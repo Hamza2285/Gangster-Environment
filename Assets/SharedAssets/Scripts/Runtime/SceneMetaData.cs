@@ -1,3 +1,4 @@
+using Benchmarking;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -30,6 +31,28 @@ public class SceneMetaData : MonoBehaviour
     public bool StartActive;
     public int RendererIndex = 0;
 
-    // Multi-scene transition setup (SceneTransitionManager / Benchmark) from the URP sample is not part of this project.
-    // This component only carries the scene lighting metadata used by CityDayNightController.
+    void Start()
+    {
+        if(SceneTransitionManager.IsAvailable() && !PerformanceTest.RunningBenchmark)
+        {
+            SetUp();
+        }
+    }
+
+    private void SetUp()
+    {
+        Scene = gameObject.scene;
+
+        //Disable objects that shouldn't be used in a multi scene setup
+        foreach (var go in Scene.GetRootGameObjects())
+        {
+            if (go != gameObject && !(go == Root && StartActive))
+            {
+                go.SetActive(false);
+            }
+        }
+        
+        //Register scene
+        SceneTransitionManager.RegisterScene(Scene.name, this);
+    }
 }

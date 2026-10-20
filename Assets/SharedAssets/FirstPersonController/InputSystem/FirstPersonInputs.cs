@@ -1,3 +1,4 @@
+using Benchmarking;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -29,6 +30,7 @@ namespace StarterAssets
 
 		private void Start()
 		{
+#if ENABLE_INPUT_SYSTEM
 			if (!m_FocusActionsSetUp)
 			{
 #if UNITY_EDITOR
@@ -47,6 +49,7 @@ namespace StarterAssets
 				
 				m_FocusActionsSetUp = true;
 			}
+#endif
 		}
 
 		private void OnDestroy()
@@ -137,6 +140,8 @@ namespace StarterAssets
 
 		private void SetCursorState(bool newState)
 		{
+			if (PerformanceTest.RunningBenchmark)
+				return;
 
 			Cursor.lockState = newState ? CursorLockMode.Locked : CursorLockMode.None;
 		}

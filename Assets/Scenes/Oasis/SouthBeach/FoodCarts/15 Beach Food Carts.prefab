@@ -1,0 +1,1166 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &9211092857128427034
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 159509616362818544}
+  m_Layer: 0
+  m_Name: 15 Beach Food Carts
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &159509616362818544
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9211092857128427034}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 4263267209477642711}
+  - {fileID: 7333225635562825833}
+  - {fileID: 777880985317797184}
+  - {fileID: 5411806674645503470}
+  - {fileID: 3426689848603119137}
+  - {fileID: 3777065580479027206}
+  - {fileID: 1231699411373881727}
+  - {fileID: 6291329221585390562}
+  - {fileID: 1023780569642757760}
+  - {fileID: 5906499260368418973}
+  - {fileID: 5010597092811406894}
+  - {fileID: 8420587285791350559}
+  - {fileID: 3460327510297527618}
+  - {fileID: 9203126268758011787}
+  - {fileID: 874346169793655285}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &1934716965205828025
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 645318178721384536, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 11 - Outer Coast - Palm Green
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -511.3181
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.7362
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -471.45975
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.70838785
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7058234
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9059549576325874265, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+--- !u!4 &5010597092811406894 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+  m_PrefabInstance: {fileID: 1934716965205828025}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3615834071167221650
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 06 - Canal Bank - Coral Red
+      objectReference: {fileID: 0}
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -33.10016
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.735481
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -535.68677
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 597883237663326777, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5578385432493940150, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+--- !u!4 &3777065580479027206 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+  m_PrefabInstance: {fileID: 3615834071167221650}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4721595803955764084
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 09 - Outer Coast - Ocean Blue
+      objectReference: {fileID: 0}
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 2630383377442327374, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -518.0682
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.73625
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 14.600082
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.71012217
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7040785
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7896027901484131993, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+--- !u!4 &1023780569642757760 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+  m_PrefabInstance: {fileID: 4721595803955764084}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &5031857173189042070
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -31.100159
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.2243
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 335.94904
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2860877879530653138, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 3063214938062894481, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 08 - Canal Bank - Golden Yellow
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+--- !u!4 &6291329221585390562 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+  m_PrefabInstance: {fileID: 5031857173189042070}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &5640663153959003880
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 645318178721384536, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 07 - Canal Bank - Palm Green
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 133.72992
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.735657
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -47.924908
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9059549576325874265, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+--- !u!4 &1231699411373881727 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+  m_PrefabInstance: {fileID: 5640663153959003880}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6012873275823435362
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 645318178721384536, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 15 - Outer Coast - Palm Green
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -512.2223
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.736223
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -223.25238
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.71012217
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7040785
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9059549576325874265, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+--- !u!4 &874346169793655285 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+  m_PrefabInstance: {fileID: 6012873275823435362}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6168770353792742103
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 645318178721384536, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 03 - Canal Bank - Palm Green
+      objectReference: {fileID: 0}
+    - target: {fileID: 1708647276680292869, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -33.10016
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.735592
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -221.39961
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9059549576325874265, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+--- !u!4 &777880985317797184 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 6868070067496755095, guid: effd6ac40d8495c40b413e755e7f9bc3, type: 3}
+  m_PrefabInstance: {fileID: 6168770353792742103}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6322148998408724233
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 10 - Outer Coast - Coral Red
+      objectReference: {fileID: 0}
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -488.91858
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.736296
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 503.43936
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.81016815
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.5861976
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 597883237663326777, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5578385432493940150, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+--- !u!4 &5906499260368418973 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+  m_PrefabInstance: {fileID: 6322148998408724233}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6449555537479309722
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 232.22083
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.735516
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -464.5245
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.07960694
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.99682635
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2860877879530653138, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 3063214938062894481, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 04 - Canal Bank - Golden Yellow
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+--- !u!4 &5411806674645503470 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+  m_PrefabInstance: {fileID: 6449555537479309722}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6934774996022590421
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 05 - Canal Bank - Ocean Blue
+      objectReference: {fileID: 0}
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 2630383377442327374, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 4474305441185412603, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.284
+      objectReference: {fileID: 0}
+    - target: {fileID: 4474305441185412603, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 2.777
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -33.10016
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.380806
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 135.0382
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7896027901484131993, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+--- !u!4 &3426689848603119137 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+  m_PrefabInstance: {fileID: 6934774996022590421}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7169740574635921405
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 02 - Canal Bank - Coral Red
+      objectReference: {fileID: 0}
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 589.46924
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 26.814243
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -478.47473
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.0001806867
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 597883237663326777, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5578385432493940150, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+--- !u!4 &7333225635562825833 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+  m_PrefabInstance: {fileID: 7169740574635921405}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7367918049053985643
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -299.48254
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.7362
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -745.73926
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.0009974577
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.9999995
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2860877879530653138, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 3063214938062894481, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 12 - Outer Coast - Golden Yellow
+      objectReference: {fileID: 0}
+    - target: {fileID: 7707054774679558036, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+--- !u!4 &8420587285791350559 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1340935692763452532, guid: 2a9b3cc4d9e0dc3499e958ba946f97fa, type: 3}
+  m_PrefabInstance: {fileID: 7367918049053985643}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &8401856181315742755
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 01 - Canal Bank - Ocean Blue
+      objectReference: {fileID: 0}
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 2630383377442327374, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 134.79993
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.439919
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 449.56323
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.7071069
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.70710677
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7896027901484131993, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+--- !u!4 &4263267209477642711 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+  m_PrefabInstance: {fileID: 8401856181315742755}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &8790114259473303583
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 14 - Outer Coast - Coral Red
+      objectReference: {fileID: 0}
+    - target: {fileID: 306843412416565174, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -490.2378
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.736269
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 257.42392
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.7117381
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7024449
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 597883237663326777, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5578385432493940150, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+--- !u!4 &9203126268758011787 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 451715437695313812, guid: d32c14ea8780ede44a53a2dee5780b1f, type: 3}
+  m_PrefabInstance: {fileID: 8790114259473303583}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &9202759318951768246
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 159509616362818544}
+    m_Modifications:
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_Name
+      value: Beach Food Cart 13 - Outer Coast - Ocean Blue
+      objectReference: {fileID: 0}
+    - target: {fileID: 125064154424139922, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 2630383377442327374, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -208.13612
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 27.736288
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 565.212
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.99999774
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.0021285177
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7896027901484131993, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+--- !u!4 &3460327510297527618 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5743014621766415860, guid: 1c1e8624dad4f1947b00a69108d9c561, type: 3}
+  m_PrefabInstance: {fileID: 9202759318951768246}
+  m_PrefabAsset: {fileID: 0}

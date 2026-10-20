@@ -1,0 +1,7 @@
+using System;using System.IO;using System.Linq;using System.Collections.Generic;using UnityEngine;using UnityEditor;
+public static class SignalAudit{
+[InitializeOnLoadMethod]static void Init(){EditorApplication.delayCall+=Run;}
+public static List<int[]> Parts(Mesh m){var v=m.vertices;var t=m.triangles;var p=Enumerable.Range(0,v.Length).ToArray();Func<int,int> root=null;root=i=>p[i]==i?i:p[i]=root(p[i]);Action<int,int> join=(a,b)=>p[root(a)]=root(b);var keys=new Dictionary<Vector3Int,int>();for(int i=0;i<v.Length;i++){var k=Vector3Int.RoundToInt(v[i]*10000);if(keys.TryGetValue(k,out int j))join(i,j);else keys[k]=i;}for(int i=0;i<t.Length;i+=3){join(t[i],t[i+1]);join(t[i],t[i+2]);}return Enumerable.Range(0,v.Length).GroupBy(root).Select(g=>g.ToArray()).OrderByDescending(g=>g.Length).ToList();}
+static void Run(){if(!File.Exists("SignalAudit.request"))return;File.Delete("SignalAudit.request");var go=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Scenes/Oasis/3D/Prefeb/Signal.prefab");var m=go.GetComponent<MeshFilter>().sharedMesh;var v=m.vertices;var uv=m.uv;var lines=new List<string>();int id=0;foreach(var part in Parts(m)){var b=new Bounds(go.transform.localRotation*v[part[0]],Vector3.zero);var u=new Bounds(uv[part[0]],Vector3.zero);foreach(int i in part){b.Encapsulate(go.transform.localRotation*v[i]);u.Encapsulate(uv[i]);}lines.Add(id+++" n="+part.Length+" center="+b.center.ToString("F3")+" size="+b.size.ToString("F3")+" uv="+u.center.ToString("F3"));}File.WriteAllLines("VenueLightingReview/SignalParts.txt",lines);}
+}
+ 
