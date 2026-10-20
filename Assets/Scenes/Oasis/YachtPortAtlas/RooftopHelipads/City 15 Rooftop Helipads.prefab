@@ -1,0 +1,1158 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &6696959138970476224
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5213270049596595643}
+  m_Layer: 0
+  m_Name: City 15 Rooftop Helipads
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &5213270049596595643
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6696959138970476224}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1214525259593710077}
+  - {fileID: 4369626753183334128}
+  - {fileID: 3672966212883473193}
+  - {fileID: 7357449017617363518}
+  - {fileID: 1538498247266341117}
+  - {fileID: 1638451319358198965}
+  - {fileID: 2292532411494237118}
+  - {fileID: 755478051865984218}
+  - {fileID: 244999819707268477}
+  - {fileID: 7995295639120100856}
+  - {fileID: 7454249991973428044}
+  - {fileID: 6035509857633965460}
+  - {fileID: 1382243090606611203}
+  - {fileID: 3806920231140870185}
+  - {fileID: 3141045391141207107}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &1068335360051424329
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248894
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248894
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 706.0692
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 120.014786
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 15 - defaultMaterial (8)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &3141045391141207107 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 1068335360051424329}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1265692615939299363
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248901
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248901
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 618.1692
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 246.27478
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 14 - defaultMaterial (6)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &3806920231140870185 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 1265692615939299363}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1710451084082656035
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -104.78552
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -652.5282
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 3 - defaultMaterial (15)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &3672966212883473193 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 1710451084082656035}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1864570633930338042
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -274.62018
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -96.65446
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 2 - defaultMaterial (16)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &4369626753183334128 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 1864570633930338042}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &2747806500287966583
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 9.925598
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 9.925598
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 241.98187
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.955
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 401.45468
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 9 - defaultMaterial (9)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &244999819707268477 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 2747806500287966583}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3404648977009781968
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 594.0354
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -213.17102
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 8 - defaultMaterial (10)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &755478051865984218 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 3404648977009781968}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3467096048237592823
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248779
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248779
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 358.39697
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 228.35953
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 5 - defaultMaterial (1)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &1538498247266341117 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 3467096048237592823}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3744940688293119167
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248749
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248749
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -427.47015
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 396.90637
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 6 - defaultMaterial (13)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &1638451319358198965 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 3744940688293119167}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3863698378106972663
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 12.132599
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 12.132599
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -436.73114
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.055
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -599.438
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 1 - defaultMaterial (17)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &1214525259593710077 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 3863698378106972663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &3921218803116772105
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.878174
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.878174
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -286.80676
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 190.61722
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 13 - defaultMaterial (14)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &1382243090606611203 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 3921218803116772105}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4221270782601122740
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248833
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248833
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 444.9306
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -60.993145
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 7 - defaultMaterial (3)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &2292532411494237118 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 4221270782601122740}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4771160981156596550
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248749
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248749
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 513.87964
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 371.3349
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 11 - defaultMaterial
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &7454249991973428044 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 4771160981156596550}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4854503934802453044
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 12.640442
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 12.640442
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -189.69504
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.955
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -220.4184
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 4 - defaultMaterial (18)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &7357449017617363518 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 4854503934802453044}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &5454068573321850354
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 308.5927
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -162.64223
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 10 - defaultMaterial (5)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &7995295639120100856 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 5454068573321850354}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &8540567899673707934
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 5213270049596595643}
+    m_Modifications:
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 10.248795
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 10.248795
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -265.1149
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 71.855
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 471.72955
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_Name
+      value: Roof helipad 12 - defaultMaterial (11)
+      objectReference: {fileID: 0}
+    - target: {fileID: 8089556122353205973, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+--- !u!4 &6035509857633965460 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2685343285874249738, guid: 5c0466e71ea8e2a46beb924dabf2d71c, type: 3}
+  m_PrefabInstance: {fileID: 8540567899673707934}
+  m_PrefabAsset: {fileID: 0}

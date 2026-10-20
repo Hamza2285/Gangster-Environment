@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Painted Concrete Walls
+  m_Shader: {fileID: 4800000, guid: 7497dd30819450847bbb759b32375b1c, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _Artwork:
+        m_Texture: {fileID: 2800000, guid: c40acd9fb25e92d49b40c19d2c2132e8, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: c40acd9fb25e92d49b40c19d2c2132e8, type: 3}
+        m_Scale: {x: 4, y: 2}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats: []
+    m_Colors:
+    - _Art0: {r: 0.0784375, g: 0.5228125, b: 0.2275, a: 0.1275}
+    - _Art1: {r: 0.3509375, g: 0.3390625, b: 0.31375, a: 0.15625}
+    - _Art10: {r: 0.3540625, g: 0.0053125, b: 0.3075, a: 0.166875}
+    - _Art11: {r: 0.5646875, g: 0.5009375, b: 0.1825, a: 0.245625}
+    - _Art12: {r: 0.6659375, g: 0.0053125, b: 0.33, a: 0.16}
+    - _Art13: {r: 0.0034375, g: 0.0034375, b: 0.104375, a: 0.205}
+    - _Art2: {r: 0.6671875, g: 0.3365625, b: 0.330625, a: 0.1625}
+    - _Art3: {r: 0.0728125, g: 0.3671875, b: 0.273125, a: 0.15375}
+    - _Art4: {r: 0.4246875, g: 0.5009375, b: 0.135625, a: 0.245625}
+    - _Art5: {r: 0.6678125, g: 0.1721875, b: 0.329375, a: 0.158125}
+    - _Art6: {r: 0.0728125, g: 0.2121875, b: 0.273125, a: 0.153125}
+    - _Art7: {r: 0.1121875, g: 0.0034375, b: 0.11375, a: 0.205}
+    - _Art8: {r: 0.3509375, g: 0.1778125, b: 0.310625, a: 0.154375}
+    - _Art9: {r: 0.2309375, g: 0.0034375, b: 0.115, a: 0.205}
+    - _BaseColor: {r: 0.65999997, g: 0.65999997, b: 0.65, a: 1}
+  m_BuildTextureStacks: []

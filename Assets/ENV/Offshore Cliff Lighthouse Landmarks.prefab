@@ -1,0 +1,413 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7253369193165863362
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8966505746420757313}
+  m_Layer: 0
+  m_Name: Offshore Cliff Lighthouse Landmarks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &8966505746420757313
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7253369193165863362}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 153, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 8860417943092865416}
+  - {fileID: 8670757215330778533}
+  - {fileID: 3644712803267681231}
+  - {fileID: 698434542203577592}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &5103874828062531059
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8966505746420757313}
+    m_Modifications:
+    - target: {fileID: 3070499780677945181, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.89
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.89
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.89
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -771
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -430
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.551937
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.83388585
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7844718882378560645, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 8367905899460119200, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 8580301726334899756, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_Name
+      value: Distant Granite Cliff Lighthouse 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8580301726334899756, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 9134058771955892774, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+--- !u!4 &8670757215330778533 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4503648702502248534, guid: bee83f27d939b844b914626eebb7e24f, type: 3}
+  m_PrefabInstance: {fileID: 5103874828062531059}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &5892269943509486936
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8966505746420757313}
+    m_Modifications:
+    - target: {fileID: 2043851521754805545, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 3521487977910743230, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5677026190354119817, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.96
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.96
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.96
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -242
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -1006
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.13917309
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.9902681
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7415349757663155508, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 8021864614066002429, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_Name
+      value: Distant Granite Cliff Lighthouse 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8021864614066002429, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+--- !u!4 &3644712803267681231 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7156521831813256855, guid: adf2a82019710744aa7be3e66cf71fb3, type: 3}
+  m_PrefabInstance: {fileID: 5892269943509486936}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7347168442248867213
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8966505746420757313}
+    m_Modifications:
+    - target: {fileID: 1128008282945764262, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_Name
+      value: Distant Granite Cliff Lighthouse 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 1128008282945764262, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 2928453791403447539, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 5595927319964013035, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.03
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.03
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.03
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 402
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -985
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: -0.760406
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.64944804
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8287182346768467163, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 8692110453707772262, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+--- !u!4 &698434542203577592 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7802262335163992437, guid: 797b8f5c15e2c5444b0afbc7c2fad0c2, type: 3}
+  m_PrefabInstance: {fileID: 7347168442248867213}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &8543310076911175867
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8966505746420757313}
+    m_Modifications:
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.82
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.82
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.82
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -800
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 264
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9659259
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.25881907
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2722529435035208103, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 3432997577006577815, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 4256210835937439040, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_Name
+      value: Distant Granite Cliff Lighthouse 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4256210835937439040, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 4749099611819807527, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    - target: {fileID: 6895654054089028079, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+--- !u!4 &8860417943092865416 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 898864416383197491, guid: 4d43eeda65010a343a2a306869a989cc, type: 3}
+  m_PrefabInstance: {fileID: 8543310076911175867}
+  m_PrefabAsset: {fileID: 0}

@@ -1,0 +1,103 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0c3166036859054ca8cd2e53b6939ba, type: 3}
+  m_Name: City Day Night Presets
+  m_EditorClassIdentifier: 
+  day:
+    windowColorMix: 1
+    accentBrightness: 1.4
+    whiteWindowColor: {r: 0.945, g: 0.974, b: 1, a: 1}
+    blueWindowColor: {r: 0.46, g: 0.68, b: 1, a: 1}
+    blueAccentColor: {r: 0.272, g: 0.566, b: 1, a: 1}
+    pinkAccentColor: {r: 1, g: 0.206, b: 0.65, a: 1}
+    venueBrightness: 2.4
+    skybox: {fileID: 2100000, guid: babc67b72a83f184e8592680fc29d551, type: 2}
+    reflectionMode: 0
+    reflection: {fileID: 0}
+    reflectionIntensity: 1
+    reflectionBounces: 2
+    ambientMode: 1
+    ambientSky: {r: 0.254902, g: 0.44830096, b: 0.7176471, a: 1}
+    ambientEquator: {r: 0.88420105, g: 0.97492677, b: 1.3091658, a: 1}
+    ambientGround: {r: 0, g: 0, b: 0, a: 1}
+    ambientIntensity: 1
+    fog: 0
+    fogMode: 2
+    fogColor: {r: 0.9607843, g: 0.47843137, b: 0.33333334, a: 1}
+    fogDensity: 0.002
+    fogStart: 0
+    fogEnd: 300
+    lightRotation: {x: 13.000003, y: 340.7, z: 0}
+    lightColor: {r: 1, g: 0.76362115, b: 0.48490566, a: 1}
+    lightIntensity: 2.5
+    indirectIntensity: 1.5
+    lightEnabled: 1
+    useColorTemperature: 0
+    colorTemperature: 6570
+    shadows: 2
+    shadowStrength: 1
+    sceneBrightness: 1
+    windowLightsEnabled: 1
+    windowWarmth: 0.65
+    litWindowAmount: 0.65
+    nightAmount: 0
+    windowBrightness: 1.6
+    windowColor: {r: 1, g: 0.7, b: 0.35, a: 1}
+    roadEmission: 0.06
+    effects: {fileID: 0}
+  night:
+    windowColorMix: 1
+    accentBrightness: 1.6
+    whiteWindowColor: {r: 0.9150943, g: 0.9150943, b: 0.9150943, a: 1}
+    blueWindowColor: {r: 0.46, g: 0.68, b: 1, a: 1}
+    blueAccentColor: {r: 0.272, g: 0.566, b: 1, a: 1}
+    pinkAccentColor: {r: 1, g: 0.206, b: 0.65, a: 1}
+    venueBrightness: 2.4
+    skybox: {fileID: 2100000, guid: 349fd12a4b0048840a86f560bf8d149c, type: 2}
+    reflectionMode: 1
+    reflection: {fileID: 8900000, guid: e29dc6267966e9947a846d8f1af3189f, type: 2}
+    reflectionIntensity: 0.85
+    reflectionBounces: 2
+    ambientMode: 1
+    ambientSky: {r: 0.31, g: 0.35, b: 0.43, a: 1}
+    ambientEquator: {r: 0.215, g: 0.23, b: 0.28, a: 1}
+    ambientGround: {r: 0.085, g: 0.09, b: 0.115, a: 1}
+    ambientIntensity: 1
+    fog: 0
+    fogMode: 2
+    fogColor: {r: 0.065, g: 0.1, b: 0.18, a: 1}
+    fogDensity: 0.002
+    fogStart: 0
+    fogEnd: 300
+    lightRotation: {x: 37.999996, y: 328, z: 0}
+    lightColor: {r: 0.86, g: 0.89, b: 1, a: 1}
+    lightIntensity: 0.52
+    indirectIntensity: 1
+    lightEnabled: 1
+    useColorTemperature: 0
+    colorTemperature: 6570
+    shadows: 1
+    shadowStrength: 0.72
+    sceneBrightness: 1.551
+    windowLightsEnabled: 1
+    windowWarmth: 0.93
+    litWindowAmount: 0.74
+    nightAmount: 1
+    windowBrightness: 1.65
+    windowColor: {r: 1, g: 1, b: 1, a: 1}
+    roadEmission: 0.06
+    effects: {fileID: 11400000, guid: 2c9bbc1f24ea93d4fa95f6ffea91fe75, type: 2}
+  nearbyStreetLights: 4
+  streetLightRange: 27
+  streetLightIntensity: 32
+  streetLightColor: {r: 1, g: 0.85, b: 0.64, a: 1}
+  streetLightDistance: 100
