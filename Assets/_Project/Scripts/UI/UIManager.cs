@@ -18,7 +18,7 @@ namespace OpenworldCrime.UI
     public class UIManager : MonoBehaviour
     {
         [Header("Player")]
-        [SerializeField] private PlayerManager playerManager;
+        [SerializeField] private OpenworldCrime.Player.PlayerManager playerManager; // qualified: SharedAssets has a global PlayerManager
         [SerializeField] private PlayerWeaponController weaponController;
 
         [Header("HUD")]

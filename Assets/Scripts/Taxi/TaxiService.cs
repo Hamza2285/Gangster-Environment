@@ -41,7 +41,7 @@ public class TaxiService : MonoBehaviour
     [SerializeField] private TaxiDestination[] destinations = new TaxiDestination[0];
 
     [Header("Player")]
-    [SerializeField] private PlayerManager playerManager;
+    [SerializeField] private OpenworldCrime.Player.PlayerManager playerManager; // qualified: SharedAssets has a global PlayerManager
     [SerializeField] private PlayerInteractionController interactionController;
     [SerializeField] private PlayerVehicleInteraction vehicleInteraction;
     [SerializeField] private vThirdPersonInput playerInput;

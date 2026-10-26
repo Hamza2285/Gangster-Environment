@@ -23,7 +23,7 @@ namespace OpenworldCrime.Controls
         [SerializeField] private bool useMobileControls;
 
         [Header("References")]
-        [SerializeField] private PlayerManager playerManager;
+        [SerializeField] private OpenworldCrime.Player.PlayerManager playerManager; // qualified: SharedAssets has a global PlayerManager
         [SerializeField] private vThirdPersonInput playerInput;
         [Tooltip("On-foot controls (joystick, look area, action buttons). Shown in mobile mode while not in a vehicle.")]
         [SerializeField] private GameObject onFootControls;

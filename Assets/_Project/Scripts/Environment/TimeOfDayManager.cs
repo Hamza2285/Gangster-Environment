@@ -98,14 +98,9 @@ namespace OpenworldCrime.Environment
         private void Refresh()
         {
             Daylight = DaylightAt(Hour);
-            float dayProgress = Mathf.InverseLerp(sunrise, sunset, Hour);                // 0 sunrise .. 1 sunset
-            float elevation = Mathf.Sin(dayProgress * Mathf.PI) * noonElevation;
-            float noon = Mathf.Clamp01(Mathf.Sin(dayProgress * Mathf.PI));
-            Quaternion sunRot = Quaternion.Euler(Mathf.Max(elevation, 4f), noonYaw - 90f + 180f * dayProgress, 0f);
-            Quaternion moonRot = Quaternion.Euler(moonRotation.x, moonRotation.y, 0f);
-            // Through twilight the low sun hands over to the moon while the light is dim, so the swap is not visible.
-            Quaternion light = Quaternion.Slerp(moonRot, sunRot, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.25f, 0.6f, Daylight)));
-            if (cityLighting != null) cityLighting.ApplyBlend(Daylight, light, Daylight > 0.5f ? noon : 0f);
+            // Hamza's CityDayNightController owns the look (incl. light direction from its day/night presets);
+            // the clock only feeds it the night amount. The old ApplyBlend(sun arc) hook no longer exists after the merge.
+            if (cityLighting != null) cityLighting.PreviewBlend(1f - Daylight);
 
             bool night = IsNight;
             if (night != lastNight)
