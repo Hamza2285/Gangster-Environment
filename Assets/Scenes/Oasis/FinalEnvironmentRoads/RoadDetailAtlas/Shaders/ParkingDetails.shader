@@ -9,6 +9,7 @@ Shader "Gangstar City/PNG Parking Details"
         _CitySmoothnessLimit("Maximum Shininess", Range(0,1)) = 0.72
         _CityEmissionStrength("Emission Strength", Range(0,1)) = 0.02
 
+        _StackArtworkGlow("Stack House Artwork Glow", Range(0,5)) = 0
         // Specular vs Metallic workflow
         _MarkAtlas("City PNG Atlas", 2D) = "black" {}
 _ParkingBay("Parking bay", Vector)=(0,0,0,0)
@@ -490,6 +491,7 @@ _ParkingSize("Parking size", Vector)=(0,0,0,0)
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
     CustomEditor "CityDetailMaterialGUI"
 }
+
 
 
 

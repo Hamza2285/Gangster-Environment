@@ -30,7 +30,7 @@ half _ClearCoatSmoothness;
 half _DetailAlbedoMapScale;
 half _DetailNormalMapScale;
 half _Surface;
-half _CityContrast, _CityMetallic, _CitySmoothnessLimit, _CityEmissionStrength;
+half _CityContrast, _CityMetallic, _CitySmoothnessLimit, _CityEmissionStrength, _StackArtworkGlow;
 CBUFFER_END
 
 // NOTE: Do not ifdef the properties for dots instancing, but ifdef the actual usage.
@@ -297,9 +297,11 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData s)
     s.emission += base.rgb * _EmissionColor.rgb * _CityEmissionStrength * (1.0h - _GangstarNight);
 #endif
     if(parkingConcrete>.5h){s.normalTS=half3(0,0,1);s.metallic=0;s.smoothness=.20h;s.occlusion=1;s.emission=0;}
+    s.emission *= saturate(_GangstarNight); // Day/night master emission gate.
 }
 
 #endif // UNIVERSAL_INPUT_SURFACE_PBR_INCLUDED
+
 
 
 

@@ -23,7 +23,7 @@ Shader "Gangstar City/Mobile Night Sky"
     half4 _Horizon,_Zenith,_MoonDirection,_MoonColor,_DayTint,_DayCube_HDR;
     float _DayExposure,_DayRotation;
    CBUFFER_END
-   TEXTURECUBE(_DayCube);SAMPLER(sampler_DayCube);float _CitySkyBlend;
+   TEXTURECUBE(_DayCube);SAMPLER(sampler_DayCube);float _CitySkyBlend;float4 _CitySolarDirection;float _CitySunrise;
    struct A{float4 positionOS:POSITION;};struct V{float4 positionCS:SV_POSITION;float3 direction:TEXCOORD0;};
    V vert(A i){V o;o.positionCS=TransformObjectToHClip(i.positionOS.xyz);o.direction=i.positionOS.xyz;return o;}
    half4 frag(V i):SV_Target{
@@ -49,6 +49,13 @@ Shader "Gangstar City/Mobile Night Sky"
         float phase=saturate(t<.5?t*2:(t-.5)*2);
     phase=phase*phase*phase*(phase*(phase*6-15)+10);
     half3 sky=t<.5?lerp(day,dusk,phase):lerp(dusk,color,phase);
+    float3 solar=normalize(_CitySolarDirection.xyz);
+    float alignment=dot(d,solar);float sunEdge=max(fwidth(alignment),.000015);
+    float solarDisc=smoothstep(.9997-sunEdge,.9997+sunEdge,alignment);
+    float horizonBand=exp2(-abs(d.y-solar.y)*18);
+    float directionalGlow=pow(saturate(dot(normalize(d.xz+float2(.0001,0)),normalize(solar.xz+float2(.0001,0)))),8);
+    float aboveHorizon=smoothstep(-.025,.025,d.y);
+    sky+=half3(1,.30,.055)*_CitySunrise*aboveHorizon*(horizonBand*directionalGlow*.32+solarDisc*2.6);
     return half4(sky,1);
    }
    ENDHLSL

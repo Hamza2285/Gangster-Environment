@@ -3,11 +3,15 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 [CustomEditor(typeof(CityDayNightController))]
 public sealed class CityDayNightControllerEditor:Editor {
+ public override bool RequiresConstantRepaint()=>((CityDayNightController)target).IsTransitioning;
  public override void OnInspectorGUI(){
   var c=(CityDayNightController)target;
   EditorGUILayout.LabelField("CITY LIGHTING",EditorStyles.boldLabel);
   EditorGUILayout.HelpBox("Choose Day or Night. Open the preset file below to tune either look. Day preserves the captured scene lighting.",MessageType.Info);
   Buttons(c);
+  EditorGUI.BeginChangeCheck();float manual=EditorGUILayout.Slider("Manual Day / Night",c.NightBlend,0,1);
+  if(EditorGUI.EndChangeCheck()){Undo.RecordObject(c,"Preview day night mix");c.SetManualBlend(manual);EditorUtility.SetDirty(c);}
+  if(c.presets){var quick=new SerializedObject(c.presets);quick.Update();EditorGUILayout.PropertyField(quick.FindProperty("day").FindPropertyRelative("sceneBrightness"),new GUIContent("Day Brightness"));EditorGUILayout.PropertyField(quick.FindProperty("night").FindPropertyRelative("sceneBrightness"),new GUIContent("Night Brightness"));EditorGUILayout.PropertyField(quick.FindProperty("night").FindPropertyRelative("lightIntensity"),new GUIContent("Moonlight Brightness"));if(quick.ApplyModifiedProperties()){if(c.IsTransitioning)c.PreviewBlend(c.NightBlend);else c.Apply(c.IsNight);SceneView.RepaintAll();}}
   DrawDefaultInspector();
  }
  public static void Buttons(CityDayNightController c){
@@ -15,7 +19,9 @@ public sealed class CityDayNightControllerEditor:Editor {
   if(GUILayout.Button("DAY",GUILayout.Height(38)))Switch(c,false);
   if(GUILayout.Button("NIGHT",GUILayout.Height(38)))Switch(c,true);
   EditorGUILayout.EndHorizontal();
-  EditorGUILayout.LabelField("Current look: "+(c.IsNight?"Night":"Day"));
+  EditorGUILayout.LabelField(c.IsTransitioning?"Transitioning to "+(c.IsNight?"Night":"Day")+" — "+Mathf.RoundToInt(c.NightBlend*100)+"% night":"Current look: "+(c.IsNight?"Night":"Day"));
+  if(c.IsTransitioning)EditorGUILayout.HelpBox("Smooth transition: "+c.transitionSeconds+" seconds. Use the manual slider or instant previews to check lighting immediately.",MessageType.Info);
+  EditorGUILayout.BeginHorizontal();if(GUILayout.Button("Preview Day Now")){c.Apply(false);SceneView.RepaintAll();}if(GUILayout.Button("Preview Night Now")){c.Apply(true);SceneView.RepaintAll();}EditorGUILayout.EndHorizontal();
  }
  static void Switch(CityDayNightController c,bool night){
   Undo.RecordObject(c,"Change city lighting");if(c.sun){Undo.RecordObject(c.sun,"Change city lighting");Undo.RecordObject(c.sun.transform,"Change city lighting");}
@@ -56,6 +62,8 @@ public sealed class CityDayNightPresetsEditor:Editor {
  [MenuItem("Gangstar City/Lighting/Night")]static void Night(){var c=Object.FindObjectOfType<CityDayNightController>(true);if(c)c.ApplyNight();SceneView.RepaintAll();}
  [MenuItem("Gangstar City/Lighting/Open Presets")]static void Open(){Selection.activeObject=AssetDatabase.LoadAssetAtPath<CityDayNightPresets>("Assets/Scenes/Oasis/DayNight/City Day Night Presets.asset");}
 }
+
+
 
 
 

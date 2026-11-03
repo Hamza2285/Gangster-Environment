@@ -1,14 +1,15 @@
 Shader "City/Mobile Painted Underpass Walls" {
-Properties{_BaseMap("Existing concrete",2D)="white"{} _BaseColor("Concrete tint",Color)=(1,1,1,1) _Artwork("Existing artwork atlas",2D)="white"{} [HideInInspector]_Art0("Art 0",Vector)=(0,0,1,1) [HideInInspector]_Art1("Art 1",Vector)=(0,0,1,1) [HideInInspector]_Art2("Art 2",Vector)=(0,0,1,1) [HideInInspector]_Art3("Art 3",Vector)=(0,0,1,1) [HideInInspector]_Art4("Art 4",Vector)=(0,0,1,1) [HideInInspector]_Art5("Art 5",Vector)=(0,0,1,1) [HideInInspector]_Art6("Art 6",Vector)=(0,0,1,1) [HideInInspector]_Art7("Art 7",Vector)=(0,0,1,1) [HideInInspector]_Art8("Art 8",Vector)=(0,0,1,1) [HideInInspector]_Art9("Art 9",Vector)=(0,0,1,1) [HideInInspector]_Art10("Art 10",Vector)=(0,0,1,1) [HideInInspector]_Art11("Art 11",Vector)=(0,0,1,1) [HideInInspector]_Art12("Art 12",Vector)=(0,0,1,1) [HideInInspector]_Art13("Art 13",Vector)=(0,0,1,1)}
+Properties{_ArtworkGlow("Night Artwork Glow",Range(0,5))=1.5 _BaseMap("Existing concrete",2D)="white"{} _BaseColor("Concrete tint",Color)=(1,1,1,1) _Artwork("Existing artwork atlas",2D)="white"{} [HideInInspector]_Art0("Art 0",Vector)=(0,0,1,1) [HideInInspector]_Art1("Art 1",Vector)=(0,0,1,1) [HideInInspector]_Art2("Art 2",Vector)=(0,0,1,1) [HideInInspector]_Art3("Art 3",Vector)=(0,0,1,1) [HideInInspector]_Art4("Art 4",Vector)=(0,0,1,1) [HideInInspector]_Art5("Art 5",Vector)=(0,0,1,1) [HideInInspector]_Art6("Art 6",Vector)=(0,0,1,1) [HideInInspector]_Art7("Art 7",Vector)=(0,0,1,1) [HideInInspector]_Art8("Art 8",Vector)=(0,0,1,1) [HideInInspector]_Art9("Art 9",Vector)=(0,0,1,1) [HideInInspector]_Art10("Art 10",Vector)=(0,0,1,1) [HideInInspector]_Art11("Art 11",Vector)=(0,0,1,1) [HideInInspector]_Art12("Art 12",Vector)=(0,0,1,1) [HideInInspector]_Art13("Art 13",Vector)=(0,0,1,1)}
 SubShader{Tags{"RenderPipeline"="UniversalPipeline" "RenderType"="Opaque" "Queue"="Geometry"} Cull Back ZWrite On
 HLSLINCLUDE
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 TEXTURE2D(_BaseMap);SAMPLER(sampler_BaseMap);TEXTURE2D(_Artwork);SAMPLER(sampler_Artwork);
 CBUFFER_START(UnityPerMaterial)
-float4 _BaseMap_ST,_BaseColor;
+float4 _BaseMap_ST,_BaseColor;float _ArtworkGlow;
 float4 _Art0,_Art1,_Art2,_Art3,_Art4,_Art5,_Art6,_Art7,_Art8,_Art9,_Art10,_Art11,_Art12,_Art13;
 CBUFFER_END
+half _GangstarNight;
 struct A{float4 p:POSITION;float3 n:NORMAL;float2 uv:TEXCOORD0;float4 art:TEXCOORD2;float2 fit:TEXCOORD3;UNITY_VERTEX_INPUT_INSTANCE_ID};
 struct V{float4 p:SV_POSITION;float3 n:TEXCOORD0;float2 uv:TEXCOORD1;float4 art:TEXCOORD2;float3 world:TEXCOORD3;float fog:TEXCOORD4;float2 fit:TEXCOORD5;UNITY_VERTEX_INPUT_INSTANCE_ID};
 V Vert(A i){V o;UNITY_SETUP_INSTANCE_ID(i);UNITY_TRANSFER_INSTANCE_ID(i,o);o.world=TransformObjectToWorld(i.p.xyz);o.p=TransformWorldToHClip(o.world);o.n=TransformObjectToWorldNormal(i.n);o.uv=TRANSFORM_TEX(i.uv,_BaseMap);o.art=i.art;o.fit=i.fit;o.fog=ComputeFogFactor(o.p.z);return o;}
@@ -16,7 +17,7 @@ float4 Rect(float id){if(id<.5)return _Art0;if(id<1.5)return _Art1;if(id<2.5)ret
 half4 Frag(V i):SV_Target{
 UNITY_SETUP_INSTANCE_ID(i);
 half3 concrete=SAMPLE_TEXTURE2D(_BaseMap,sampler_BaseMap,float2(.252,.752)+frac(i.uv)*.246).rgb*_BaseColor.rgb;
-concrete=lerp(_BaseColor.rgb,concrete,saturate(i.art.z));half3 color=concrete;
+concrete=lerp(_BaseColor.rgb,concrete,saturate(i.art.z));half3 color=concrete;half3 artworkEmission=0;
 if(i.art.z>.001){
 float slot=floor(i.art.x);float id=fmod(slot+i.art.w,14);float4 rect=Rect(id);
 float artworkHeight=max(.2,i.fit.x);float width=min(10.7,rect.z/rect.w*artworkHeight);
@@ -30,11 +31,11 @@ float ink=smoothstep(.018,.15,max(art.r,max(art.g,art.b)));
 float weather=lerp(.91,1,smoothstep(.12,.45,noise));
 float mask=fade*saturate(i.art.z)*lerp(.38,.98,ink)*weather;
 art*=lerp(.88,1.12,saturate(grain*1.4));
-color=lerp(concrete,art,mask);
+color=lerp(concrete,art,mask);artworkEmission=art*mask*_ArtworkGlow*saturate(_GangstarNight);
 }
 half3 n=normalize(i.n);Light light=GetMainLight(TransformWorldToShadowCoord(i.world));
 half3 illumination=SampleSH(n)+light.color*saturate(dot(n,light.direction))*light.shadowAttenuation*light.distanceAttenuation;
-color*=max(.16,illumination);
+color=color*max(.16,illumination)+artworkEmission;
 return half4(MixFog(color,i.fog),1);
 }
 half4 Depth(V i):SV_Target{return 0;}half4 Norm(V i):SV_Target{return half4(normalize(i.n),0);}

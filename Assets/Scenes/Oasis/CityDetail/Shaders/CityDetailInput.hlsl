@@ -30,7 +30,8 @@ half _DetailAlbedoMapScale;
 half _DetailNormalMapScale;
 half _Surface;
 half _CityFlagAtlas; half _CityHospital; float4 _CityHospitalAtlasRect; float4 _CityClothAtlasRect; float4 _CityClothVariantsRect; float4 _CityWeaponAtlasRect; float4 _CityWeaponVariantsRect; float4 _CityWeaponStoneRect;
-half _CityContrast, _CityMetallic, _CitySmoothnessLimit, _CityEmissionStrength, _CityRailingGlow, _CityRailingUseEmissionMap;
+float _CityLegacyAtlasY;
+half _CityContrast, _CityMetallic, _CitySmoothnessLimit, _CityEmissionStrength, _CityRailingGlow, _CityRailingUseEmissionMap, _StackArtworkGlow, _TerminalAccentGlow;
 CBUFFER_END
 
 // NOTE: Do not ifdef the properties for dots instancing, but ifdef the actual usage.
@@ -255,6 +256,7 @@ half _CityWindowMix, _CityAccentBrightness, _CityVenueBrightness;
 half4 _CityWhiteWindowColor, _CityBlueWindowColor, _CityBlueAccentColor, _CityPinkAccentColor;
 inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData s)
 {
+    if(uv.x>=256.0){float kind=floor((uv.x-256.0)/2.0);float2 artUV=float2(uv.x-256.0-kind*2.0,uv.y);half3 c=SampleAlbedoAlpha(artUV,TEXTURE2D_ARGS(_BaseMap,sampler_BaseMap)).rgb;s=(SurfaceData)0;s.albedo=c;s.alpha=1;s.normalTS=half3(0,0,1);s.occlusion=1;s.metallic=kind==3?.35h:0;s.smoothness=kind==1||kind==4?.38h:kind==6?.72h:.24h;half glow=kind==1?1.1h:kind==2?3.2h:kind==3?3.4h:kind==4?1.3h:kind==5?2.2h:kind==6?.55h:kind==7?.25h:kind==8?.3h:kind==9?5.0h:kind==10?3.5h:kind==13?.75h:kind==15?1.0h:0;s.emission=c*glow*saturate(_GangstarNight);if(kind==16||kind==17){float2 p=(artUV-float2(3332.0/4096.0,2052.0/3072.0))/float2(248.0/4096.0,248.0/3072.0);float d=min(min(p.x,1-p.x)*(kind==17?4.35:11.1),min(p.y,1-p.y));float core=1-smoothstep(.013,.028,d);float glow=core+.25*(1-smoothstep(.025,.065,d));half3 red=half3(.97,.01,.005);s.albedo=lerp(c,red*.35,core);s.emission=red*glow*4*saturate(_GangstarNight);}if(kind==14){float2 p=(artUV-float2(1715.0/4096.0,19.0/3072.0))/float2(122.0/4096.0,122.0/3072.0);float down=saturate(1-p.y);float cone=saturate(1-abs(p.x-.5)/(.045+down*.48));s.emission=c*(half3(.32,.36,.42)+half3(8,4.3,1.6)*cone*cone*(1-down*.5))*saturate(_GangstarNight);}if(kind==15)s.albedo=c*1.7;if(kind==12){float2 stoneUV=(artUV-float2(1712.0/4096.0,16.0/3072.0))/float2(128.0/4096.0,512.0/3072.0);float pool=saturate(1-abs(frac(stoneUV.x*5)-.5)*2)*saturate((stoneUV.y-.4)*1.7);s.emission=c*(half3(.32,.36,.42)+half3(2,1.05,.35)*pool*pool)*saturate(_GangstarNight);}if(kind==11){float2 wallUV=(artUV-float2(3072.0/4096.0,2048.0/3072.0))/float2(256.0/4096.0,256.0/3072.0);float pool=saturate(1-abs(frac(wallUV.x*5)-.5)*2)*saturate(wallUV.y);s.albedo=c*.25;s.emission=c*(half3(.20,.17,.12)+half3(3.5,1.8,.65)*pool*pool)*saturate(_GangstarNight);}if(kind==8){float2 wallUV=(artUV-float2(3072.0/4096.0,2048.0/3072.0))/float2(256.0/4096.0,256.0/3072.0);float wash=saturate(1.0-abs(wallUV.x-.5)*1.8)*saturate(1.0-abs(wallUV.y-.52)*1.7);s.emission+=c*half3(1.25,.65,.25)*wash*wash*saturate(_GangstarNight);}return;}
     half weaponStone = (_CityHospital > .5 && uv.x >= 223.0) ? 1.0h : 0.0h;
     half stoneNosing = weaponStone > .5 && uv.y > 63.0 ? 1.0h : 0.0h;
     if (weaponStone > .5) uv = frac(uv - float2(224.0,stoneNosing > .5 ? 64.0 : 0.0));
@@ -275,6 +277,7 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData s)
     half signGeometry = step(2.0,uv.x); uv.x -= signGeometry * 2.0;
     float2 baseUV = uv;
     if (_CityHospital > .5) { float4 tile = weaponStone > .5 ? _CityWeaponStoneRect : weaponFacade > .5 ? (weaponVariant > .5 ? _CityWeaponVariantsRect : _CityWeaponAtlasRect) : (clothFacade > .5 ? (clothVariant > .5 ? _CityClothVariantsRect : _CityClothAtlasRect) : _CityHospitalAtlasRect); baseUV = uv * tile.xy + tile.zw; }
+    baseUV.y*=_CityLegacyAtlasY;
     half4 base = SampleAlbedoAlpha(baseUV, TEXTURE2D_ARGS(_BaseMap, sampler_BaseMap));
     // Flag tiles occupy previously white pixels; building surfaces keep their original white sample.
     float2 reservedUV = frac(uv);
@@ -334,12 +337,37 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData s)
     // Painted shop fascia only: boost cyan LEDs without lighting clothing or other buildings.
     if (clothFacade > .5 && clothVariant < .5 && uv.y > .71) { half blueLED = smoothstep(.12h,.40h,base.b-base.r)*smoothstep(.20h,.60h,base.g)*smoothstep(.35h,.75h,base.b); s.emission += base.rgb * blueLED * lerp(.45h,2.4h,saturate(_GangstarNight)); }
     if (weaponFacade > .5 && weaponVariant < .5 && uv.y > .70) { half amberLED = smoothstep(.18h,.45h,base.r-base.b)*smoothstep(.35h,.70h,base.g); s.emission += base.rgb * amberLED * lerp(.3h,1.8h,saturate(_GangstarNight)); }
+    if(_TerminalAccentGlow>.001h){half terminalLetters=(abs(uv.x-.2898)<.002h&&abs(uv.y-.4016)<.004h)?1.0h:0.0h;s.emission+=half3(1.0h,.018h,.004h)*terminalLetters*_TerminalAccentGlow*saturate(_GangstarNight);}
+    if(_StackArtworkGlow>.001h) {
+        float2 artUV=frac(uv);
+        half menu=(artUV.x<.132 && artUV.y<.331) ? 1.0h : 0.0h;
+        half badge=1.0h-smoothstep(.94h,1.0h,length((artUV-float2(.215,.166))/float2(.075,.075)));
+        half sign=(artUV.x>.819 && artUV.x<.972 && artUV.y>.147 && artUV.y<.211) ? 1.0h:0.0h;
+        s.emission+=base.rgb*max(menu,max(badge,sign))*_StackArtworkGlow*saturate(_GangstarNight);
+    }
     if (weaponStone > .5) { s.albedo *= stoneNosing > .5 ? .34h : .72h; s.metallic=0; s.smoothness=.18h; s.occlusion=1; s.normalTS=half3(0,0,1); s.emission=half3(0,0,0); }
     if (_CityRailingGlow > .001 && railingMask > 0) { s.albedo=lerp(s.albedo,railingColor,railingMask*.75h); s.emission+=railingColor*railingMask*_CityRailingGlow*lerp(.28h,1.0h,saturate(_GangstarNight)); }
     if(busSurface>.5h||busAccent>.5h||busWarm>.5h){s.normalTS=half3(0,0,1);s.metallic=.12h;s.smoothness=.32h;s.occlusion=1;s.emission=base.rgb*(busAccent>.5h?lerp(.65h,2.4h,saturate(_GangstarNight)):.02h);if(busWarm>.5h)s.emission=base.rgb*half3(1,.78,.48)*lerp(.03h,.40h,saturate(_GangstarNight));}
+    s.emission *= saturate(_GangstarNight); // Day/night master emission gate.
 }
 
 #endif // UNIVERSAL_INPUT_SURFACE_PBR_INCLUDED
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

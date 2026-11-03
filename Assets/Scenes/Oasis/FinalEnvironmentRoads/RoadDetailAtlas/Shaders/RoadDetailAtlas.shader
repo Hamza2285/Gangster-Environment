@@ -2,6 +2,12 @@ Shader "Gangstar City/Road Detail PNG Atlas"
 {
     Properties
     {
+        [Toggle] _MedianLightsEnabled("Median Lights On", Float) = 0
+        [Toggle] _MedianBlinkEnabled("Median Blink", Float) = 1
+        _MedianBlinkSpeed("Median Blink Speed (Hz)", Range(.2,3)) = 1
+        _MedianLightGlow("Median Light Brightness", Range(0,6)) = 0
+        _CrossingDotGlow("Crossing Dot Glow", Range(0,6)) = 0
+        [HDR] _CrossingDotColor("Crossing Dot Color", Color) = (1,.42,.08,1)
         _MarkAtlas("City detail PNG atlas", 2D) = "black" {}
         [HideInInspector] _Road0ST("Mapping 0", Vector) = (1,1,0,0)
         [HideInInspector] _Road0Tint("Tint 0", Color) = (1,1,1,1)
@@ -508,6 +514,9 @@ Shader "Gangstar City/Road Detail PNG Atlas"
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
     CustomEditor "RoadAtlasMaterialGUI"
 }
+
+
+
 
 
 

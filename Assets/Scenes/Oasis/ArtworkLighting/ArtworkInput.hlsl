@@ -15,6 +15,7 @@
 half _GangstarNight;
 CBUFFER_START(UnityPerMaterial)
  half _ArtworkBrightness; half4 _ArtworkColor;
+ half _UseEmissionMap, _EmissionStrength, _EmissionNightOnly;
 float4 _BaseMap_ST;
 float4 _DetailAlbedoMap_ST;
 half4 _BaseColor;
@@ -269,6 +270,10 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData outSurfa
     outSurfaceData.normalTS = SampleNormal(uv, TEXTURE2D_ARGS(_BumpMap, sampler_BumpMap), _BumpScale);
     outSurfaceData.occlusion = SampleOcclusion(uv);
     outSurfaceData.emission = albedoAlpha.rgb * _ArtworkColor.rgb * specGloss.b * _ArtworkBrightness * saturate(_GangstarNight);
+#ifdef _ARTWORK_EMISSION_MAP
+    // Add lens emission without removing the existing artwork illumination.
+    outSurfaceData.emission += SAMPLE_TEXTURE2D(_EmissionMap,sampler_EmissionMap,uv).rgb * _EmissionColor.rgb * _EmissionStrength * saturate(_GangstarNight);
+#endif
 
 #if defined(_CLEARCOAT) || defined(_CLEARCOATMAP)
     half2 clearCoat = SampleClearCoat(uv);
@@ -288,4 +293,6 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData outSurfa
 }
 
 #endif // UNIVERSAL_INPUT_SURFACE_PBR_INCLUDED
+
+
 
