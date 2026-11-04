@@ -16,7 +16,7 @@ public class PopulationLinker : MonoBehaviour
 
     private void Awake()
     {
-        if (roads == null) roads = FindFirstObjectByType<TSMainManager>();
+        if (roads == null) roads = FindObjectOfType<TSMainManager>();
         if (roads == null)
         {
             Debug.LogError("[Population] No iTS road manager (TSMainManager) in the scene, so no traffic or pedestrians.", this);
@@ -40,7 +40,7 @@ public class PopulationLinker : MonoBehaviour
 
     private static Transform FindPlayer()
     {
-        foreach (var cc in FindObjectsByType<CharacterController>(FindObjectsSortMode.None))
+        foreach (var cc in FindObjectsOfType<CharacterController>())
             if (cc.CompareTag("Player")) return cc.transform;
         var tagged = GameObject.FindGameObjectWithTag("Player");
         if (tagged != null) return tagged.transform;

@@ -30,6 +30,8 @@ half _ClearCoatSmoothness;
 half _DetailAlbedoMapScale;
 half _DetailNormalMapScale;
 half _Surface;
+half _CrossingDotGlow; half4 _CrossingDotColor;
+half _MedianLightsEnabled, _MedianBlinkEnabled, _MedianBlinkSpeed, _MedianLightGlow;
 float4 _Road0ST;
 half4 _Road0Tint;
 half _Road0Smoothness, _Road0Metallic, _Road0Emission, _Road0SurfaceSlice;
@@ -286,7 +288,25 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData outSurfa
     outSurfaceData.normalTS = SampleNormal(uv, TEXTURE2D_ARGS(_BumpMap, sampler_BumpMap), _BumpScale);
     outSurfaceData.occlusion = SampleOcclusion(uv);
     outSurfaceData.emission = albedoAlpha.rgb * _EmissionColor.rgb * RoadEmission(uv) * lerp(1.0h, _CityNightRoadEmission, _GangstarNight);
+    // Only dotted bronze crossing panels in slice 1; reuse the existing albedo sample.
+    if (_CrossingDotGlow > .001h && abs(RoadSlice(uv)-1.0)<.1) {
+        float2 q=frac(RoadUV(uv)*_Road1ST.xy+_Road1ST.zw);
+        half panels=((q.x>.024 && q.x<.108 || q.x>.892 && q.x<.976) && q.y>.124 && q.y<.869 || (q.y>.901 && q.y<.995 || q.y>.015 && q.y<.108) && q.x>.145 && q.x<.865) ? 1.0h:0.0h;
+        half dots=smoothstep(.10h,.35h,min(albedoAlpha.r,albedoAlpha.g))*smoothstep(.025h,.10h,albedoAlpha.r-albedoAlpha.b);
+        outSurfaceData.emission+=_CrossingDotColor.rgb*(panels*dots*_CrossingDotGlow*lerp(.02h,1.0h,saturate(_GangstarNight)));
+    }
 
+    // Existing orange median lens pixels in road slice 0. No new texture samples.
+    if (_MedianLightGlow>.001h && abs(RoadSlice(uv))<.1) {
+        float2 medianUV=frac(RoadUV(uv)*_Road0ST.xy+_Road0ST.zw);
+        if(medianUV.x>.465 && medianUV.x<.497) {
+            half lens=smoothstep(.13h,.40h,albedoAlpha.r-albedoAlpha.b)*smoothstep(.055h,.20h,albedoAlpha.g-albedoAlpha.b)*smoothstep(.12h,.32h,albedoAlpha.r);
+            half pulse=lerp(1.0h,1.0h-smoothstep(.43h,.53h,frac(_Time.y*_MedianBlinkSpeed)),saturate(_MedianBlinkEnabled))*saturate(_MedianLightsEnabled);
+            outSurfaceData.albedo*=lerp(1.0h,lerp(.20h,1.0h,pulse),lens);
+            outSurfaceData.emission*=lerp(1.0h,pulse,lens);
+            outSurfaceData.emission+=half3(1,.30,.035)*(lens*pulse*_MedianLightGlow*lerp(.25h,1.0h,saturate(_GangstarNight)));
+        }
+    }
 #if defined(_CLEARCOAT) || defined(_CLEARCOATMAP)
     half2 clearCoat = SampleClearCoat(uv);
     outSurfaceData.clearCoatMask       = clearCoat.r;
@@ -302,9 +322,13 @@ inline void InitializeStandardLitSurfaceData(float2 uv, out SurfaceData outSurfa
     outSurfaceData.albedo = ApplyDetailAlbedo(detailUv, outSurfaceData.albedo, detailMask);
     outSurfaceData.normalTS = ApplyDetailNormal(detailUv, outSurfaceData.normalTS, detailMask);
 #endif
+    outSurfaceData.emission *= saturate(_GangstarNight); // Day/night master emission gate.
 }
 
 #endif // UNIVERSAL_INPUT_SURFACE_PBR_INCLUDED
+
+
+
 
 
 

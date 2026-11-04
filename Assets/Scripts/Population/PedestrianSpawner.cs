@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using OpenworldCrime.Pedestrians;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -12,6 +11,15 @@ public class PedestrianSpawner : MonoBehaviour
     const float SlotSpacing = 3f;
     const float SlotCellSize = 40f;
     const float MinSpawnGap = 4f;
+    const float AvoidRange = 3.5f;
+    const float ClearWidth = 0.8f;
+    const float ComfortDistance = 1.4f;
+    const float MinSeparation = 0.65f;
+    const float MaxLateral = 0.85f;
+    const float GroupCheckSeconds = 0.6f;
+    const float GroupGatherRange = 5f;
+    const float GroupClearance = 2.2f;
+    const float ArriveTimeout = 9f;
 
     [Header("References")]
     public GameObject[] peoplePrefabs;
@@ -25,8 +33,6 @@ public class PedestrianSpawner : MonoBehaviour
     public float peoplePerCar = 2f;
     [Tooltip("Pool size; also the active count when not matching car density.")]
     public int amount = 240;
-    [Tooltip("Upper limit of the pool when matching car density (set by the graphics profiles).")]
-    public int maxAmount = 240;
     public float spawnRadius = 220f;
 
     [Header("Spawn rules")]
@@ -37,16 +43,12 @@ public class PedestrianSpawner : MonoBehaviour
     public float walkSpeedMax = 1.6f;
     [Tooltip("Only people this close to the camera cast shadows.")]
     public float shadowDistance = 60f;
-    [Tooltip("Only people this close to the camera have per-bone bullet hitboxes (head shots) and keep live corpse physics; " +
-             "farther away one capsule takes the bullets and settled corpses are frozen (set by the graphics profiles).")]
-    public float hitboxDistance = 25f;
 
     [Header("Panic")]
     [Tooltip("NavMesh over roads, footpaths and plazas; loaded only while someone is off their lane.")]
     public NavMeshData panicNavMesh;
     [Tooltip("Defaults to the player's CharacterController.")]
     public Transform player;
-    [Tooltip("Legacy: panic everyone who comes within panicTriggerRadius of the player. Off by default; panic is now triggered by threats (aiming / gunshots, see PedestrianThreatSource on the player).")]
     public bool panicWhenPlayerNear = true;
     public float panicTriggerRadius = 12f;
     [Tooltip("Fleeing people keep running while the player is within this distance.")]
@@ -58,30 +60,21 @@ public class PedestrianSpawner : MonoBehaviour
     [Tooltip("Seconds the panic NavMesh stays loaded after everyone is back on their lanes.")]
     public float panicNavMeshUnloadDelay = 10f;
 
-    [Header("Damage")]
-    [Tooltip("Seconds a dead body stays before it may be recycled (only once the camera cannot see it).")]
-    public float corpseLifetime = 20f;
-    [Tooltip("People within this distance run when someone is knocked down or killed.")]
-    public float knockdownPanicRadius = 15f;
-    [Tooltip("People within this distance run when someone is hurt (e.g. bumped by a car).")]
-    public float hurtPanicRadius = 8f;
-    [Tooltip("Layers of vehicle bodies a running person must not walk into (their kinematic capsule would shove the car). Empty = the 'Vehicle' layer.")]
-    public LayerMask vehicleLayers;
-    [Tooltip("Radius of the vehicle check capsule. Keep it at least the body radius (0.3) so the body never touches a car.")]
-    public float vehicleCheckRadius = 0.32f;
-
-    /// <summary>Height of a pedestrian's body centre above its feet (aim checks).</summary>
-    public const float BodyCenterHeight = 0.9f;
-    private static readonly Collider[] VehicleOverlap = new Collider[4];
+    [Header("Public life")]
+    [Tooltip("Share of people standing in conversations at any moment.")]
+    [Range(0f, 0.6f)] public float talkingShare = 0.25f;
+    [Tooltip("Share of people pausing alone at any moment.")]
+    [Range(0f, 0.3f)] public float waitingShare = 0.06f;
+    public float talkSecondsMin = 12f;
+    public float talkSecondsMax = 30f;
+    public float waitSecondsMin = 6f;
+    public float waitSecondsMax = 14f;
+    [Tooltip("How long someone keeps walking before they may stop again.")]
+    public float standCooldownMin = 30f;
+    public float standCooldownMax = 80f;
 
     [Header("Budget")]
-    [Tooltip("Create the whole pool (Amount) during the first seconds and run every person's first activation (Awake) right " +
-             "away, instead of growing the pool and waking people up while the player drives into busy streets.")]
-    public bool prewarmPool = true;
-    public int instantiatePerFrame = 3;
-    [Tooltip("Most people placed per second (0 = no limit). Streets fill up gradually instead of in one burst, and the " +
-             "activation cost of a pooled person is spread out (set by the graphics profiles).")]
-    public float maxSpawnsPerSecond = 8f;
+    public int instantiatePerFrame = 10;
     public int spawnAttemptsPerFrame = 40;
     public int peopleCheckedPerFrame = 30;
 
@@ -101,6 +94,12 @@ public class PedestrianSpawner : MonoBehaviour
     private float _lastOffLaneTime;
     private int _offLaneCount;
     private int _carSensorLayer = -1;
+    private readonly List<StandingGroup> _groups = new List<StandingGroup>();
+    private readonly List<PedestrianWalker> _partners = new List<PedestrianWalker>();
+    private readonly List<int> _slotsNear = new List<int>();
+    private readonly Vector3[] _spots = new Vector3[3];
+    private readonly Collider[] _overlap = new Collider[8];
+    private float _groupTimer;
 
     public int CarSensorLayer
     {
@@ -155,15 +154,14 @@ public class PedestrianSpawner : MonoBehaviour
 
     private void Start()
     {
-        Active = this;
         _network = GetComponent<FootpathLaneNetwork>();
         if (matchCarDensity && carSpawner != null)
         {
-            amount = Mathf.Min(maxAmount, Mathf.CeilToInt(carSpawner.amount * peoplePerCar));
+            amount = Mathf.CeilToInt(carSpawner.amount * peoplePerCar);
             spawnRadius = carSpawner.maxDistance;
         }
         _targetActive = matchCarDensity ? 0 : amount;
-        _targetInView = matchCarDensity ? 0 : int.MaxValue;
+        _targetInView = matchCarDensity ? 0 : amount;
 
         _laneWalkers = new List<PedestrianWalker>[_network.lanes.Count];
         for (int i = 0; i < _laneWalkers.Length; i++) _laneWalkers[i] = new List<PedestrianWalker>();
@@ -178,44 +176,14 @@ public class PedestrianSpawner : MonoBehaviour
 
         if (player == null)
         {
-            foreach (var cc in FindObjectsByType<CharacterController>(FindObjectsSortMode.None))
+            foreach (var cc in FindObjectsOfType<CharacterController>())
                 if (cc.CompareTag("Player")) { player = cc.transform; break; }
         }
-        if (vehicleLayers.value == 0) vehicleLayers = LayerMask.GetMask("Vehicle");
     }
 
     private void OnDisable()
     {
-        if (Active == this) Active = null;
         if (_panicNavMeshInstance.valid) _panicNavMeshInstance.Remove();
-    }
-
-    /// <summary>
-    /// Density from the graphics profiles. Lower values take effect at once (surplus people leave where the camera cannot
-    /// see them); the pool only grows up to the new limit.
-    /// </summary>
-    public void SetDensity(float newPeoplePerCar, int newMaxAmount)
-    {
-        peoplePerCar = Mathf.Max(0f, newPeoplePerCar);
-        maxAmount = Mathf.Max(0, newMaxAmount);
-        amount = matchCarDensity && carSpawner != null
-            ? Mathf.Min(maxAmount, Mathf.CeilToInt(carSpawner.amount * peoplePerCar))
-            : Mathf.Min(amount, maxAmount);
-        if (!matchCarDensity) _targetActive = amount;
-    }
-
-    /// <summary>Per-bone hitbox / live corpse distance and the spawn rate (graphics profiles).</summary>
-    public void SetDetail(float newHitboxDistance, float newMaxSpawnsPerSecond, bool newPrewarmPool)
-    {
-        hitboxDistance = Mathf.Max(0f, newHitboxDistance);
-        maxSpawnsPerSecond = Mathf.Max(0f, newMaxSpawnsPerSecond);
-        prewarmPool = newPrewarmPool;
-    }
-
-    /// <summary>Only people this close to the camera cast shadows (graphics profiles; 0 = none).</summary>
-    public void SetShadowDistance(float distance)
-    {
-        shadowDistance = Mathf.Max(0f, distance);
     }
 
     private void Update()
@@ -241,7 +209,10 @@ public class PedestrianSpawner : MonoBehaviour
         CreatePooled();
         SpawnPooled(cam);
         if (panicWhenPlayerNear && player != null) TriggerPanic(player.position, panicTriggerRadius);
+        UpdateStanding(Time.deltaTime);
+        KeepApart();
         MoveWalkers(Time.deltaTime);
+        SeparateOverlaps();
         CheckActive(cam);
         UpdatePanicNavMesh();
     }
@@ -256,104 +227,11 @@ public class PedestrianSpawner : MonoBehaviour
             Vector3 d = walker.transform.position - point;
             d.y = 0f;
             if (d.sqrMagnitude > radiusSqr) continue;
-            PanicWalker(walker, point);
+
+            PedestrianWalker.Mode before = walker.State;
+            if (!walker.StartPanic(point, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax))) continue;
+            if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
         }
-    }
-
-    // Panics everyone within radius of the line from -> to (e.g. a bullet path), or only the one closest to 'from'.
-    public int TriggerPanicAlongLine(Vector3 from, Vector3 to, float radius, Vector3 threat, bool closestOnly)
-    {
-        Vector3 line = to - from;
-        float length = line.magnitude;
-        if (length < 0.01f) return 0;
-        Vector3 dir = line / length;
-        float radiusSqr = radius * radius;
-        PedestrianWalker closest = null;
-        float closestAlong = float.MaxValue;
-        int count = 0;
-        for (int i = 0; i < _active.Count; i++)
-        {
-            PedestrianWalker walker = _active[i];
-            Vector3 body = walker.transform.position + Vector3.up * BodyCenterHeight;
-            float along = Vector3.Dot(body - from, dir);
-            if (along < 0f || along > length) continue;
-            if ((body - (from + dir * along)).sqrMagnitude > radiusSqr) continue;
-            if (closestOnly)
-            {
-                if (along < closestAlong) { closestAlong = along; closest = walker; }
-            }
-            else if (PanicWalker(walker, threat)) count++;
-        }
-        if (closest != null && PanicWalker(closest, threat)) count++;
-        return count;
-    }
-
-    /// <summary>First pedestrian (closest to 'from') whose body centre lies within radius of the line from -> to, or null.</summary>
-    public PedestrianWalker FindFirstAlongLine(Vector3 from, Vector3 to, float radius)
-    {
-        Vector3 line = to - from;
-        float length = line.magnitude;
-        if (length < 0.01f) return null;
-        Vector3 dir = line / length;
-        float radiusSqr = radius * radius;
-        PedestrianWalker closest = null;
-        float closestAlong = float.MaxValue;
-        for (int i = 0; i < _active.Count; i++)
-        {
-            PedestrianWalker walker = _active[i];
-            Vector3 body = walker.transform.position + Vector3.up * BodyCenterHeight;
-            float along = Vector3.Dot(body - from, dir);
-            if (along < 0f || along > length || along >= closestAlong) continue;
-            if ((body - (from + dir * along)).sqrMagnitude > radiusSqr) continue;
-            closestAlong = along;
-            closest = walker;
-        }
-        return closest;
-    }
-
-    public bool TriggerPanicFor(PedestrianWalker walker, Vector3 threat)
-    {
-        return walker != null && PanicWalker(walker, threat);
-    }
-
-    private bool PanicWalker(PedestrianWalker walker, Vector3 threat)
-    {
-        PedestrianWalker.Mode before = walker.State;
-        if (!walker.StartPanic(threat, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax))) return false;
-        if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
-        return true;
-    }
-
-    // Damage events forwarded by the walkers (PedestrianDamage).
-    public void OnWalkerDowned(PedestrianWalker walker, PedestrianWalker.Mode before)
-    {
-        if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
-        if (knockdownPanicRadius > 0f) TriggerPanic(walker.transform.position, knockdownPanicRadius);
-    }
-
-    public void OnWalkerRecovered(PedestrianWalker walker, Vector3 threat)
-    {
-        walker.Recover(threat, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax));
-    }
-
-    public void OnWalkerHurt(PedestrianWalker walker, Vector3 threat)
-    {
-        PanicWalker(walker, threat);
-        if (hurtPanicRadius > 0f) TriggerPanic(walker.transform.position, hurtPanicRadius);
-    }
-
-    /// <summary>True when stepping from current to next would walk into a vehicle body (stepping out of one is always allowed).</summary>
-    public bool IsBlockedByVehicle(Vector3 current, Vector3 next)
-    {
-        if (!Overlaps(next)) return false;
-        return !Overlaps(current);
-    }
-
-    private bool Overlaps(Vector3 feet)
-    {
-        float r = vehicleCheckRadius;
-        return Physics.OverlapCapsuleNonAlloc(feet + Vector3.up * (0.3f + r), feet + Vector3.up * (1.8f - r), r,
-            VehicleOverlap, vehicleLayers, QueryTriggerInteraction.Ignore) > 0;
     }
 
     public bool EnsurePanicNavMesh()
@@ -469,81 +347,20 @@ public class PedestrianSpawner : MonoBehaviour
         }
     }
 
-    /// <summary>The spawner in the running scene (null outside play mode).</summary>
-    public static PedestrianSpawner Active { get; private set; }
-    /// <summary>Parent of every placed person.</summary>
-    public Transform ActiveRoot => _activeRoot;
-
-    /// <summary>
-    /// Takes a person of the given type (index into People Prefabs) out of the pool - or creates one - and hands it to a
-    /// scripted scene at the given pose (a traffic car's driver being pulled out or falling out dead). The person is a normal
-    /// walker afterwards: <see cref="PedestrianWalker.Release"/> lets it run, PedestrianDamage drives its knock-down / death,
-    /// and the spawner recycles it like anyone else. Returns null if the type is unknown.
-    /// </summary>
-    public PedestrianWalker AdoptDriver(int prefabIndex, Vector3 position, Quaternion rotation)
-    {
-        if (_network == null || peoplePrefabs == null || prefabIndex < 0 || prefabIndex >= peoplePrefabs.Length || peoplePrefabs[prefabIndex] == null) return null;
-        GameObject prefab = peoplePrefabs[prefabIndex];
-        PedestrianWalker walker = TakeInactive(prefab.name);
-        if (walker == null)
-        {
-            walker = CreateWalker(prefab);
-            _created++;
-        }
-        walker.transform.SetParent(_activeRoot, true);
-        walker.transform.SetPositionAndRotation(position, rotation);
-        walker.Hold();
-        walker.SetVisible(true);
-        _active.Add(walker);
-        _peopleInView++;
-        return walker;
-    }
-
-    private PedestrianWalker TakeInactive(string prefabName)
-    {
-        PedestrianWalker found = null;
-        int count = _inactive.Count;
-        for (int i = 0; i < count; i++)
-        {
-            PedestrianWalker w = _inactive.Dequeue();
-            if (found == null && w != null && w.name.StartsWith(prefabName)) found = w;
-            else _inactive.Enqueue(w);
-        }
-        return found;
-    }
-
     private void CreatePooled()
     {
-        int wanted = prewarmPool ? amount : _targetActive;
-        for (int i = 0; i < instantiatePerFrame && _created < amount && _active.Count + _inactive.Count + _parked.Count < wanted; i++, _created++)
+        for (int i = 0; i < instantiatePerFrame && _created < amount && _active.Count + _inactive.Count + _parked.Count < _targetActive; i++, _created++)
         {
-            PedestrianWalker walker = CreateWalker(peoplePrefabs[Random.Range(0, peoplePrefabs.Length)]);
-            _inactive.Enqueue(walker);
-        }
-    }
-
-    private PedestrianWalker CreateWalker(GameObject prefab)
-    {
-        {
+            GameObject prefab = peoplePrefabs[Random.Range(0, peoplePrefabs.Length)];
             GameObject go = Instantiate(prefab, _poolRoot);
 
-            // The pedestrian prefab variants carry their own alive capsule and kinematic body (PedestrianDamage uses them).
-            CapsuleCollider capsule;
-            if (!go.TryGetComponent(out capsule))
-            {
-                capsule = go.AddComponent<CapsuleCollider>();
-                capsule.height = 1.8f;
-                capsule.radius = 0.3f;
-                capsule.center = new Vector3(0f, 0.9f, 0f);
-            }
-            Rigidbody body;
-            if (!go.TryGetComponent(out body))
-            {
-                body = go.AddComponent<Rigidbody>();
-                body.mass = 70f;
-                body.isKinematic = true;
-                body.useGravity = false;
-            }
+            var capsule = go.AddComponent<CapsuleCollider>();
+            capsule.height = 1.8f;
+            capsule.radius = 0.3f;
+            capsule.center = new Vector3(0f, 0.9f, 0f);
+            var body = go.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.useGravity = false;
 
             var agent = go.AddComponent<NavMeshAgent>();
             agent.radius = 0.35f;
@@ -554,31 +371,16 @@ public class PedestrianSpawner : MonoBehaviour
             agent.avoidancePriority = Random.Range(30, 70);
 
             var walker = go.AddComponent<PedestrianWalker>();
-            walker.Setup(_network, this, agent, go.GetComponent<PedestrianDamage>());
-            if (prewarmPool)
-            {
-                // First activation (every component's Awake, Animator graph) now, out of sight, not on the first spawn.
-                go.transform.position = ParkingSpot;
-                go.transform.SetParent(_activeRoot, true);
-                go.transform.SetParent(_poolRoot, true);
-            }
-            return walker;
+            walker.Setup(_network, this, agent);
+            _inactive.Enqueue(walker);
         }
     }
-
-    private float _spawnBudget;
 
     private void SpawnPooled(Camera cam)
     {
         Vector3 camPos = cam.transform.position;
-        if (maxSpawnsPerSecond > 0f)
-        {
-            _spawnBudget = Mathf.Min(_spawnBudget + maxSpawnsPerSecond * Time.deltaTime, Mathf.Max(1f, maxSpawnsPerSecond * 0.25f));
-            if (_spawnBudget < 1f) return;
-        }
         for (int attempt = 0; attempt < spawnAttemptsPerFrame && _inactive.Count > 0; attempt++)
         {
-            if (maxSpawnsPerSecond > 0f && _spawnBudget < 1f) break;
             // People inside the view radius match the cars there; the rest of the disc matches the remaining cars.
             bool needInside = _peopleInView < _targetInView && _slotsInView.Count > 0;
             bool needOutside = _active.Count - _peopleInView < OutsideTarget && _slotsInDisc.Count > 0;
@@ -601,15 +403,19 @@ public class PedestrianSpawner : MonoBehaviour
             _laneWalkers[walker.Lane].Add(walker);
             _active.Add(walker);
             if (insideView) _peopleInView++;
-            _spawnBudget -= 1f;
         }
     }
 
     private bool LaneHasRoom(int lane, float distance)
     {
+        return LaneHasRoom(lane, distance, MinSpawnGap);
+    }
+
+    private bool LaneHasRoom(int lane, float distance, float gap)
+    {
         List<PedestrianWalker> list = _laneWalkers[lane];
         for (int i = 0; i < list.Count; i++)
-            if (Mathf.Abs(list[i].Distance - distance) < MinSpawnGap) return false;
+            if (Mathf.Abs(list[i].Distance - distance) < gap) return false;
         return true;
     }
 
@@ -637,9 +443,9 @@ public class PedestrianSpawner : MonoBehaviour
         for (int i = 0; i < _active.Count; i++)
         {
             PedestrianWalker walker = _active[i];
-            if (walker.State == PedestrianWalker.Mode.Down)
+            if (walker.State == PedestrianWalker.Mode.Standing)
             {
-                walker.TickOffLane(dt, playerPos, calmDistance);
+                walker.TickStanding(dt);
                 continue;
             }
             if (walker.State != PedestrianWalker.Mode.Lane)
@@ -655,6 +461,316 @@ public class PedestrianSpawner : MonoBehaviour
                 _laneWalkers[walker.Lane].Add(walker);
             }
         }
+    }
+
+    // Walkers only queue behind others on their own lane, so this looks at everyone nearby: a person in the way
+    // is passed by stepping aside, and when there is no room to step, by slowing until they have gone by.
+    private void KeepApart()
+    {
+        for (int i = 0; i < _active.Count; i++)
+        {
+            PedestrianWalker walker = _active[i];
+            if (walker.State != PedestrianWalker.Mode.Lane) continue;
+
+            Vector3 position = walker.transform.position;
+            Vector3 forward = walker.Forward;
+            Vector3 left = new Vector3(-forward.z, 0f, forward.x);
+            float step = 0f;
+            float scale = 1f;
+
+            for (int j = 0; j < _active.Count; j++)
+            {
+                if (j == i) continue;
+                PedestrianWalker other = _active[j];
+                Vector3 toOther = other.transform.position - position;
+                toOther.y = 0f;
+                float distance = toOther.magnitude;
+                if (distance > AvoidRange || distance < 1e-3f) continue;
+
+                float ahead = Vector3.Dot(toOther, forward);
+                if (ahead < 0.1f) continue;
+                float side = Vector3.Dot(toOther, left);
+                if (Mathf.Abs(side) >= ClearWidth) continue;
+                // Someone moving ahead at the same pace or faster isn't getting any closer.
+                float closing = Vector3.Dot(forward * walker.Velocity.magnitude - other.Velocity, toOther / distance);
+                if (closing <= 0.02f && distance > ComfortDistance) continue;
+
+                // Passing someone coming the other way, both keep to their own right; otherwise step away from them.
+                bool headOn = Vector3.Dot(forward, other.Forward) < -0.5f && other.State == PedestrianWalker.Mode.Lane;
+                float direction = headOn || Mathf.Abs(side) < 0.05f ? -1f : -Mathf.Sign(side);
+                float want = (ClearWidth - Mathf.Abs(side)) * direction;
+                if (Mathf.Abs(want) > Mathf.Abs(step)) step = want;
+
+                float slow = Mathf.Clamp01((distance - MinSeparation) / (ComfortDistance - MinSeparation));
+                // At a crossing only one of the two gives way, or both would stop for good.
+                bool yields = headOn || other.State != PedestrianWalker.Mode.Lane || walker.GetInstanceID() < other.GetInstanceID();
+                if (yields && slow < scale) scale = slow;
+            }
+
+            walker.SpeedScale = scale;
+            if (step == 0f)
+            {
+                walker.LateralTarget = Mathf.MoveTowards(walker.LateralTarget, 0f, Time.deltaTime * 0.5f);
+                continue;
+            }
+
+            float target = Mathf.Clamp(walker.Lateral + step, -MaxLateral, MaxLateral);
+            if (!RoomAt(position + left * (target - walker.Lateral)))
+            {
+                float opposite = Mathf.Clamp(walker.Lateral - step, -MaxLateral, MaxLateral);
+                if (RoomAt(position + left * (opposite - walker.Lateral))) target = opposite;
+                else
+                {
+                    target = walker.Lateral;
+                    walker.SpeedScale = Mathf.Min(walker.SpeedScale, 0.4f);
+                }
+            }
+            walker.LateralTarget = target;
+        }
+    }
+
+    private bool RoomAt(Vector3 feet)
+    {
+        int hits = Physics.OverlapCapsuleNonAlloc(feet + Vector3.up * 0.6f, feet + Vector3.up * 1.5f, 0.28f, _overlap, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hits; i++)
+        {
+            Collider c = _overlap[i];
+            if (c.GetComponentInParent<PedestrianWalker>() == null && c.attachedRigidbody == null) return false;
+        }
+        return true;
+    }
+
+    // Last line of defence: whatever the steering above missed, two people never stand inside each other.
+    private void SeparateOverlaps()
+    {
+        for (int i = 0; i < _active.Count; i++)
+        {
+            PedestrianWalker a = _active[i];
+            if (a.State == PedestrianWalker.Mode.Fleeing || a.State == PedestrianWalker.Mode.Returning) continue;
+            for (int j = i + 1; j < _active.Count; j++)
+            {
+                PedestrianWalker b = _active[j];
+                if (b.State == PedestrianWalker.Mode.Fleeing || b.State == PedestrianWalker.Mode.Returning) continue;
+                Vector3 apart = b.transform.position - a.transform.position;
+                apart.y = 0f;
+                float distance = apart.magnitude;
+                if (distance >= MinSeparation) continue;
+                Vector3 direction = distance > 1e-3f ? apart / distance : a.transform.right;
+                float overlap = MinSeparation - distance;
+                bool aStands = a.State == PedestrianWalker.Mode.Standing && a.ArrivedAtSpot;
+                bool bStands = b.State == PedestrianWalker.Mode.Standing && b.ArrivedAtSpot;
+                if (aStands && bStands) continue;
+                if (aStands) b.Nudge(direction * overlap);
+                else if (bStands) a.Nudge(-direction * overlap);
+                else
+                {
+                    a.Nudge(-direction * overlap * 0.5f);
+                    b.Nudge(direction * overlap * 0.5f);
+                }
+            }
+        }
+    }
+
+    // A few people at a time stop to talk with whoever is beside them, or just wait a moment, then walk on.
+    private sealed class StandingGroup
+    {
+        public readonly List<PedestrianWalker> members = new List<PedestrianWalker>();
+        public float endsAt;
+        public float nextLineAt;
+        public float mustArriveBy;
+        public bool chatting;
+        public PedestrianWalker speaker;
+    }
+
+    private void UpdateStanding(float dt)
+    {
+        for (int g = _groups.Count - 1; g >= 0; g--)
+        {
+            StandingGroup group = _groups[g];
+            group.members.RemoveAll(m => m == null || m.State != PedestrianWalker.Mode.Standing || !m.gameObject.activeInHierarchy);
+            if (group.members.Count == 0 || (group.chatting && group.members.Count == 1 && group.speaker != group.members[0]))
+            {
+                EndGroup(g);
+                continue;
+            }
+
+            bool arrived = true;
+            for (int i = 0; i < group.members.Count; i++) arrived &= group.members[i].ArrivedAtSpot;
+            if (arrived && Time.time >= group.nextLineAt) NextLine(group);
+            if (Time.time >= group.endsAt || (!arrived && Time.time >= group.mustArriveBy)) EndGroup(g);
+        }
+
+        _groupTimer -= dt;
+        if (_groupTimer > 0f || _active.Count < 2) return;
+        _groupTimer = GroupCheckSeconds;
+
+        int wantGroups = Mathf.FloorToInt(_active.Count * talkingShare / 2.5f);
+        int wantWaiting = Mathf.FloorToInt(_active.Count * waitingShare);
+        int groups = 0, waiting = 0;
+        for (int g = 0; g < _groups.Count; g++)
+        {
+            if (_groups[g].chatting) groups++;
+            else waiting++;
+        }
+        if (groups < wantGroups) TryStartConversation();
+        if (waiting < wantWaiting) TryStartWaiting();
+    }
+
+    private void NextLine(StandingGroup group)
+    {
+        group.nextLineAt = Time.time + Random.Range(3f, 7f);
+        if (!group.chatting)
+        {
+            PedestrianWalker alone = group.members[0];
+            alone.PlayStand(alone.HasSecondIdle && Random.value < 0.5f ? "idle2" : "idle1");
+            return;
+        }
+
+        // Taking turns: one talks, the others listen.
+        PedestrianWalker next = group.members[Random.Range(0, group.members.Count)];
+        if (next == group.speaker && group.members.Count > 1)
+            next = group.members[(group.members.IndexOf(next) + 1) % group.members.Count];
+        group.speaker = next;
+        for (int i = 0; i < group.members.Count; i++)
+        {
+            PedestrianWalker member = group.members[i];
+            member.PlayStand(member == next ? (Random.value < 0.5f ? "talk1" : "talk2") : "listen");
+        }
+    }
+
+    private void EndGroup(int index)
+    {
+        StandingGroup group = _groups[index];
+        _groups.RemoveAt(index);
+        for (int i = 0; i < group.members.Count; i++)
+        {
+            PedestrianWalker member = group.members[i];
+            member.StandCooldownUntil = Time.time + Random.Range(standCooldownMin, standCooldownMax);
+            int lane = member.Lane;
+            float distance = member.Distance;
+            NearestLanePoint(member.transform.position, ref lane, ref distance);
+            member.FinishStanding(lane, distance);
+            _laneWalkers[member.Lane].Add(member);
+        }
+    }
+
+    private void NearestLanePoint(Vector3 from, ref int lane, ref float distance)
+    {
+        CollectSlots(_slotsNear, from, 8f);
+        float best = float.MaxValue;
+        for (int i = 0; i < _slotsNear.Count; i++)
+        {
+            int slot = _slotsNear[i];
+            float d = (_slotPosition[slot] - from).sqrMagnitude;
+            if (d >= best || !LaneHasRoom(_slotLane[slot], _slotDistance[slot], 1.5f)) continue;
+            best = d;
+            lane = _slotLane[slot];
+            distance = _slotDistance[slot];
+        }
+    }
+
+    private bool FreeToStand(PedestrianWalker walker)
+    {
+        return walker.State == PedestrianWalker.Mode.Lane && !walker.Rejoining && Time.time >= walker.StandCooldownUntil;
+    }
+
+    private bool TryPlaceSpot(Vector3 around, out Vector3 spot)
+    {
+        spot = around;
+        RaycastHit ground;
+        if (!Physics.Raycast(around + Vector3.up * 1.2f, Vector3.down, out ground, 2.4f, ~0, QueryTriggerInteraction.Ignore)) return false;
+        spot = around;
+        spot.y = around.y;
+        if (Mathf.Abs(ground.point.y - around.y) > 0.5f) return false;
+        spot.y = ground.point.y + 0.02f;
+        if (!RoomAt(spot)) return false;
+        // Not on top of someone else who is standing.
+        for (int g = 0; g < _groups.Count; g++)
+        {
+            for (int i = 0; i < _groups[g].members.Count; i++)
+            {
+                Vector3 d = _groups[g].members[i].transform.position - spot;
+                d.y = 0f;
+                if (d.sqrMagnitude < GroupClearance * GroupClearance) return false;
+            }
+        }
+        return true;
+    }
+
+    private void TryStartConversation()
+    {
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            PedestrianWalker first = _active[Random.Range(0, _active.Count)];
+            if (!first.CanTalk || !FreeToStand(first)) continue;
+
+            _partners.Clear();
+            for (int i = 0; i < _active.Count && _partners.Count < 2; i++)
+            {
+                PedestrianWalker other = _active[i];
+                if (other == first || !other.CanTalk || !FreeToStand(other)) continue;
+                Vector3 d = other.transform.position - first.transform.position;
+                if (Mathf.Abs(d.y) < 0.5f && d.sqrMagnitude < GroupGatherRange * GroupGatherRange) _partners.Add(other);
+            }
+            if (_partners.Count == 0) continue;
+            if (_partners.Count == 2 && Random.value > 0.3f) _partners.RemoveAt(1);
+
+            Vector3 centre = first.transform.position;
+            for (int i = 0; i < _partners.Count; i++) centre += _partners[i].transform.position;
+            centre /= _partners.Count + 1;
+
+            // Spread around the middle, with the pair roughly along the footpath so they don't block it.
+            int size = _partners.Count + 1;
+            float angle = Mathf.Atan2(first.Forward.x, first.Forward.z) * Mathf.Rad2Deg + Random.Range(-25f, 25f);
+            float radius = size == 2 ? 0.55f : 0.75f;
+            bool fits = true;
+            for (int i = 0; i < size && fits; i++)
+            {
+                Vector3 around = centre + Quaternion.Euler(0f, angle + i * 360f / size, 0f) * Vector3.forward * radius;
+                fits = TryPlaceSpot(around, out _spots[i]);
+            }
+            if (!fits) continue;
+
+            var group = new StandingGroup { chatting = true };
+            AddToGroup(group, first, _spots[0], centre);
+            for (int i = 0; i < _partners.Count; i++) AddToGroup(group, _partners[i], _spots[i + 1], centre);
+            group.endsAt = Time.time + Random.Range(talkSecondsMin, talkSecondsMax);
+            group.mustArriveBy = Time.time + ArriveTimeout;
+            group.nextLineAt = Time.time;
+            _groups.Add(group);
+            return;
+        }
+    }
+
+    private void TryStartWaiting()
+    {
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            PedestrianWalker walker = _active[Random.Range(0, _active.Count)];
+            if (!FreeToStand(walker)) continue;
+
+            // Off to one side of the lane, so others have room to go by.
+            Vector3 left = new Vector3(-walker.Forward.z, 0f, walker.Forward.x);
+            float side = Random.value < 0.5f ? -1f : 1f;
+            Vector3 ahead = walker.transform.position + walker.Forward * 1.2f;
+            Vector3 spot;
+            if (!TryPlaceSpot(ahead + left * side * 0.8f, out spot) && !TryPlaceSpot(ahead - left * side * 0.8f, out spot)) continue;
+
+            var group = new StandingGroup { chatting = false };
+            AddToGroup(group, walker, spot, spot + (Random.value < 0.5f ? left : -left) * 3f);
+            group.endsAt = Time.time + Random.Range(waitSecondsMin, waitSecondsMax);
+            group.mustArriveBy = Time.time + ArriveTimeout;
+            group.nextLineAt = Time.time;
+            _groups.Add(group);
+            return;
+        }
+    }
+
+    private void AddToGroup(StandingGroup group, PedestrianWalker walker, Vector3 spot, Vector3 faceToward)
+    {
+        _laneWalkers[walker.Lane].Remove(walker);
+        walker.BeginStanding(spot, faceToward);
+        group.members.Add(walker);
     }
 
     private static void SortByDistance(List<PedestrianWalker> list)
@@ -688,14 +804,8 @@ public class PedestrianSpawner : MonoBehaviour
         {
             if (_cursor >= _active.Count) _cursor = 0;
             PedestrianWalker walker = _active[_cursor];
-            if (walker.IsHeld)
-            {
-                // Owned by a scripted scene (a driver being pulled out of a car): never hidden or recycled meanwhile.
-                _cursor++;
-                continue;
-            }
 
-            Vector3 pos = walker.BodyPosition;
+            Vector3 pos = walker.transform.position;
             Vector3 fromCenter = pos - center;
             fromCenter.y = 0f;
             bool outsideDisc = fromCenter.sqrMagnitude > despawnSqr;
@@ -720,13 +830,15 @@ public class PedestrianSpawner : MonoBehaviour
             if (visible && distSqr >= hideSqr) walker.SetVisible(false);
             else if (!visible && distSqr <= showSqr) walker.SetVisible(true);
             walker.SetCastShadows(distSqr <= shadowDistance * shadowDistance);
-            walker.SetHitboxDetail(distSqr <= hitboxDistance * hitboxDistance);
             _cursor++;
         }
     }
 
     private void Despawn(PedestrianWalker walker)
     {
+        // Their group carries on without them; they were already off the lane lists.
+        if (walker.State == PedestrianWalker.Mode.Standing) walker.OnDespawned();
+
         if (walker.State == PedestrianWalker.Mode.Lane)
         {
             _laneWalkers[walker.Lane].Remove(walker);

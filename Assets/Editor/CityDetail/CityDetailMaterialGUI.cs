@@ -33,11 +33,13 @@ public class CityDetailMaterialGUI : ShaderGUI {
   EditorGUILayout.HelpBox("Night light is restricted to the Window Lights Mask. Brightness, warmth and lit windows are controlled in City Day Night Presets.",MessageType.Info);
   editor.ColorProperty(FindProperty("_EmissionColor",props),"Emission Tint");
   editor.RangeProperty(FindProperty("_CityEmissionStrength",props),"Emission Strength");
-  EditorGUILayout.Space();EditorGUILayout.LabelField("Railing Post Emission",EditorStyles.boldLabel);
+  if(m.HasProperty("_CityRailingGlow")){EditorGUILayout.Space();EditorGUILayout.LabelField("Railing Post Emission",EditorStyles.boldLabel);
   editor.RangeProperty(FindProperty("_CityRailingGlow",props),"Post Glow Strength");
   editor.ShaderProperty(FindProperty("_CityRailingUseEmissionMap",props),"Use Custom Emission Mask");
   editor.TexturePropertySingleLine(new GUIContent("Post Emission Map (Red Channel)"),FindProperty("_EmissionMap",props));
   EditorGUILayout.HelpBox("Only the amber post inserts emit orange, pink and red. Optional mask: white emits, black does not.",MessageType.Info);
+  }
+  if(m.HasProperty("_StackArtworkGlow"))editor.RangeProperty(FindProperty("_StackArtworkGlow",props),"Stack House Artwork Glow");
   EditorGUILayout.Space();EditorGUILayout.LabelField("Cutout and Sides",EditorStyles.boldLabel);
   editor.ShaderProperty(FindProperty("_AlphaClip",props),"Alpha Clipping");
   if(m.GetFloat("_AlphaClip")>0.5f)editor.RangeProperty(FindProperty("_Cutoff",props),"Cutout Threshold");
@@ -45,5 +47,6 @@ public class CityDetailMaterialGUI : ShaderGUI {
   foreach(Material target in editor.targets)CityMaterialUpgrade.Keywords(target);
  }
 }
+
 
 

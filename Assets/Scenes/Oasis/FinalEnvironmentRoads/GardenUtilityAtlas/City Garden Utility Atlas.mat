@@ -41,7 +41,9 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _CoffeeFenceGlow: 1.35
     - _Cutoff: 0.32
+    - _FenceGoldGlow: 2.3
     - _Wind: 0.09
     m_Colors: []
   m_BuildTextureStacks: []

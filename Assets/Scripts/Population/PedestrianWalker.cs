@@ -1,4 +1,3 @@
-using OpenworldCrime.Pedestrians;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -7,27 +6,30 @@ public class PedestrianWalker : MonoBehaviour
     // Ground speeds the clips were authored for; playback is scaled to match actual movement.
     const float WalkClipSpeed = 1.3f;
     const float RunClipSpeed = 4f;
-    // A walker held up by a vehicle on its path picks a new route after this long.
-    const float BlockedRepathTime = 0.35f;
+    const float LateralSpeed = 1.1f;
+    const float ArriveDistance = 0.06f;
 
-    // Down: knocked over or dead (PedestrianDamage drives the ragdoll; the walker does not move the body).
-    public enum Mode { Lane, Fleeing, Returning, Down }
+    public enum Mode { Lane, Fleeing, Returning, Standing }
 
     public Mode State { get; private set; }
-    /// <summary>True while a scripted scene owns this person (a traffic driver being pulled out of a car): the walker leaves
-    /// the body and its Animator alone and the spawner never recycles it.</summary>
-    public bool IsHeld { get; private set; }
     public int Lane { get; private set; }
     public float Distance { get; private set; }
     public float GapAhead { get; set; }
     public bool WantsRecycle { get; private set; }
     public Renderer[] Renderers { get; private set; }
 
-    /// <summary>Where the body actually is (the ragdoll hips while knocked down; they can be thrown away from the root).</summary>
-    public Vector3 BodyPosition
-    {
-        get { return State == Mode.Down && _damage != null && _damage.IsDown ? _damage.BodyPosition : transform.position; }
-    }
+    // Set each frame by the spawner to keep people apart.
+    public float SpeedScale { get; set; } = 1f;
+    public float LateralTarget { get; set; }
+    public float Lateral { get; private set; }
+
+    public Vector3 Forward { get; private set; } = Vector3.forward;
+    public Vector3 Velocity { get; private set; }
+    public bool ArrivedAtSpot { get; private set; }
+    public float StandCooldownUntil { get; set; }
+    public bool CanTalk { get; private set; }
+    public bool HasSecondIdle { get; private set; }
+    public bool Rejoining { get { return _rejoining; } }
 
     private FootpathLaneNetwork _network;
     private PedestrianSpawner _owner;
@@ -44,28 +46,17 @@ public class PedestrianWalker : MonoBehaviour
     private int _returnLane;
     private float _returnDistance;
     private float _stuckTime;
-    private float _blockedTime;
 
-    private PedestrianDamage _damage;
-    private bool _dead;
-    private float _corpseUntil;
+    private Vector3 _spot;
+    private Vector3 _faceToward;
+    private bool _rejoining;
 
-    public void Setup(FootpathLaneNetwork network, PedestrianSpawner owner, NavMeshAgent agent, PedestrianDamage damage)
+    public void Setup(FootpathLaneNetwork network, PedestrianSpawner owner, NavMeshAgent agent)
     {
         _network = network;
         _owner = owner;
         _agent = agent;
         _agent.enabled = false;
-        // The walker moves the transform itself (FollowAgent), so a vehicle in the way can hold it back.
-        _agent.updatePosition = false;
-        _damage = damage;
-        if (_damage != null)
-        {
-            _damage.OnKnockedDown += HandleKnockedDown;
-            _damage.OnDied += HandleDied;
-            _damage.OnRecovered += HandleRecovered;
-            _damage.OnHurt += HandleHurt;
-        }
         _laneLayer = gameObject.layer;
         _laneTag = gameObject.tag;
         _animator = GetComponentInChildren<Animator>();
@@ -74,26 +65,39 @@ public class PedestrianWalker : MonoBehaviour
         {
             _animator.applyRootMotion = false;
             _animator.cullingMode = AnimatorCullingMode.CullCompletely;
-            // Pooled people are switched off and on all the time; keeping the Animator's graph avoids rebuilding it
-            // (Animator.Initialize / avatar setup) on every spawn. Place() plays the walk state anyway.
-            _animator.keepAnimatorStateOnDisable = true;
+            var clips = _animator.runtimeAnimatorController as RuntimeAnimatorController;
+            CanTalk = HasClipFor(clips, "talk");
+            HasSecondIdle = HasClipFor(clips, "idle2") || HasClipFor(clips, "idle_2");
         }
+    }
+
+    // Officers have only walking clips, so they never join a conversation.
+    private static bool HasClipFor(RuntimeAnimatorController controller, string part)
+    {
+        if (controller == null) return false;
+        foreach (var clip in controller.animationClips)
+            if (clip != null && clip.name.ToLowerInvariant().Contains(part)) return true;
+        return false;
     }
 
     public void Place(int lane, float distance, float speed)
     {
         LeaveNavMesh();
         State = Mode.Lane;
-        _dead = false;
         Lane = lane;
         Distance = distance;
         _speed = speed;
         GapAhead = float.MaxValue;
         WantsRecycle = false;
+        Lateral = 0f;
+        LateralTarget = 0f;
+        SpeedScale = 1f;
+        _rejoining = false;
 
         Vector3 forward;
         Vector3 position = _network.Evaluate(lane, distance, out forward);
         forward.y = 0f;
+        if (forward.sqrMagnitude > 1e-4f) Forward = forward.normalized;
         transform.SetPositionAndRotation(position, forward.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(forward) : transform.rotation);
         _animState = null;
         PlayState("walk", Random.value);
@@ -103,13 +107,15 @@ public class PedestrianWalker : MonoBehaviour
     public int Advance(float dt)
     {
         int previousLane = Lane;
-        float speed = _speed * Mathf.Clamp01((GapAhead - 0.9f) / 1.2f);
+        // At a true dead end they wait there until they can be removed unseen.
+        float speed = WantsRecycle ? 0f : _speed * Mathf.Clamp01((GapAhead - 0.9f) / 1.2f) * SpeedScale;
         bool idle = speed < 0.15f;
         PlayState(idle ? "idle1" : "walk", Random.value);
         if (_animator != null) _animator.speed = idle ? 1f : Mathf.Clamp(speed / WalkClipSpeed, 0.5f, 1.4f);
 
+        // Coming back from a conversation: the lane waits until they have stepped back onto it.
+        float distance = Distance + (_rejoining ? 0f : speed * dt);
         FootpathLane lane = _network.lanes[Lane];
-        float distance = Distance + speed * dt;
         if (distance >= lane.Length)
         {
             if (lane.loop)
@@ -132,25 +138,99 @@ public class PedestrianWalker : MonoBehaviour
 
         Vector3 forward;
         Vector3 target = _network.Evaluate(Lane, Distance, out forward);
-        Vector3 current = transform.position;
-        // Glide across the short hop onto a connecting lane instead of snapping.
-        Vector3 position = (target - current).sqrMagnitude > 0.25f
-            ? Vector3.MoveTowards(current, target, Mathf.Max(speed, 1.5f) * 2.5f * dt)
-            : target;
-
         forward.y = 0f;
-        Quaternion rotation = transform.rotation;
-        if (forward.sqrMagnitude > 1e-4f)
-            rotation = Quaternion.Slerp(rotation, Quaternion.LookRotation(forward), 1f - Mathf.Exp(-8f * dt));
+        if (forward.sqrMagnitude > 1e-4f) Forward = forward.normalized;
+
+        Lateral = Mathf.MoveTowards(Lateral, LateralTarget, LateralSpeed * dt);
+        target += new Vector3(-Forward.z, 0f, Forward.x) * Lateral;
+
+        Vector3 current = transform.position;
+        // Short hops onto a connecting lane and steps back from a conversation are walked, not snapped.
+        bool offLine = (target - current).sqrMagnitude > 0.04f;
+        Vector3 position = offLine ? Vector3.MoveTowards(current, target, Mathf.Max(speed, 0.6f) * dt * (_rejoining ? 1f : 1.25f)) : target;
+        if (_rejoining && !offLine) _rejoining = false;
+
+        Vector3 moved = position - current;
+        moved.y = 0f;
+        Velocity = dt > 0f ? moved / dt : Vector3.zero;
+        Vector3 heading = offLine && moved.sqrMagnitude > 1e-6f ? moved : Forward;
+        Quaternion rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(heading), 1f - Mathf.Exp(-8f * dt));
         transform.SetPositionAndRotation(position, rotation);
 
         return previousLane;
     }
 
+    // Steps out of the flow to a spot and stands there: for a conversation, or just to wait a moment.
+    public void BeginStanding(Vector3 spot, Vector3 faceToward)
+    {
+        State = Mode.Standing;
+        _spot = spot;
+        _faceToward = faceToward;
+        ArrivedAtSpot = false;
+        _rejoining = false;
+        Lateral = 0f;
+        LateralTarget = 0f;
+        PlayState("walk", Random.value);
+    }
+
+    public void TickStanding(float dt)
+    {
+        Vector3 current = transform.position;
+        if (!ArrivedAtSpot)
+        {
+            Vector3 position = Vector3.MoveTowards(current, _spot, _speed * dt);
+            Vector3 moved = position - current;
+            moved.y = 0f;
+            Velocity = dt > 0f ? moved / dt : Vector3.zero;
+            if (_animator != null) _animator.speed = Mathf.Clamp(_speed / WalkClipSpeed, 0.5f, 1.4f);
+            Quaternion rotation = moved.sqrMagnitude > 1e-6f
+                ? Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(moved), 1f - Mathf.Exp(-8f * dt))
+                : transform.rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            if ((position - _spot).sqrMagnitude < ArriveDistance * ArriveDistance)
+            {
+                ArrivedAtSpot = true;
+                Velocity = Vector3.zero;
+                PlayStand("idle1");
+            }
+            return;
+        }
+
+        Vector3 toFace = _faceToward - current;
+        toFace.y = 0f;
+        if (toFace.sqrMagnitude > 1e-4f)
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(toFace), 1f - Mathf.Exp(-5f * dt));
+    }
+
+    public void PlayStand(string state)
+    {
+        PlayState(state, Random.value);
+        if (_animator != null) _animator.speed = 1f;
+    }
+
+    public void FinishStanding(int lane, float distance)
+    {
+        State = Mode.Lane;
+        Lane = lane;
+        Distance = distance;
+        GapAhead = float.MaxValue;
+        Lateral = 0f;
+        LateralTarget = 0f;
+        SpeedScale = 1f;
+        _rejoining = true;
+        PlayState("walk", Random.value);
+    }
+
+    // A small push to keep two people from standing in each other; only a walker in the flow takes it.
+    public void Nudge(Vector3 push)
+    {
+        transform.position += push;
+        if (State == Mode.Lane) Lateral += Vector3.Dot(push, new Vector3(-Forward.z, 0f, Forward.x));
+    }
+
     // Leaves the lane and runs away from the threat across any walkable surface. Returns false if no NavMesh here.
     public bool StartPanic(Vector3 threat, float duration, float runSpeed)
     {
-        if (State == Mode.Down) return false;
         _threat = threat;
         _panicUntil = Time.time + duration;
         if (State == Mode.Fleeing) return true;
@@ -170,25 +250,9 @@ public class PedestrianWalker : MonoBehaviour
 
     public void TickOffLane(float dt, Vector3 playerPosition, float calmDistance)
     {
-        if (State == Mode.Down)
-        {
-            // Corpses are cleared after the spawner's corpse lifetime; knocked-down survivors wait for PedestrianDamage.
-            if (_dead && Time.time >= _corpseUntil) WantsRecycle = true;
-            return;
-        }
-
         if (!_agent.enabled || !_agent.isOnNavMesh)
         {
             WantsRecycle = true;
-            return;
-        }
-
-        FollowAgent(dt);
-        if (_blockedTime > BlockedRepathTime)
-        {
-            _blockedTime = 0f;
-            if (State == Mode.Fleeing) PickFleeTarget();
-            else BeginReturn();
             return;
         }
 
@@ -226,28 +290,6 @@ public class PedestrianWalker : MonoBehaviour
         }
     }
 
-    /// <summary>Hands the person to a scripted scene (see <see cref="IsHeld"/>): off any lane / NavMesh, standing still.</summary>
-    public void Hold()
-    {
-        LeaveNavMesh();
-        State = Mode.Down;
-        _dead = false;
-        WantsRecycle = false;
-        IsHeld = true;
-        _animState = null;
-    }
-
-    /// <summary>
-    /// Gives the person back after a scripted scene. Still standing (no knock-down / death in progress): it runs from the threat
-    /// at once. Otherwise PedestrianDamage brings it back (gets up and runs, or stays a corpse).
-    /// </summary>
-    public void Release(Vector3 threat)
-    {
-        IsHeld = false;
-        _animState = null;
-        if (_damage == null || (!_damage.IsDown && !_damage.IsDead)) _owner.OnWalkerRecovered(this, threat);
-    }
-
     public void ForceCalm()
     {
         if (State == Mode.Fleeing) _panicUntil = 0f;
@@ -256,77 +298,7 @@ public class PedestrianWalker : MonoBehaviour
     public void OnDespawned()
     {
         LeaveNavMesh();
-        IsHeld = false;
         State = Mode.Lane;
-        _dead = false;
-        _blockedTime = 0f;
-        if (_damage != null) _damage.ResetForReuse();
-    }
-
-    /// <summary>A knocked-down survivor is back on its feet: it runs from the threat. Returns false (recycled) without NavMesh.</summary>
-    public bool Recover(Vector3 threat, float duration, float runSpeed)
-    {
-        if (State != Mode.Down) return false;
-        State = Mode.Returning;
-        _animState = null;
-        if (StartPanic(threat, duration, runSpeed)) return true;
-        State = Mode.Down;
-        WantsRecycle = true;
-        return false;
-    }
-
-    private void EnterDown()
-    {
-        if (State == Mode.Down) return;
-        Mode before = State;
-        LeaveNavMesh();
-        State = Mode.Down;
-        _owner.OnWalkerDowned(this, before);
-    }
-
-    private void HandleKnockedDown(Vector3 threat)
-    {
-        EnterDown();
-    }
-
-    private void HandleDied(Vector3 threat)
-    {
-        EnterDown();
-        _dead = true;
-        _corpseUntil = Time.time + _owner.corpseLifetime;
-    }
-
-    private void HandleRecovered(Vector3 threat)
-    {
-        _owner.OnWalkerRecovered(this, threat);
-    }
-
-    private void HandleHurt(Vector3 threat)
-    {
-        if (State != Mode.Down) _owner.OnWalkerHurt(this, threat);
-    }
-
-    private void OnDestroy()
-    {
-        if (_damage == null) return;
-        _damage.OnKnockedDown -= HandleKnockedDown;
-        _damage.OnDied -= HandleDied;
-        _damage.OnRecovered -= HandleRecovered;
-        _damage.OnHurt -= HandleHurt;
-    }
-
-    // The agent plans the route; the walker only moves there when no vehicle stands in the way (never walks into cars).
-    private void FollowAgent(float dt)
-    {
-        Vector3 next = _agent.nextPosition;
-        if (_owner.IsBlockedByVehicle(transform.position, next))
-        {
-            _agent.nextPosition = transform.position;
-            _blockedTime += dt;
-            return;
-        }
-        transform.position = next;
-        _blockedTime = 0f;
     }
 
     private void PickFleeTarget()
@@ -394,9 +366,7 @@ public class PedestrianWalker : MonoBehaviour
             _agent.enabled = false;
             return false;
         }
-        transform.position = hit.position;
         _stuckTime = 0f;
-        _blockedTime = 0f;
         return true;
     }
 
@@ -415,12 +385,6 @@ public class PedestrianWalker : MonoBehaviour
     {
         for (int i = 0; i < Renderers.Length; i++)
             if (Renderers[i] != null) Renderers[i].enabled = visible;
-    }
-
-    /// <summary>Bone hitboxes / live corpse physics near the player, one capsule and frozen corpses farther away.</summary>
-    public void SetHitboxDetail(bool near)
-    {
-        if (_damage != null) _damage.SetHitboxesEnabled(near);
     }
 
     public bool IsVisible

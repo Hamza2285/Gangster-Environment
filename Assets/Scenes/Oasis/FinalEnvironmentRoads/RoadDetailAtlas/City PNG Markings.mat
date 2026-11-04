@@ -15,7 +15,9 @@ Material:
   - _ALPHATEST_ON
   - _EMISSION
   - _METALLICSPECGLOSSMAP
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _MEDIANBLINKENABLED_ON
+  - _MEDIANLIGHTSENABLED_ON
   m_LightmapFlags: 2
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -103,6 +105,7 @@ Material:
     - _BumpScale: 1
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
+    - _CrossingDotGlow: 3
     - _Cull: 2
     - _Cutoff: 0.575
     - _DetailAlbedoMapScale: 1.24
@@ -113,6 +116,10 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _MedianBlinkEnabled: 1
+    - _MedianBlinkSpeed: 1
+    - _MedianLightGlow: 3
+    - _MedianLightsEnabled: 1
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
@@ -149,6 +156,7 @@ Material:
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _CrossingDotColor: {r: 1.281373, g: 1.4980392, b: 0.070588194, a: 1}
     - _EmissionColor: {r: 0.5566038, g: 0.5566038, b: 0.5566038, a: 1}
     - _Road0ST: {r: 1, g: 1, b: 0, a: 0}
     - _Road0Tint: {r: 0.8584906, g: 0.8584906, b: 0.8584906, a: 1}

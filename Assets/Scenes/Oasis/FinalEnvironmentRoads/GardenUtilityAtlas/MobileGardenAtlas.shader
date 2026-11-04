@@ -1,14 +1,15 @@
 Shader "City/Mobile Garden Utility Atlas"{
-Properties{_GardenPebbles("Seamless garden gravel",2D)="white"{} _RoadBaseArray("Existing road surfaces",2DArray)=""{} _GrassDetail("Existing grass detail",2D)="white"{} _Atlas("Shared PNG atlas",2D)="white"{} _Cutoff("Cutout",Range(0,1))=.32 _Wind("Wind strength",Float)=.07}
+Properties{_CoffeeFenceGlow("Coffee Fence Warm Glow",Range(0,5))=0 _FenceGoldGlow("Casino Gold Glow",Range(0,6))=0 _GardenPebbles("Seamless garden gravel",2D)="white"{} _RoadBaseArray("Existing road surfaces",2DArray)=""{} _GrassDetail("Existing grass detail",2D)="white"{} _Atlas("Shared PNG atlas",2D)="white"{} _Cutoff("Cutout",Range(0,1))=.32 _Wind("Wind strength",Float)=.07}
 SubShader{Tags{"RenderPipeline"="UniversalPipeline" "RenderType"="TransparentCutout" "Queue"="AlphaTest"} Cull Off ZWrite On
 HLSLINCLUDE
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 TEXTURE2D_ARRAY(_RoadBaseArray);SAMPLER(sampler_RoadBaseArray);TEXTURE2D(_GardenPebbles);SAMPLER(sampler_GardenPebbles);TEXTURE2D(_Atlas);SAMPLER(sampler_Atlas);TEXTURE2D(_GrassDetail);SAMPLER(sampler_GrassDetail);
 CBUFFER_START(UnityPerMaterial)
-float _Cutoff,_Wind;
+float _Cutoff,_Wind,_FenceGoldGlow,_CoffeeFenceGlow;
 CBUFFER_END
 float _CityGardenPreviewTime,_CityGardenPreviewEnabled;
+half _GangstarNight;
 float4 AtlasRect(float tile){
 if(tile<.5)return float4(.019,.773,.227,.216);
 if(tile<1.5)return float4(.270,.770,.219,.215);
@@ -30,7 +31,7 @@ return float4(.755,.0144,.226,.264);
 struct A{float4 p:POSITION;float3 n:NORMAL;float2 uv:TEXCOORD0;float2 info:TEXCOORD1;float2 plot:TEXCOORD3;float2 host:TEXCOORD4;float4 color:COLOR;UNITY_VERTEX_INPUT_INSTANCE_ID};
 struct V{float4 p:SV_POSITION;float3 n:TEXCOORD0;float2 uv:TEXCOORD1;float2 info:TEXCOORD2;float4 color:TEXCOORD3;float2 fogY:TEXCOORD4;float4 rect:TEXCOORD5;float2 grassUV:TEXCOORD6;float4 plot:TEXCOORD7;UNITY_VERTEX_INPUT_INSTANCE_ID};
 float TimeValue(){return lerp(_Time.y,_CityGardenPreviewTime,_CityGardenPreviewEnabled);}
-V Vert(A i){V o;UNITY_SETUP_INSTANCE_ID(i);UNITY_TRANSFER_INSTANCE_ID(i,o);float3 w=TransformObjectToWorld(i.p.xyz);float time=TimeValue();float phase=i.color.g*6.283+w.x*.17+w.z*.11;if(i.info.x<19.5)w.xz+=float2(sin(time*1.4+phase),cos(time*1.1+phase))*(i.color.r*i.color.r*_Wind);if(i.color.r<-.5){float life=frac(time*.72+i.color.g);w.xz+=i.plot*life;w.y+=1.9*life-3.1*life*life;}o.p=TransformWorldToHClip(w);o.n=TransformObjectToWorldNormal(i.n);o.grassUV=w.xz*.25;o.plot=float4(i.plot,i.host);o.uv=i.uv;float tile=i.color.a<.999?floor(i.color.a*16):i.info.x;o.rect=AtlasRect(tile);o.info=float2(tile,tile>12.5&&tile<13.5?1:tile>13.5&&tile<14.5?3:tile>14.5?2:0);o.color=i.color;o.fogY=float2(ComputeFogFactor(o.p.z),w.y);return o;}
+V Vert(A i){V o;UNITY_SETUP_INSTANCE_ID(i);UNITY_TRANSFER_INSTANCE_ID(i,o);float3 w=TransformObjectToWorld(i.p.xyz);float time=TimeValue();float phase=i.color.g*6.283+w.x*.17+w.z*.11;if(i.info.x<19.5)w.xz+=float2(sin(time*1.4+phase),cos(time*1.1+phase))*(i.color.r*i.color.r*_Wind);if(i.color.r<-.5){float life=frac(time*.72+i.color.g);w.xz+=i.plot*life;w.y+=1.9*life-3.1*life*life;}o.p=TransformWorldToHClip(w);o.n=TransformObjectToWorldNormal(i.n);o.grassUV=w.xz*.25;o.plot=float4(i.plot,i.host);o.uv=i.uv;float tile=i.color.a<.999?floor(i.color.a*16):i.info.x;o.rect=AtlasRect(tile);o.info=float2(tile,tile>19.5?i.info.y:(tile>12.5&&tile<13.5?1:tile>13.5&&tile<14.5?3:tile>14.5?2:0));o.color=i.color;o.fogY=float2(ComputeFogFactor(o.p.z),w.y);return o;}
 
 half4 GardenSurface(V i){if(any(i.plot.xy<1))return SAMPLE_TEXTURE2D(_Atlas,sampler_Atlas,i.rect.xy+lerp(.01,.99,i.uv)*i.rect.zw);
 float2 size=max(i.plot.xy,float2(1,1)),p=(i.uv-.5)*size;
@@ -73,7 +74,7 @@ half4 SportsSurface(V i){SportsClip(i);half3 c=i.color.rgb;
 if(i.info.x<20.5){half3 turf=SAMPLE_TEXTURE2D(_GrassDetail,sampler_GrassDetail,i.uv*.55).rgb;half gray=dot(turf,half3(.3,.59,.11));c*=lerp(.55,1.35,gray);c*=.94+.12*WaterNoise(i.uv*35);}
 else if(i.info.x<23.5){float4 rect=AtlasRect(12);float2 tex=frac(i.uv*.60);half3 stone=SAMPLE_TEXTURE2D(_Atlas,sampler_Atlas,rect.xy+lerp(.04,.96,tex)*rect.zw).rgb;half gray=dot(stone,half3(.3,.59,.11));c*=lerp(.76,1.12,gray);float stain=WaterNoise(i.uv*.34);c*=.94+.10*stain;}
 if(i.info.x>25.5){float4 leatherRect=AtlasRect(12);float2 ballUV=frac(i.uv*float2(35,18));half3 grain=SAMPLE_TEXTURE2D(_Atlas,sampler_Atlas,leatherRect.xy+lerp(.04,.96,ballUV)*leatherRect.zw).rgb;c*=.90+.16*dot(grain,half3(.3,.59,.11));if(i.info.x>26.5){float lon=i.uv.x*6.2831853,lat=i.uv.y*3.14159265;float3 sp=float3(sin(lat)*cos(lon),cos(lat),sin(lat)*sin(lon));float seamDistance=min(min(abs(sp.x),abs(sp.y)),abs(abs(sp.z)-(.63-.30*sp.y*sp.y)));float seamAA=max(fwidth(seamDistance),.002);float seam=1-smoothstep(.013-seamAA,.019+seamAA,seamDistance);float2 pebbleUV=i.uv*float2(104,52);pebbleUV.x+=fmod(floor(pebbleUV.y),2)*.5;float pebble=1-smoothstep(.18,.43,length(frac(pebbleUV)-.5));float grainVisibility=1-smoothstep(.28,.85,max(fwidth(pebbleUV.x),fwidth(pebbleUV.y)));c*=lerp(1,.86+.24*pebble,grainVisibility);c=lerp(c,half3(.018,.014,.010),seam);}}
-Light l=GetMainLight(TransformWorldToShadowCoord(PixelWorld(i)));half3 n=normalize(i.n);half3 lighting=max(.32,SampleSH(n)*.65+l.color*(.32+.65*saturate(dot(n,l.direction)))*l.shadowAttenuation);half3 lit=c*lighting;if(i.info.x>25.5){half3 view=normalize(_WorldSpaceCameraPos-PixelWorld(i));half shine=pow(saturate(dot(n,normalize(view+l.direction))),30)*.12;lit+=shine*l.color*l.shadowAttenuation;}return half4(MixFog(lit,i.fogY.x),1);}
+Light l=GetMainLight(TransformWorldToShadowCoord(PixelWorld(i)));half3 n=normalize(i.n);half3 lighting=max(.32,SampleSH(n)*.65+l.color*(.32+.65*saturate(dot(n,l.direction)))*l.shadowAttenuation);half3 lit=c*lighting;if(i.info.x>25.5){half3 view=normalize(_WorldSpaceCameraPos-PixelWorld(i));half shine=pow(saturate(dot(n,normalize(view+l.direction))),30)*.12;lit+=shine*l.color*l.shadowAttenuation;}if(i.info.x>21.5&&i.info.x<22.5&&i.info.y>1.5)lit+=half3(1,.42,.09)*_CoffeeFenceGlow*saturate(_GangstarNight);else if(i.info.x>21.5&&i.info.x<22.5&&i.info.y>.5)lit+=half3(1,.45,.075)*_FenceGoldGlow*saturate(_GangstarNight);return half4(MixFog(lit,i.fogY.x),1);}
 half4 Frag(V i):SV_Target{if(i.info.x>19.5)return SportsSurface(i);UNITY_SETUP_INSTANCE_ID(i);float time=TimeValue();float2 local=i.uv;float2 dx=ddx(local)*i.rect.zw*.98,dy=ddy(local)*i.rect.zw*.98;
 if(i.info.y>.5&&i.info.y<1.5)local=frac(local+float2(time*.018,time*.012)+sin(local.yx*12+time)*.015);
 else if(i.info.y>1.5){local.y=frac(local.y+time*(i.info.y>2.5?-.35:.28));}
@@ -124,6 +125,8 @@ HLSLPROGRAM
 ENDHLSL
 }
 }}
+
+
 
 
 

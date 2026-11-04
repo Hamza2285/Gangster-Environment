@@ -32,7 +32,8 @@ Material:
         m_Scale: {x: 4, y: 2}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _ArtworkGlow: 1.65
     m_Colors:
     - _Art0: {r: 0.0784375, g: 0.5228125, b: 0.2275, a: 0.1275}
     - _Art1: {r: 0.3509375, g: 0.3390625, b: 0.31375, a: 0.15625}

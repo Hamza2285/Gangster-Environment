@@ -2,6 +2,9 @@ Shader "Gangstar City/Artwork Mobile Lit"
 {
     Properties
     {
+        [Toggle] _UseEmissionMap("Use Emission Map", Float) = 0
+        _EmissionStrength("Emission Brightness", Range(0,12)) = 3
+        [Toggle] _EmissionNightOnly("Emission At Night Only", Float) = 1
         _ArtworkBrightness("Night Artwork Brightness", Range(0,8)) = 1.6
         [HDR] _ArtworkColor("Artwork Light Color", Color) = (1,1,1,1)
         // Specular vs Metallic workflow
@@ -126,6 +129,7 @@ Shader "Gangstar City/Artwork Mobile Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAMODULATE_ON
             #pragma shader_feature_local_fragment _EMISSION
+            #pragma shader_feature_local_fragment _ARTWORK_EMISSION_MAP
             #pragma shader_feature_local_fragment _METALLICSPECGLOSSMAP
             #pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
             #pragma shader_feature_local_fragment _OCCLUSIONMAP
@@ -257,6 +261,7 @@ Shader "Gangstar City/Artwork Mobile Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             //#pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
             #pragma shader_feature_local_fragment _EMISSION
+            #pragma shader_feature_local_fragment _ARTWORK_EMISSION_MAP
             #pragma shader_feature_local_fragment _METALLICSPECGLOSSMAP
             #pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
             #pragma shader_feature_local_fragment _OCCLUSIONMAP
@@ -421,6 +426,7 @@ Shader "Gangstar City/Artwork Mobile Lit"
             // Material Keywords
             #pragma shader_feature_local_fragment _SPECULAR_SETUP
             #pragma shader_feature_local_fragment _EMISSION
+            #pragma shader_feature_local_fragment _ARTWORK_EMISSION_MAP
             #pragma shader_feature_local_fragment _METALLICSPECGLOSSMAP
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
@@ -476,4 +482,5 @@ Shader "Gangstar City/Artwork Mobile Lit"
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
     CustomEditor "ArtworkMaterialGUI"
 }
+
 

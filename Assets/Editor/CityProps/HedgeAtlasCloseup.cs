@@ -1,0 +1,4 @@
+using System;using System.IO;using System.Linq;using UnityEngine;using UnityEditor;using UnityEngine.SceneManagement;using System.Reflection;
+public static partial class HedgeDetailUpdater {
+static void AtlasCloseCapture(){var sc=SceneManager.GetActiveScene();var f=sc.GetRootGameObjects().SelectMany(g=>g.GetComponentsInChildren<MeshFilter>(true)).Single(q=>q.name=="green1 (24)");var b=f.GetComponent<Renderer>().bounds;var group=f.GetComponentInParent<LODGroup>();if(group)group.ForceLOD(0);try{var center=b.center+Vector3.forward*(b.size.z*.5f-2f);typeof(FinalPNGCityDetails).GetMethod("Capture",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{sc,center+new Vector3(2.2f,1.5f,2.4f),center+Vector3.up*.4f,"Median880-Atlas-Leaf-Closeup"});}finally{if(group)group.ForceLOD(-1);}}
+}

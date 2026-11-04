@@ -65,6 +65,14 @@ public class RoadAtlasMaterialGUI : ShaderGUI {
             editor.RangeProperty(FindProperty("_Road"+i+"Metallic",properties),Names[i]+" Metallic");
             editor.RangeProperty(FindProperty("_Road"+i+"Emission",properties),Names[i]+" Emission");
         }
+        var crossingGlow=FindProperty("_CrossingDotGlow",properties,false);if(crossingGlow!=null){editor.RangeProperty(crossingGlow,"Crossing Dot Glow");editor.ColorProperty(FindProperty("_CrossingDotColor",properties),"Crossing Dot Color");}
+        var medianOn=FindProperty("_MedianLightsEnabled",properties,false);if(medianOn!=null){
+            EditorGUILayout.Space();EditorGUILayout.LabelField("Median Marker Lights",EditorStyles.boldLabel);
+            editor.ShaderProperty(medianOn,"Lights On");
+            editor.ShaderProperty(FindProperty("_MedianBlinkEnabled",properties),"Blink");
+            editor.RangeProperty(FindProperty("_MedianBlinkSpeed",properties),"Blink Speed (Hz)");
+            editor.RangeProperty(FindProperty("_MedianLightGlow",properties),"Brightness");
+        }
         surfaceOpen=EditorGUILayout.Foldout(surfaceOpen,"Surface Maps",true);
         if(surfaceOpen) for(int i=0;i<5;i++) {
             EditorGUI.BeginChangeCheck();
@@ -150,4 +158,6 @@ public static class RoadAtlasTextureBaker {
             throw new Exception("Unexpected imported atlas dimensions: "+path);
     }
 }
+
+
 

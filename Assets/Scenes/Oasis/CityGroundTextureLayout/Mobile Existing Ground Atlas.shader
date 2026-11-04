@@ -6,7 +6,7 @@ HLSLINCLUDE
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 TEXTURE2D(_BaseMap);SAMPLER(sampler_BaseMap);
 CBUFFER_START(UnityPerMaterial)
-float4 _PlotRect,_GroundData,_Feature0,_Feature1,_Fuel0,_Fuel1;float4 _GroundOutline[48],_GroundFacades[48];float4 _PatchRect[12],_PatchMode[12];
+float4 _GroundOffset;float4 _PlotRect,_GroundData,_Feature0,_Feature1,_Fuel0,_Fuel1;float4 _GroundOutline[48],_GroundFacades[48];float4 _PatchRect[12],_PatchMode[12];
 CBUFFER_END
 struct A{float4 p:POSITION;float3 n:NORMAL;float2 uv:TEXCOORD0;UNITY_VERTEX_INPUT_INSTANCE_ID};
 struct V{float4 p:SV_POSITION;float3 w:TEXCOORD0;float3 n:TEXCOORD1;float2 uv:TEXCOORD2;float fog:TEXCOORD3;UNITY_VERTEX_INPUT_INSTANCE_ID};
@@ -23,7 +23,7 @@ half3 Fetch(float tile,float2 uv){float2 rect=float2(fmod(tile,2),1-floor(tile/2
 float GroundStoneGrain(float2 p){float2 st=float2(.045,.035)+frac(p*float2(.73,1.63))*float2(.19,.085);return dot(Fetch(0,st),half3(.299,.587,.114));}
 float GroundHash(float2 p){float3 q=frac(float3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return frac((q.x+q.y)*q.z);}
 float GroundMottle(float2 p){float2 b=floor(p),f=frac(p);f=f*f*(3-2*f);return lerp(lerp(GroundHash(b),GroundHash(b+float2(1,0)),f.x),lerp(GroundHash(b+float2(0,1)),GroundHash(b+1),f.x),f.y);}
-half4 Frag(V i):SV_Target{UNITY_SETUP_INSTANCE_ID(i);float2 p=i.w.xz;float tile=0;half3 tint=1;float2 uv=i.uv;float active=step(.5,_GroundData.x)*step(.70,normalize(i.n).y);float paint=0;half3 paintColor=half3(.90,.89,.82);bool smoothConcrete=false;bool fuelSurface=false;float detailHeight=0;
+half4 Frag(V i):SV_Target{UNITY_SETUP_INSTANCE_ID(i);float2 p=i.w.xz-_GroundOffset.xy;float tile=0;half3 tint=1;float2 uv=i.uv;float active=step(.5,_GroundData.x)*step(.70,normalize(i.n).y);float paint=0;half3 paintColor=half3(.90,.89,.82);bool smoothConcrete=false;bool fuelSurface=false;float detailHeight=0;
 if(active>.5){float2 d=p-_PlotRect.xy;uv=p*.42;float variant=frac(_GroundData.y*.6180339);tint=lerp(half3(.97,.98,.99),half3(1.05,1.015,.96),variant);
 [loop]for(int k=0;k<12;k++){if(k>=_GroundData.z)break;float2 q=p-_PatchRect[k].xy;float sd=_PatchMode[k].z>.5?RoundedBox(q,_PatchRect[k].zw,.65):Ellipse(q,_PatchRect[k].zw);if(sd<.16){tile=sd<0?_PatchMode[k].x:0;tint=sd<0?half3(1,1,1):half3(.24,.26,.27);}}
 float edge=min(_PlotRect.z-abs(d.x),_PlotRect.w-abs(d.y));if(edge<1.8){tile=0;tint=half3(.97,.98,.99);}if(edge>1.80&&edge<1.98){tile=0;tint=half3(.30,.32,.33);}

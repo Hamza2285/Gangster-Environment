@@ -102,7 +102,10 @@ Material:
     - _CityEmissionStrength: 0.02
     - _CityFlagAtlas: 0
     - _CityHospital: 1
+    - _CityLegacyAtlasY: 0.6666667
     - _CityMetallic: 0.8
+    - _CityRailingGlow: 0
+    - _CityRailingUseEmissionMap: 0
     - _CitySmoothnessLimit: 0.5
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
@@ -130,7 +133,9 @@ Material:
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
+    - _StackArtworkGlow: 0
     - _Surface: 0
+    - _TerminalAccentGlow: 0
     - _UseAoMap: 0
     - _UseColorMap: 1
     - _UseEmissiveMap: 1

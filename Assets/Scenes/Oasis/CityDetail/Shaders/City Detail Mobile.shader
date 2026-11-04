@@ -5,6 +5,7 @@ Shader "Gangstar City/City Detail Mobile"
         [HideInInspector] _CityWeaponStoneRect("Weapon shop existing stone paving rectangle", Vector) = (1,1,0,0)
         [HideInInspector] _CityWeaponVariantsRect("Weapon display variants rectangle", Vector) = (1,1,0,0)
         [HideInInspector] _CityWeaponAtlasRect("Weapon shop atlas rectangle", Vector) = (1,1,0,0)
+        [HideInInspector] _CityLegacyAtlasY("Preserved atlas height scale",Float)=1
         [HideInInspector] _CityHospitalAtlasRect("Hospital preserved atlas rectangle", Vector) = (1,1,0,0)
         [HideInInspector] _CityClothVariantsRect("Cloth display variants rectangle", Vector) = (1,1,0,0)
         [HideInInspector] _CityClothAtlasRect("Cloth shop atlas rectangle", Vector) = (1,1,0,0)
@@ -12,6 +13,8 @@ Shader "Gangstar City/City Detail Mobile"
         [HideInInspector] _CityFlagAtlas("Reserved flag strip", Float) = 0
         _CitySurfaceMap("Packed Surface", 2D) = "white" {}
         _CityNightMap("Window Colors and Accent Mask", 2D) = "black" {}
+        _TerminalAccentGlow("Terminal Red Accent Glow", Range(0,4)) = 0
+        _StackArtworkGlow("Stack House Artwork Glow", Range(0,5)) = 0
         _CityRailingGlow("Railing Post Glow", Range(0,6)) = 0
         [Toggle] _CityRailingUseEmissionMap("Use Railing Emission Map", Float) = 0
         _CityContrast("Texture Contrast", Range(0.8,1.3)) = 1.06
@@ -497,6 +500,8 @@ Shader "Gangstar City/City Detail Mobile"
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
     CustomEditor "CityDetailMaterialGUI"
 }
+
+
 
 
 

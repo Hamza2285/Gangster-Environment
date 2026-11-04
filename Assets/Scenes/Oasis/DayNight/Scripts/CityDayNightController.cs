@@ -21,16 +21,17 @@ public sealed class CityDayNightController : MonoBehaviour
     public Renderer nightLampBulbs;
     public bool showControlsInGame=true;
     [SerializeField] bool isNight;
-    [Min(.2f)] public float transitionSeconds=8f;
-    float nightBlend, targetBlend, blendVelocity;
+    [Min(.2f)] public float transitionSeconds=40f;
+    float nightBlend, targetBlend, blendVelocity, blendAcceleration;
+    float transitionElapsed, transitionDuration, segmentStart, segmentVelocity, segmentAcceleration;
     bool transitioning;
     readonly CityLightingLook blended=new CityLightingLook();
     float[] flareIntensity;
     public float NightBlend => nightBlend;
     public bool IsTransitioning => transitioning;
 #if UNITY_EDITOR
-    double editorTime;
-    void EditorTick(){double now=UnityEditor.EditorApplication.timeSinceStartup; if(!Application.isPlaying&&transitioning){AdvanceTransition((float)(now-editorTime));UnityEditor.SceneView.RepaintAll();UnityEditor.EditorApplication.QueuePlayerLoopUpdate();}editorTime=now;}
+    double editorTime, nextEditorLightUpdate;
+    void EditorTick(){double now=UnityEditor.EditorApplication.timeSinceStartup;float delta=(float)(now-editorTime);editorTime=now;if(Application.isPlaying||!isActiveAndEnabled)return;if(transitioning){AdvanceTransition(delta);UnityEditor.SceneView.RepaintAll();UnityEditor.EditorApplication.QueuePlayerLoopUpdate();}if(now>=nextEditorLightUpdate){nextEditorLightUpdate=now+.5;var view=UnityEditor.SceneView.lastActiveSceneView;RefreshStreetLights(view?view.camera:Camera.main);if(nightBlend>.01f)UnityEditor.SceneView.RepaintAll();}}
 #endif
     float nextLightUpdate;
     public bool IsNight => isNight;
@@ -46,6 +47,7 @@ public sealed class CityDayNightController : MonoBehaviour
         ConfigureSky();Apply(isNight);
 #if UNITY_EDITOR
         editorTime=UnityEditor.EditorApplication.timeSinceStartup;
+        UnityEditor.EditorApplication.update-=EditorTick;
         UnityEditor.EditorApplication.update+=EditorTick;
 #endif
     }
@@ -85,7 +87,7 @@ public sealed class CityDayNightController : MonoBehaviour
     [ContextMenu("Night")] public void ApplyNight(){TransitionTo(true);}
     public void Apply(bool night){
         if(!presets||!sun)return;
-        transitioning=false;blendVelocity=0;nightBlend=targetBlend=night?1:0;isNight=night;Shader.SetGlobalFloat("_CitySkyBlend",nightBlend);if(flareIntensity!=null&&sunFlares!=null)for(int i=0;i<Mathf.Min(flareIntensity.Length,sunFlares.Length);i++){var f=sunFlares[i] as LensFlareComponentSRP;if(f)f.intensity=flareIntensity[i];}ApplyLook(night?presets.night:presets.day,night,true);
+        transitioning=false;blendVelocity=blendAcceleration=0;nightBlend=targetBlend=night?1:0;isNight=night;Shader.SetGlobalFloat("_CitySkyBlend",nightBlend);if(flareIntensity!=null&&sunFlares!=null)for(int i=0;i<Mathf.Min(flareIntensity.Length,sunFlares.Length);i++){var f=sunFlares[i] as LensFlareComponentSRP;if(f)f.intensity=flareIntensity[i];}ApplyLook(night?presets.night:presets.day,night,true);
     }
     void ApplyLook(CityLightingLook p,bool night,bool endpoint){
         sun.enabled=p.lightEnabled;sun.transform.rotation=Quaternion.Euler(p.lightRotation);
@@ -105,7 +107,9 @@ public sealed class CityDayNightController : MonoBehaviour
         if(endpoint&&sunFlares!=null)for(int i=0;i<sunFlares.Length;i++)if(sunFlares[i])
             sunFlares[i].enabled=!night&&dayFlareEnabled!=null&&i<dayFlareEnabled.Length&&dayFlareEnabled[i];
         if(nightEffects){if(nightEffects.sharedProfile!=p.effects)nightEffects.sharedProfile=p.effects;nightEffects.weight=p.effects?1:0;}
-        Shader.SetGlobalFloat(Night,p.nightAmount);
+        Shader.SetGlobalFloat(Night,endpoint?(night?1:0):p.nightAmount);
+        Shader.SetGlobalVector("_CitySolarDirection",-(Quaternion.Euler(presets.day.lightRotation)*Vector3.forward));
+        if(endpoint)Shader.SetGlobalFloat("_CitySunrise",0);
         Shader.SetGlobalFloat("_CityWindowMix",p.windowColorMix);
         Shader.SetGlobalFloat("_CityAccentBrightness",p.accentBrightness);
         Shader.SetGlobalFloat("_CityVenueBrightness",p.venueBrightness);
@@ -119,47 +123,65 @@ public sealed class CityDayNightController : MonoBehaviour
         Shader.SetGlobalColor(WindowColor,(p.windowColor*Color.Lerp(new Color(.92f,.96f,1),new Color(1,.65f,.32f),p.windowWarmth)).linear);
         Shader.SetGlobalFloat(Road,p.roadEmission);
         if(endpoint&&streetLights!=null)foreach(var l in streetLights)if(l)l.enabled=false;
-        if(endpoint&&night)RefreshStreetLights(Camera.main);
+        if(endpoint&&night)RefreshStreetLights(ActiveLightingCamera());
         // Rebuild the existing sky reflection only when the user changes the preset.
         // Night uses a precomputed cubemap, never realtime reflection probes.
         if(endpoint&&!night)DynamicGI.UpdateEnvironment();
     }
-    public void TransitionTo(bool night){if(!presets||!sun)return;targetBlend=night?1:0;isNight=night;transitioning=Mathf.Abs(targetBlend-nightBlend)>.00001f;
+    public void TransitionTo(bool night){if(!presets||!sun)return;if(!transitioning&&Mathf.Abs(nightBlend-(night?1:0))<.00001f){Apply(night);return;}if(transitioning&&isNight==night)return;segmentStart=nightBlend;segmentVelocity=blendVelocity;segmentAcceleration=blendAcceleration;transitionElapsed=0;transitionDuration=Mathf.Max(.2f,transitionSeconds);targetBlend=night?1:0;isNight=night;transitioning=Mathf.Abs(targetBlend-nightBlend)>.00001f;
 #if UNITY_EDITOR
         editorTime=UnityEditor.EditorApplication.timeSinceStartup;
 #endif
     }
-    // Analytic critically damped motion preserves velocity when the user reverses direction.
-    // Unlike a frame-dependent lerp, this gives the same timing at 30, 60 and 120 FPS.
+    // Quintic Hermite trajectory has zero endpoint velocity/acceleration and exact duration.
+    // Preserve both derivatives when reversing, so light and sky values do not jump.
     public void AdvanceTransition(float seconds){
         if(!transitioning||seconds<=0)return;
-        float omega=12f/Mathf.Max(.2f,transitionSeconds);
-        float offset=nightBlend-targetBlend;
-        float coefficient=blendVelocity+omega*offset;
-        float decay=Mathf.Exp(-omega*seconds);
-        float value=targetBlend+(offset+coefficient*seconds)*decay;
-        blendVelocity=(blendVelocity-omega*coefficient*seconds)*decay;
-        if(Mathf.Abs(value-targetBlend)<.0002f&&Mathf.Abs(blendVelocity)<.001f){Apply(targetBlend>.5f);return;}
+        transitionElapsed=Mathf.Min(transitionElapsed+seconds,transitionDuration);
+        if(transitionElapsed>=transitionDuration){Apply(targetBlend>.5f);return;}
+        float u=transitionElapsed/transitionDuration,u2=u*u,u3=u2*u,u4=u3*u,u5=u4*u;
+        float d=targetBlend-segmentStart,v=segmentVelocity*transitionDuration,a=segmentAcceleration*transitionDuration*transitionDuration;
+        float c3=10*d-6*v-1.5f*a,c4=-15*d+8*v+1.5f*a,c5=6*d-3*v-.5f*a;
+        float value=segmentStart+v*u+.5f*a*u2+c3*u3+c4*u4+c5*u5;
+        blendVelocity=(v+a*u+3*c3*u2+4*c4*u3+5*c5*u4)/transitionDuration;
+        blendAcceleration=(a+6*c3*u+12*c4*u2+20*c5*u3)/(transitionDuration*transitionDuration);
         PreviewBlend(value);
     }
+    public void SetManualBlend(float amount){transitioning=false;blendVelocity=blendAcceleration=0;isNight=amount>=.5f;if(amount<=0||amount>=1)Apply(amount>=1);else PreviewBlend(amount);}
     static float SmootherStep(float x){x=Mathf.Clamp01(x);return x*x*x*(x*(x*6-15)+10);}
-    public void PreviewBlend(float amount){nightBlend=Mathf.Clamp01(amount);var a=presets.day;var b=presets.night;float t=SmootherStep(nightBlend);var p=blended;
-        p.skybox=presets.night.skybox;p.lightEnabled=true;p.lightRotation=Quaternion.Slerp(Quaternion.Euler(a.lightRotation),Quaternion.Euler(b.lightRotation),t).eulerAngles;
-        p.lightColor=Color.Lerp(a.lightColor,b.lightColor,t);p.lightIntensity=Mathf.Lerp(a.lightIntensity*a.sceneBrightness,b.lightIntensity*b.sceneBrightness,t);p.sceneBrightness=1;p.indirectIntensity=Mathf.Lerp(a.indirectIntensity,b.indirectIntensity,t);
-        p.useColorTemperature=a.useColorTemperature;p.colorTemperature=Mathf.Lerp(a.colorTemperature,b.colorTemperature,t);p.shadows=t<.5f?a.shadows:b.shadows;p.shadowStrength=Mathf.Lerp(a.shadowStrength,b.shadowStrength,t)*SmootherStep(Mathf.Abs(t*2-1));
+    public void PreviewBlend(float amount){if(!presets||!sun)return;nightBlend=Mathf.Clamp01(amount);var a=presets.day;var b=presets.night;float t=nightBlend;var p=blended;
+        p.skybox=presets.night.skybox;p.lightEnabled=true;
+        float solarProgress=1-SmootherStep(Mathf.InverseLerp(.08f,.86f,t));
+        float elevation=Mathf.Lerp(-7f,Mathf.DeltaAngle(0,a.lightRotation.x),solarProgress);
+        var solarRotation=Quaternion.Euler(elevation,a.lightRotation.y,a.lightRotation.z);
+        float moonMix=SmootherStep(Mathf.InverseLerp(.72f,1,t));
+        p.lightRotation=Quaternion.Slerp(solarRotation,Quaternion.Euler(b.lightRotation),moonMix).eulerAngles;
+        float sunVisible=SmootherStep(Mathf.InverseLerp(-2f,6f,elevation));
+        float moonVisible=SmootherStep(Mathf.InverseLerp(.78f,1,t));
+        var sunriseColor=Color.Lerp(new Color(1f,.30f,.08f),a.lightColor,SmootherStep(Mathf.InverseLerp(0,Mathf.Max(8,a.lightRotation.x),elevation)));
+        p.lightColor=Color.Lerp(sunriseColor,b.lightColor,moonVisible);p.lightIntensity=a.lightIntensity*a.sceneBrightness*sunVisible*(1-moonMix)+b.lightIntensity*b.sceneBrightness*moonVisible;p.sceneBrightness=1;p.indirectIntensity=Mathf.Lerp(a.indirectIntensity,b.indirectIntensity,t);
+        p.useColorTemperature=a.useColorTemperature;p.colorTemperature=Mathf.Lerp(a.colorTemperature,b.colorTemperature,t);p.shadows=t<.76f?a.shadows:b.shadows;p.shadowStrength=Mathf.Lerp(a.shadowStrength,b.shadowStrength,t);
         p.ambientMode=a.ambientMode;p.ambientSky=Color.Lerp(a.ambientSky*a.sceneBrightness,b.ambientSky*b.sceneBrightness,t);p.ambientEquator=Color.Lerp(a.ambientEquator*a.sceneBrightness,b.ambientEquator*b.sceneBrightness,t);p.ambientGround=Color.Lerp(a.ambientGround*a.sceneBrightness,b.ambientGround*b.sceneBrightness,t);p.ambientIntensity=Mathf.Lerp(a.ambientIntensity,b.ambientIntensity,t);
         // Exchange the existing reflection sources at zero contribution, avoiding an endpoint pop.
         var reflectionLook=t<.5f?a:b;
         p.reflectionMode=reflectionLook.reflectionMode;p.reflection=reflectionLook.reflection;
         p.reflectionIntensity=Mathf.Lerp(a.reflectionIntensity,b.reflectionIntensity,t)*SmootherStep(Mathf.Abs(t*2-1));p.reflectionBounces=reflectionLook.reflectionBounces;
         p.fog=a.fog||b.fog;p.fogMode=a.fogMode;p.fogColor=Color.Lerp(a.fogColor,b.fogColor,t);p.fogDensity=Mathf.Lerp(a.fog?a.fogDensity:0,b.fog?b.fogDensity:0,t);p.fogStart=Mathf.Lerp(a.fogStart,b.fogStart,t);p.fogEnd=Mathf.Lerp(a.fogEnd,b.fogEnd,t);
-        p.windowLightsEnabled=true;p.windowBrightness=Mathf.Lerp(a.windowLightsEnabled?a.windowBrightness:0,b.windowLightsEnabled?b.windowBrightness:0,t);p.windowWarmth=Mathf.Lerp(a.windowWarmth,b.windowWarmth,t);p.windowColor=Color.Lerp(a.windowColor,b.windowColor,t);p.litWindowAmount=Mathf.Lerp(a.litWindowAmount,b.litWindowAmount,t);p.nightAmount=Mathf.Lerp(a.nightAmount,b.nightAmount,t);
+        p.windowLightsEnabled=true;p.windowBrightness=Mathf.Lerp(a.windowLightsEnabled?a.windowBrightness:0,b.windowLightsEnabled?b.windowBrightness:0,t);p.windowWarmth=Mathf.Lerp(a.windowWarmth,b.windowWarmth,t);p.windowColor=Color.Lerp(a.windowColor,b.windowColor,t);p.litWindowAmount=Mathf.Lerp(a.litWindowAmount,b.litWindowAmount,t);p.nightAmount=SmootherStep(Mathf.InverseLerp(.08f,.88f,t));
         p.windowColorMix=Mathf.Lerp(a.windowColorMix,b.windowColorMix,t);p.accentBrightness=Mathf.Lerp(a.accentBrightness,b.accentBrightness,t);p.venueBrightness=Mathf.Lerp(a.venueBrightness,b.venueBrightness,t);p.whiteWindowColor=Color.Lerp(a.whiteWindowColor,b.whiteWindowColor,t);p.blueWindowColor=Color.Lerp(a.blueWindowColor,b.blueWindowColor,t);p.blueAccentColor=Color.Lerp(a.blueAccentColor,b.blueAccentColor,t);p.pinkAccentColor=Color.Lerp(a.pinkAccentColor,b.pinkAccentColor,t);p.roadEmission=Mathf.Lerp(a.roadEmission,b.roadEmission,t);p.effects=b.effects;
         ApplyLook(p,false,false);Shader.SetGlobalFloat("_CitySkyBlend",t);
+        Shader.SetGlobalVector("_CitySolarDirection",-(solarRotation*Vector3.forward));
+        Shader.SetGlobalFloat("_CitySunrise",SmootherStep(Mathf.InverseLerp(.03f,.22f,t))*(1-SmootherStep(Mathf.InverseLerp(.65f,.86f,t))));
         if(nightEffects)nightEffects.weight=t;
         if(sunFlares!=null)for(int i=0;i<sunFlares.Length;i++){var f=sunFlares[i] as LensFlareComponentSRP;if(f){f.intensity=(flareIntensity!=null&&i<flareIntensity.Length?flareIntensity[i]:1)*(1-Mathf.SmoothStep(0,1,Mathf.Clamp01(t/.65f)));f.enabled=f.intensity>.0001f&&dayFlareEnabled!=null&&i<dayFlareEnabled.Length&&dayFlareEnabled[i];}}
         if(nightLampBulbs)nightLampBulbs.enabled=t>.01f;
         if(streetLights!=null)foreach(var l in streetLights)if(l&&l.enabled)l.intensity=presets.streetLightIntensity*t;
+    }
+    Camera ActiveLightingCamera(){
+#if UNITY_EDITOR
+        if(!Application.isPlaying&&UnityEditor.SceneView.lastActiveSceneView)return UnityEditor.SceneView.lastActiveSceneView.camera;
+#endif
+        return Camera.main;
     }
     public void RefreshStreetLights(Camera camera){
         if(streetLights==null)return;
@@ -181,6 +203,7 @@ public sealed class CityDayNightController : MonoBehaviour
         }
     }
 }
+
 
 
 
