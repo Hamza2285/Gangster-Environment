@@ -117,7 +117,7 @@ public class TaxiHud : MonoBehaviour
             return;
         }
         var camera = Camera.main;
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         if (camera == null || player == null) return;
 
         Vector3 world = labelTarget.position + Vector3.up * 2.8f;

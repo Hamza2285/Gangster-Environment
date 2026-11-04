@@ -7,9 +7,11 @@ public class WaypointSystem : MonoBehaviour
 {
     public static WaypointSystem Instance { get; private set; }
 
-    [Header("Road guide line")]
-    public Material routeMaterial;
-    public float lineWidth = 1.4f;
+    [Header("Road guide arrows")]
+    public Color arrowColor = new Color(0.15f, 0.95f, 0.3f, 1f);
+    public float arrowWidth = 2.6f;
+    [Tooltip("Metres from one arrow to the next.")]
+    public float arrowSpacing = 3.5f;
     public float lineLift = 0.22f;
     public int maxVisiblePoints = 90;
 
@@ -30,6 +32,7 @@ public class WaypointSystem : MonoBehaviour
 
     readonly List<Vector3> route = new List<Vector3>();
     LineRenderer line;
+    Material arrowMaterial;
     GameObject beam;
     float nextUpdate;
     Vector3[] linePoints = new Vector3[0];
@@ -44,12 +47,17 @@ public class WaypointSystem : MonoBehaviour
         line = lineObject.AddComponent<LineRenderer>();
         line.alignment = LineAlignment.TransformZ;
         line.useWorldSpace = true;
-        line.widthMultiplier = lineWidth;
+        line.widthMultiplier = arrowWidth;
         line.numCornerVertices = 2;
-        line.numCapVertices = 2;
         line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         line.receiveShadows = false;
-        line.sharedMaterial = routeMaterial;
+        line.textureMode = LineTextureMode.Tile;
+        line.textureScale = new Vector2(1f / arrowSpacing, 1f);
+        // The beam's material is already transparent, which the gaps between arrows need.
+        arrowMaterial = new Material(beamMaterial);
+        arrowMaterial.SetTexture("_BaseMap", MakeArrowTexture());
+        arrowMaterial.SetColor("_BaseColor", arrowColor);
+        line.sharedMaterial = arrowMaterial;
         line.positionCount = 0;
 
         beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -103,7 +111,7 @@ public class WaypointSystem : MonoBehaviour
 
     void Recalculate()
     {
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         var network = RoadNetwork.Instance;
         if (player == null || network == null || !HasMarker) return;
         if (!network.TryFindRoute(player.transform.position, MarkerPosition, route))
@@ -120,7 +128,7 @@ public class WaypointSystem : MonoBehaviour
         if (!HasMarker || Time.time < nextUpdate) return;
         nextUpdate = Time.time + updateInterval;
 
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         if (player == null) return;
         Vector3 position = player.transform.position;
         // In the taxi the trip owns the route: only follow along it.
@@ -178,5 +186,35 @@ public class WaypointSystem : MonoBehaviour
         for (int i = 0; i < count; i++) linePoints[i] = route[RouteIndex + i] + Vector3.up * lineLift;
         line.positionCount = count;
         line.SetPositions(linePoints);
+
+        // The line gets shorter from its start as the player advances; this keeps the arrows painted in place.
+        float passed = 0f;
+        for (int i = 1; i <= RouteIndex; i++) passed += Vector3.Distance(route[i - 1], route[i]);
+        arrowMaterial.SetTextureOffset("_BaseMap", new Vector2(passed / arrowSpacing, 0f));
+    }
+
+    // One arrow pointing along +U, repeated down the line.
+    static Texture2D MakeArrowTexture()
+    {
+        const int size = 64;
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, true);
+        texture.wrapModeU = TextureWrapMode.Repeat;
+        texture.wrapModeV = TextureWrapMode.Clamp;
+        texture.filterMode = FilterMode.Trilinear;
+        var pixels = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+                float across = Mathf.Abs((y + 0.5f) / size - 0.5f) * 2f;
+                float swept = u + across * 0.45f;
+                bool arrow = across < 0.9f && swept > 0.45f && swept < 0.9f;
+                pixels[y * size + x] = new Color32(255, 255, 255, (byte)(arrow ? 255 : 0));
+            }
+        }
+        texture.SetPixels32(pixels);
+        texture.Apply(true);
+        return texture;
     }
 }

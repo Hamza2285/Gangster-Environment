@@ -11,15 +11,15 @@ using UnityEngine.SceneManagement;
 // it rebuilds its own objects and leaves everything else alone.
 public static class GameplaySetup
 {
+    // Lets a project's own character controller be put on the Player object when the gameplay is built.
+    public static event System.Action<GameObject, Transform> PlayerCreated;
+
     const string Root = "Assets/Game";
     const string TaxiPrefabPath = Root + "/Prefabs/Taxi.prefab";
     const string RoadMapPath = Root + "/Minimap/RoadMap.png";
     const string MapDataPath = Root + "/Minimap/MiniMapData.asset";
     const string GameplayName = "Gameplay";
     const string WalkCollidersName = "Walk Ground Colliders";
-    const string BuildingCollidersName = "Building Colliders";
-
-    static readonly string[] BuildingRoots = { "Building 01", "Building 02", "Building 03", "Bus and casino", "Cafe" };
 
     [MenuItem("Game/Setup Gameplay In Open Scene")]
     public static void SetupAll()
@@ -27,6 +27,8 @@ public static class GameplaySetup
         Debug.Log(BakeRoadMap());
         Debug.Log(CreateAssets());
         Debug.Log(BuildColliders());
+        // Buildings and props collide with their own meshes.
+        Debug.Log(EnvironmentColliderBuilder.Build());
         Debug.Log(BuildGameplayObjects());
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         EditorSceneManager.SaveOpenScenes();
@@ -134,7 +136,6 @@ public static class GameplaySetup
     {
         Directory.CreateDirectory(Root + "/Materials");
         Directory.CreateDirectory(Root + "/Prefabs");
-        var route = Unlit(Root + "/Materials/RouteLine.mat", new Color(1f, 0.78f, 0.1f, 1f), false);
         var beam = Unlit(Root + "/Materials/MarkerBeam.mat", new Color(1f, 0.78f, 0.1f, 0.35f), true);
         var sign = Unlit(Root + "/Materials/TaxiSign.mat", new Color(1f, 0.95f, 0.55f, 1f), false);
 
@@ -165,7 +166,7 @@ public static class GameplaySetup
         PrefabUtility.SaveAsPrefabAsset(car, TaxiPrefabPath);
         Object.DestroyImmediate(car);
         AssetDatabase.SaveAssets();
-        return "Assets ready (route " + route.name + ", beam " + beam.name + ", taxi prefab)";
+        return "Assets ready (beam " + beam.name + ", taxi prefab)";
     }
 
     static Material Unlit(string path, Color color, bool transparent)
@@ -226,45 +227,7 @@ public static class GameplaySetup
             }
         }
 
-        // Buildings use oriented boxes from their mesh bounds so the player cannot walk through them.
-        DestroyRoot(scene, BuildingCollidersName);
-        var buildingRoot = new GameObject(BuildingCollidersName);
         var manager = Object.FindFirstObjectByType<TSMainManager>(FindObjectsInactive.Include);
-        var lanePoints = new List<Vector3>();
-        if (manager != null) foreach (var lane in manager.lanes) for (int i = 0; i < lane.points.Length; i += 3) lanePoints.Add(lane.points[i].point);
-        int boxes = 0, skipped = 0;
-        foreach (var rootName in BuildingRoots)
-        {
-            var building = FindEnv(rootName);
-            if (building == null) continue;
-            foreach (var filter in building.GetComponentsInChildren<MeshFilter>(true))
-            {
-                var renderer = filter.GetComponent<MeshRenderer>();
-                if (renderer == null || filter.sharedMesh == null) continue;
-                if (filter.name.Contains("LOD1") || filter.name.Contains("Mobile LOD")) continue;
-                Bounds b = renderer.bounds;
-                if (b.size.y < 4f || Mathf.Max(b.size.x, b.size.z) > 140f || Mathf.Min(b.size.x, b.size.z) < 2f) continue;
-                var go = Clone(filter.transform, "Box_" + filter.name, buildingRoot.transform);
-                var box = go.AddComponent<BoxCollider>();
-                box.center = filter.sharedMesh.bounds.center;
-                box.size = filter.sharedMesh.bounds.size;
-                // A box that would block a road is wrong (L-shaped building, wide base): drop it.
-                Physics.SyncTransforms();
-                Bounds worldBox = box.bounds;
-                worldBox.Expand(new Vector3(0f, 4f, 0f));
-                bool blocksRoad = false;
-                foreach (var p in lanePoints)
-                {
-                    if (worldBox.Contains(p) && box.ClosestPoint(p) == p) { blocksRoad = true; break; }
-                }
-                if (blocksRoad)
-                {
-                    Object.DestroyImmediate(go);
-                    skipped++;
-                }
-                else boxes++;
-            }
-        }
 
         // Small seams where road pieces meet.
         var roadRoot = scene.GetRootGameObjects().FirstOrDefault(g => g.name == "Traffic Road Colliders");
@@ -291,7 +254,7 @@ public static class GameplaySetup
             }
         }
         Physics.SyncTransforms();
-        return "Colliders: walk ground " + walk + ", building boxes " + boxes + " (dropped " + skipped + " over roads), seam patches " + patches;
+        return "Colliders: walk ground " + walk + ", seam patches " + patches;
     }
 
     static void DestroyRoot(Scene scene, string name)
@@ -353,16 +316,16 @@ public static class GameplaySetup
         controller.center = new Vector3(0f, 0.9f, 0f);
         controller.stepOffset = 0.5f;
         controller.slopeLimit = 55f;
-        var fps = player.AddComponent<FirstPersonPlayer>();
+        player.tag = "Player";
         camera.transform.SetParent(player.transform, false);
         camera.transform.localPosition = new Vector3(0f, 1.65f, 0f);
         camera.transform.localRotation = Quaternion.identity;
-        fps.cameraPivot = camera.transform;
         PlacePlayer(player.transform, manager);
+        PlayerCreated?.Invoke(player, camera.transform);
 
         var waypoints = gameplay.AddComponent<WaypointSystem>();
-        waypoints.routeMaterial = AssetDatabase.LoadAssetAtPath<Material>(Root + "/Materials/RouteLine.mat");
         waypoints.beamMaterial = AssetDatabase.LoadAssetAtPath<Material>(Root + "/Materials/MarkerBeam.mat");
+        gameplay.AddComponent<TrafficFlowKeeper>();
         gameplay.AddComponent<ScreenBlink>();
         gameplay.AddComponent<GameMapUI>().mapData = AssetDatabase.LoadAssetAtPath<MiniMapData>(MapDataPath);
         gameplay.AddComponent<TaxiHud>();

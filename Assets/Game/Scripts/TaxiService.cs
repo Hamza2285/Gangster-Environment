@@ -109,15 +109,15 @@ public class TaxiService : MonoBehaviour
     void Update()
     {
         var map = GameMapUI.Instance;
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         var hud = TaxiHud.Instance;
         if (map == null || player == null || hud == null) return;
 
         switch (CurrentState)
         {
             case State.Idle:
-                map.SetHint("E: whistle for a taxi     M: map");
-                if (GameInput.InteractDown && !map.IsMapOpen) StartCoroutine(CallTaxi());
+                map.SetHint("E: whistle for a taxi     M: map" + GamePlayer.ExtraKeysHint);
+                if (GameInput.InteractDown && !map.IsMapOpen && !GamePlayer.MenuOpen) StartCoroutine(CallTaxi());
                 break;
             case State.Whistling:
                 map.SetHint("");
@@ -145,8 +145,8 @@ public class TaxiService : MonoBehaviour
     void LateUpdate()
     {
         if (!cameraFollowing || taxi == null) return;
-        var player = FirstPersonPlayer.Instance;
-        var cameraTransform = player.cameraPivot;
+        var player = GamePlayer.Current;
+        var cameraTransform = player.CameraPivot;
         Transform car = taxi.transform;
 
         // The player has no body in the car; it comes along so traffic and the minimap follow the trip.
@@ -169,7 +169,7 @@ public class TaxiService : MonoBehaviour
         cameraTransform.rotation = Quaternion.LookRotation(look - cameraTransform.position);
     }
 
-    void UpdateWaiting(GameMapUI map, FirstPersonPlayer player)
+    void UpdateWaiting(GameMapUI map, IGamePlayer player)
     {
         if (map.IsMapOpen) return;
         if (taxi == null)
@@ -210,7 +210,7 @@ public class TaxiService : MonoBehaviour
     {
         CurrentState = State.Whistling;
         var map = GameMapUI.Instance;
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         TaxiHud.Instance.SetTaxiLabel(null, null);
         whistleSource.PlayOneShot(whistleClip);
         map.ShowMessage("*whistle*", 1.2f);
@@ -307,7 +307,7 @@ public class TaxiService : MonoBehaviour
         if (Time.time < nextFollowCheck) return false;
         nextFollowCheck = Time.time + 0.5f;
         var network = RoadNetwork.Instance;
-        if (!network.TryFindCurbStop(FirstPersonPlayer.Instance.transform.position, out followStop)) return false;
+        if (!network.TryFindCurbStop(GamePlayer.Current.transform.position, out followStop)) return false;
         if (FlatDistance(followStop.position, taxiStop.position) < followThreshold) return false;
 
         followRerouted = TryRouteFromTaxi(followStop, speed, out followRespawn);
@@ -322,7 +322,7 @@ public class TaxiService : MonoBehaviour
 
     IEnumerator EnterTaxi()
     {
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         var map = GameMapUI.Instance;
         var hud = TaxiHud.Instance;
         var waypoints = WaypointSystem.Instance;
@@ -407,11 +407,11 @@ public class TaxiService : MonoBehaviour
     IEnumerator WatchTrip(List<Vector3> path, List<RoadNetwork.Link> links, RoadNetwork.RoadPoint destination)
     {
         CurrentState = State.Watching;
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         var hud = TaxiHud.Instance;
         var waypoints = WaypointSystem.Instance;
         var blink = ScreenBlink.Instance;
-        var cameraTransform = player.cameraPivot;
+        var cameraTransform = player.CameraPivot;
 
         skipRequested = false;
         cameraIndex = 0;
@@ -443,12 +443,12 @@ public class TaxiService : MonoBehaviour
     IEnumerator FinishTrip(RoadNetwork.RoadPoint destination, bool taxiDroveThere)
     {
         CurrentState = State.Arriving;
-        var player = FirstPersonPlayer.Instance;
+        var player = GamePlayer.Current;
         var waypoints = WaypointSystem.Instance;
         var map = GameMapUI.Instance;
         var blink = ScreenBlink.Instance;
         var network = RoadNetwork.Instance;
-        var cameraTransform = player.cameraPivot;
+        var cameraTransform = player.CameraPivot;
 
         yield return blink.Blink(0.18f, 0.14f);
         yield return new WaitForSeconds(0.1f);

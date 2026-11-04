@@ -65,6 +65,7 @@ public static class GameInput
     public static bool EnterDown => KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter);
     public static bool MapDown => KeyDown(KeyCode.M);
     public static bool CameraDown => KeyDown(KeyCode.C);
+    public static bool OutfitDown => KeyDown(KeyCode.O);
     public static bool WatchOptionDown => KeyDown(KeyCode.Alpha1);
     public static bool SkipOptionDown => KeyDown(KeyCode.Alpha2);
     public static bool CancelDown => KeyDown(KeyCode.Escape);
@@ -98,6 +99,39 @@ public static class GameInput
 #endif
         }
     }
+
+    public static bool PrimaryHeld
+    {
+        get
+        {
+#if ENABLE_INPUT_SYSTEM
+            if (Mouse.current != null) return Mouse.current.leftButton.isPressed;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+            return Input.GetMouseButton(0);
+#else
+            return false;
+#endif
+        }
+    }
+
+    // One step per wheel notch: +1 up, -1 down, 0 when not scrolling.
+    public static float ScrollStep
+    {
+        get
+        {
+            float y = 0f;
+#if ENABLE_INPUT_SYSTEM
+            if (Mouse.current != null) y = Mouse.current.scroll.ReadValue().y;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+            y = Input.mouseScrollDelta.y;
+#endif
+            return y > 0f ? 1f : y < 0f ? -1f : 0f;
+        }
+    }
+
+    // Held +/- keys: +1 zooms in, -1 zooms out.
+    public static float ZoomKeys => (KeyHeld(KeyCode.Equals) || KeyHeld(KeyCode.KeypadPlus) ? 1f : 0f) - (KeyHeld(KeyCode.Minus) || KeyHeld(KeyCode.KeypadMinus) ? 1f : 0f);
 
     static bool KeyHeld(KeyCode key)
     {
@@ -135,10 +169,15 @@ public static class GameInput
             case KeyCode.E: return kb.eKey;
             case KeyCode.M: return kb.mKey;
             case KeyCode.C: return kb.cKey;
+            case KeyCode.O: return kb.oKey;
             case KeyCode.Alpha1: return kb.digit1Key;
             case KeyCode.Alpha2: return kb.digit2Key;
             case KeyCode.Return: return kb.enterKey;
             case KeyCode.KeypadEnter: return kb.numpadEnterKey;
+            case KeyCode.Equals: return kb.equalsKey;
+            case KeyCode.Minus: return kb.minusKey;
+            case KeyCode.KeypadPlus: return kb.numpadPlusKey;
+            case KeyCode.KeypadMinus: return kb.numpadMinusKey;
             default: return kb.escapeKey;
         }
     }
