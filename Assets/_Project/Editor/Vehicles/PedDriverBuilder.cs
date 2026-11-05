@@ -15,7 +15,7 @@ namespace OpenworldCrime.EditorTools
     /// 2. It bakes the pedestrian in the seated driving pose (the seated clip retargeted through that avatar, torso reclined like
     ///    the player's seated pose) into a static mesh in driver seat space: what the traffic car shows at the wheel.
     /// 3. It writes the PedDriverRoster and points every Traffic_ / Drivable_ car prefab at it (driver visuals normalised to the
-    ///    seat).
+    ///    seat), with each driver's seat height and recline for that car's roof.
     /// Menu: Tools > OpenworldCrime > Vehicles > Build Pedestrian Drivers. Re-runnable.
     /// </summary>
     public static class PedDriverBuilder
@@ -33,11 +33,8 @@ namespace OpenworldCrime.EditorTools
         // The hips of the CarPlayer driver figure in driver seat space (measured on the final cars; every seat is fitted to it).
         internal static readonly Vector3 PlayerSeatedHips = new Vector3(0f, 0.87f, -0.11f);
         private const float HeadLevelShare = 0.55f;
-        // The seated player's crown above his hips (VehicleFactory's fitted rig): every roof clears it.
         // The seated player's crown relative to his hips (VehicleFactory's fitted rig), front to back.
         private const float PlayerCrownBehindHips = -0.217f * VehicleFactory.PlayerScale;
-        // Kept between a seated driver's head and the roof.
-        private const float DriverRoofClearance = 0.03f;
 
         // Humanoid bone -> Biped bone names (first match wins).
         private static readonly (string human, string[] biped)[] BoneMap =
@@ -226,8 +223,8 @@ namespace OpenworldCrime.EditorTools
                 Quaternion rootInverse = Quaternion.Inverse(inst.transform.rotation);
                 for (int i = 0; i < v.Length; i++) v[i] = rootInverse * (toWorld.MultiplyPoint3x4(v[i]) - inst.transform.position) + seatOffset;
                 for (int i = 0; i < n.Length; i++) n[i] = (rootInverse * toWorld.MultiplyVector(n[i])).normalized;
-                // Pedestrians sit taller than the player (more upright, a little bigger); each car limits the crown to what its
-                // roof allows and scales a too-tall driver about these hips (PedDriverRoster.SeatedScale).
+                // Pedestrians sit taller than the player (more upright, a little bigger); each car seats them lower and more
+                // reclined about these hips as its roof requires (ComputeFits).
                 Vector3 hipsPoint = (pelvis != null ? pelvis.position : Vector3.zero) + seatOffset;
                 // Their heads also lean a little further back than his; the crown is moved forward onto his (the whole body moves
                 // a few cm), so sloping roofs that clear his head clear theirs.
@@ -335,35 +332,36 @@ namespace OpenworldCrime.EditorTools
             return top;
         }
 
-        /// <summary>Re-points freshly built car prefabs at the existing roster (called by VehicleFactory after a build).</summary>
+        /// <summary>Re-points freshly built car prefabs at the existing roster and fits its drivers to their roofs (called after a build).</summary>
         public static string RepatchPrefabs()
         {
             var roster = AssetDatabase.LoadAssetAtPath<PedDriverRoster>(RosterPath);
             return roster != null && roster.Count > 0 ? "[PedDriverBuilder]\n" + PatchPrefabs(roster) : "[PedDriverBuilder] no roster yet (run Build Pedestrian Drivers)";
         }
 
-        // Every car prefab uses the roster; its driver visual sits exactly on the driver seat (the mesh is in seat space).
+        // Every car prefab uses the roster. Each driver is seated full size: per car and per driver, the smallest change of seat height
+        // and recline that clears the actual roof mesh, measured from the baked head against the car's triangles.
         private static string PatchPrefabs(PedDriverRoster roster)
         {
             var sb = new StringBuilder();
-            int traffic = 0, drivable = 0;
-            // Highest driver crown each car's roof allows (seat space), from its drivable prefab (seat + fitted player rig).
-            var limits = new Dictionary<string, float>();
+            SetHeadCenters(roster);
+            AssetDatabase.SaveAssets();
+
+            var fitsByCar = new Dictionary<string, PedDriverRoster.SeatFit[]>();
             foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/_Project/Prefabs/Vehicles/Drivable" }))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 GameObject root = PrefabUtility.LoadPrefabContents(path);
-                try { limits[root.name.Replace("Drivable_", "")] = CrownLimit(root.transform); }
+                try
+                {
+                    Transform floor = root.transform.Find("CabinFloor");
+                    string car = root.name.Replace("Drivable_", "");
+                    fitsByCar[car] = ComputeFits(root.transform, root.transform.Find("DriverSeat"), floor != null ? floor.position.y : float.NegativeInfinity, roster, false, car, sb);
+                }
                 finally { PrefabUtility.UnloadPrefabContents(root); }
             }
-            int scaledCars = 0;
-            foreach (var pair in limits)
-            {
-                if (pair.Value <= 0f) continue;
-                float smallest = 1f;
-                for (int i = 0; i < roster.Count; i++) smallest = Mathf.Min(smallest, roster.SeatedScale(i, pair.Value));
-                if (smallest < 1f) { scaledCars++; sb.AppendLine($"  {pair.Key}: low roof, tallest driver sits at {smallest:F2}"); }
-            }
+
+            int traffic = 0, drivable = 0;
             foreach (string folder in new[] { "Assets/_Project/Prefabs/Vehicles/Traffic", "Assets/_Project/Prefabs/Vehicles/Drivable" })
                 foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { folder }))
                 {
@@ -372,24 +370,22 @@ namespace OpenworldCrime.EditorTools
                     try
                     {
                         bool changed = false;
-                        limits.TryGetValue(root.name.Replace("Traffic_", "").Replace("Drivable_", ""), out float limit);
+                        fitsByCar.TryGetValue(root.name.Replace("Traffic_", "").Replace("Drivable_", ""), out PedDriverRoster.SeatFit[] fits);
                         var adapter = root.GetComponent<TrafficVehicleAdapter>();
                         if (adapter != null)
                         {
-                            // The police car is no final car: it keeps the limit its builder measured.
-                            if (limit <= 0f) limit = adapter.EditorDriverCrownLimit;
-                            adapter.EditorSetDriverRoster(roster, limit);
+                            // The police car has no drivable twin: it is measured here, with officers only.
+                            if (fits == null) fits = ComputeFits(root.transform, adapter.EditorDriverVisual.transform.parent, float.NegativeInfinity, roster, true, root.name, sb);
+                            adapter.EditorSetDriverRoster(roster, fits);
                             NormaliseVisual(adapter.EditorDriverVisual, root.transform);
-                            roster.ApplySeated(adapter.EditorDriverVisual, 0, limit);
                             traffic++;
                             changed = true;
                         }
                         var driver = root.GetComponent<TrafficVehicleDriver>();
                         if (driver != null)
                         {
-                            driver.EditorSetDriverCrownLimit(limit);
+                            driver.EditorSetDriverFits(fits);
                             NormaliseVisual(driver.EditorSeatedVisual, root.transform);
-                            roster.ApplySeated(driver.EditorSeatedVisual, 0, limit);
                             drivable++;
                             changed = true;
                         }
@@ -397,63 +393,182 @@ namespace OpenworldCrime.EditorTools
                     }
                     finally { PrefabUtility.UnloadPrefabContents(root); }
                 }
-            sb.AppendLine($"  prefabs: {traffic} traffic, {drivable} drivable now use pedestrian drivers ({scaledCars} low-roof cars scale tall drivers)");
+            sb.AppendLine($"  prefabs: {traffic} traffic, {drivable} drivable use pedestrian drivers, full size");
             return sb.ToString();
         }
 
-        // Highest crown (driver seat space, y) the roof allows over the seated player's head, minus the clearance; 0 = open top
-        // or no fitted rig (no limit). The roof is the lowest car surface in the roof band over the head and a ring around it.
-        private static float CrownLimit(Transform root)
+        // Where each driver's head zone goes: the middle of the top of his baked mesh, in seat space.
+        private static void SetHeadCenters(PedDriverRoster roster)
         {
-            Transform seat = root.Find("DriverSeat");
-            Transform model = root.Find("Model");
-            Transform rig = root.Find("DriverSeat/CarPlayer/JasonSeated");
-            if (rig == null) rig = root.Find("DriverSeat/CarPlayer");
-            if (seat == null || model == null || rig == null) return 0f;
-            Transform head = null;
-            foreach (Transform t in rig.GetComponentsInChildren<Transform>(true)) if (t.name == "mixamorig:Head") head = t;
-            if (head == null) return 0f;
-            Vector3 crown = head.position + Vector3.up * (0.17f * VehicleFactory.PlayerScale);
-
-            var tris = new List<Vector3>();
-            foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+            for (int i = 0; i < roster.Count; i++)
             {
-                string n = mf.name.ToLowerInvariant();
-                if (n.Contains("wheel") && !n.Contains("steer")) continue;
-                Mesh m = mf.sharedMesh;
-                if (m == null || !m.isReadable) continue;
-                Vector3[] v = m.vertices; int[] tr = m.triangles; Matrix4x4 mat = mf.transform.localToWorldMatrix;
-                foreach (int i in tr) tris.Add(mat.MultiplyPoint3x4(v[i]));
-            }
-            float roofTop = float.NegativeInfinity;
-            Vector3 local0 = root.InverseTransformPoint(crown);
-            foreach (Vector3 q in tris)
-            {
-                Vector3 l = root.InverseTransformPoint(q);
-                if (Mathf.Abs(l.z - local0.z) < 0.3f && Mathf.Abs(l.x) < 0.5f && q.y > roofTop) roofTop = q.y;
-            }
-            float band = Mathf.Max(crown.y - 0.12f, roofTop - 0.25f);
-            float gap = float.PositiveInfinity;
-            for (int k = 0; k < 9; k++)
-            {
-                Vector3 p = crown + (k == 0 ? Vector3.zero : Quaternion.Euler(0f, k * 45f, 0f) * Vector3.forward * 0.09f);
-                for (int i = 0; i + 2 < tris.Count; i += 3)
+                PedDriverRoster.Entry e = roster.Get(i);
+                if (e == null || e.seatedMesh == null) continue;
+                Vector3 sum = Vector3.zero;
+                int count = 0;
+                foreach (Vector3 v in e.seatedMesh.vertices)
                 {
-                    Vector3 a = tris[i], b = tris[i + 1], c = tris[i + 2];
-                    float d1 = (p.x - b.x) * (a.z - b.z) - (a.x - b.x) * (p.z - b.z);
-                    float d2 = (p.x - c.x) * (b.z - c.z) - (b.x - c.x) * (p.z - c.z);
-                    float d3 = (p.x - a.x) * (c.z - a.z) - (c.x - a.x) * (p.z - a.z);
-                    if ((d1 < 0f || d2 < 0f || d3 < 0f) && (d1 > 0f || d2 > 0f || d3 > 0f)) continue;
-                    float den = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
-                    if (Mathf.Abs(den) < 1e-7f) continue;
-                    float l1 = ((b.z - c.z) * (p.x - c.x) + (c.x - b.x) * (p.z - c.z)) / den;
-                    float l2 = ((c.z - a.z) * (p.x - c.x) + (a.x - c.x) * (p.z - c.z)) / den;
-                    float y = l1 * a.y + l2 * b.y + (1f - l1 - l2) * c.y;
-                    if (y >= band) gap = Mathf.Min(gap, y - p.y);
+                    if (v.y < e.seatedCrownY - HeadHeight) continue;
+                    sum += v;
+                    count++;
                 }
+                if (count > 0) e.seatedHeadCenter = sum / count;
             }
-            if (float.IsInfinity(gap)) return 0f;
-            return seat.InverseTransformPoint(crown).y + gap - DriverRoofClearance;
+            EditorUtility.SetDirty(roster);
+        }
+
+        private const float HeadHeight = 0.24f;
+        private const float RoofClearance = 0.02f;
+        private const float MaxReclineDegrees = 16f;
+        private const float MaxDrop = 0.18f;
+        private const float MinHipsAboveFloor = 0.04f;
+        private const float RoofGridHalfSize = 0.5f;
+        private const float RoofGridStep = 0.03f;
+        // Hands on the wheel relative to the seated hips (the cabin fit): what recline and drop should disturb least.
+        private static readonly Vector3 HandsFromHips = new Vector3(0f, 0.32f, 0.47f);
+
+        private static PedDriverRoster.SeatFit[] ComputeFits(Transform root, Transform seat, float floorY, PedDriverRoster roster, bool police, string carName, StringBuilder log)
+        {
+            var fits = new PedDriverRoster.SeatFit[roster.Count];
+            RoofGrid grid = BuildRoofGrid(root, seat);
+            float worstGap = float.PositiveInfinity, largestDrop = 0f, largestRecline = 0f, largestHands = 0f;
+            int failed = 0;
+            for (int i = 0; i < roster.Count; i++)
+            {
+                PedDriverRoster.Entry e = roster.Get(i);
+                if (e == null || e.seatedMesh == null || e.police != police) continue;
+                float hipsY = seat.TransformPoint(e.seatedHips).y;
+                float maxDrop = Mathf.Clamp(hipsY - floorY - MinHipsAboveFloor, 0f, MaxDrop);
+                List<Vector3> head = HeadPoints(e);
+                Vector3 hands = e.seatedHips + HandsFromHips;
+
+                var best = default(PedDriverRoster.SeatFit);
+                float bestHands = float.PositiveInfinity, bestGap = float.NegativeInfinity;
+                PedDriverRoster.SeatFit fallback = default;
+                for (float recline = 0f; recline <= MaxReclineDegrees; recline += 2f)
+                    for (float drop = 0f; drop <= maxDrop + 1e-4f; drop += 0.01f)
+                    {
+                        var fit = new PedDriverRoster.SeatFit { drop = drop, recline = recline };
+                        PedDriverRoster.GetSeatedPose(e.seatedHips, fit, out Vector3 position, out Quaternion rotation);
+                        Matrix4x4 toWorld = seat.localToWorldMatrix * Matrix4x4.TRS(position, rotation, Vector3.one);
+                        float gap = grid.Clearance(head, toWorld);
+                        if (gap > bestGap) { bestGap = gap; fallback = fit; }
+                        if (gap < RoofClearance) continue;
+                        float handMove = (position + rotation * hands - hands).magnitude;
+                        if (handMove < bestHands) { bestHands = handMove; best = fit; }
+                    }
+                bool ok = !float.IsPositiveInfinity(bestHands);
+                if (!ok) { failed++; best = fallback; }
+                fits[i] = best;
+                worstGap = Mathf.Min(worstGap, ok ? RoofClearance : bestGap);
+                largestDrop = Mathf.Max(largestDrop, best.drop);
+                largestRecline = Mathf.Max(largestRecline, best.recline);
+                if (ok) largestHands = Mathf.Max(largestHands, bestHands);
+            }
+            log.AppendLine($"  {carName}: drop up to {largestDrop:F2} m, recline up to {largestRecline:F0} deg, hands move up to {largestHands:F2} m, worst head gap {worstGap:F2} m{(failed > 0 ? $", {failed} DRIVERS DO NOT FIT" : "")}");
+            return fits;
+        }
+
+        private static List<Vector3> HeadPoints(PedDriverRoster.Entry e)
+        {
+            var points = new List<Vector3>();
+            Vector3[] vertices = e.seatedMesh.vertices;
+            foreach (Vector3 v in vertices) if (v.y > e.seatedCrownY - HeadHeight && (v - e.seatedHeadCenter).sqrMagnitude < 0.09f) points.Add(v);
+            if (points.Count <= 120) return points;
+            var thinned = new List<Vector3>(120);
+            int step = points.Count / 120 + 1;
+            for (int i = 0; i < points.Count; i += step) thinned.Add(points[i]);
+            return thinned;
+        }
+
+        // Underside of the roof (world y) on a grid around the driver's head; infinite where nothing covers the column.
+        private sealed class RoofGrid
+        {
+            public Vector3 Origin;
+            public Vector3 AxisX, AxisZ;
+            public float[,] Heights;
+
+            public float Clearance(List<Vector3> head, Matrix4x4 toWorld)
+            {
+                float gap = float.PositiveInfinity;
+                int size = Heights.GetLength(0);
+                foreach (Vector3 v in head)
+                {
+                    Vector3 p = toWorld.MultiplyPoint3x4(v);
+                    Vector3 d = p - Origin;
+                    int ix = Mathf.RoundToInt(Vector3.Dot(d, AxisX) / RoofGridStep), iz = Mathf.RoundToInt(Vector3.Dot(d, AxisZ) / RoofGridStep);
+                    if (ix < 0 || iz < 0 || ix >= size || iz >= size) continue;
+                    gap = Mathf.Min(gap, Heights[ix, iz] - p.y);
+                }
+                return gap;
+            }
+        }
+
+        private static RoofGrid BuildRoofGrid(Transform root, Transform seat)
+        {
+            var triangles = new List<Vector3>();
+            foreach (MeshFilter filter in root.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (filter.transform.IsChildOf(seat) || IsWheelOrLamp(filter.transform, root)) continue;
+                Mesh mesh = filter.sharedMesh;
+                if (mesh == null) continue;
+                Vector3[] vertices = mesh.vertices;
+                int[] indices = mesh.triangles;
+                Matrix4x4 toWorld = filter.transform.localToWorldMatrix;
+                foreach (int index in indices) triangles.Add(toWorld.MultiplyPoint3x4(vertices[index]));
+            }
+
+            int size = Mathf.RoundToInt(2f * RoofGridHalfSize / RoofGridStep) + 1;
+            Vector3 center = seat.TransformPoint(PlayerSeatedHips) + Vector3.up * 0.7f;
+            var grid = new RoofGrid { AxisX = Vector3.right, AxisZ = Vector3.forward, Heights = new float[size, size] };
+            grid.Origin = center - Vector3.right * RoofGridHalfSize - Vector3.forward * RoofGridHalfSize;
+            float minY = center.y - 0.35f;
+
+            var crossings = new List<float>[size, size];
+            for (int t = 0; t + 2 < triangles.Count; t += 3)
+            {
+                Vector3 a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                if (a.y < minY && b.y < minY && c.y < minY) continue;
+                int x0 = Mathf.CeilToInt((Mathf.Min(a.x, Mathf.Min(b.x, c.x)) - grid.Origin.x) / RoofGridStep), x1 = Mathf.FloorToInt((Mathf.Max(a.x, Mathf.Max(b.x, c.x)) - grid.Origin.x) / RoofGridStep);
+                int z0 = Mathf.CeilToInt((Mathf.Min(a.z, Mathf.Min(b.z, c.z)) - grid.Origin.z) / RoofGridStep), z1 = Mathf.FloorToInt((Mathf.Max(a.z, Mathf.Max(b.z, c.z)) - grid.Origin.z) / RoofGridStep);
+                float den = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+                if (Mathf.Abs(den) < 1e-7f) continue;
+                for (int ix = Mathf.Max(0, x0); ix <= x1 && ix < size; ix++)
+                    for (int iz = Mathf.Max(0, z0); iz <= z1 && iz < size; iz++)
+                    {
+                        float x = grid.Origin.x + ix * RoofGridStep, z = grid.Origin.z + iz * RoofGridStep;
+                        float l1 = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / den;
+                        float l2 = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / den;
+                        float l3 = 1f - l1 - l2;
+                        if (l1 < 0f || l2 < 0f || l3 < 0f) continue;
+                        float y = l1 * a.y + l2 * b.y + l3 * c.y;
+                        if (y < minY) continue;
+                        if (crossings[ix, iz] == null) crossings[ix, iz] = new List<float>();
+                        crossings[ix, iz].Add(y);
+                    }
+            }
+            for (int ix = 0; ix < size; ix++)
+                for (int iz = 0; iz < size; iz++)
+                {
+                    List<float> column = crossings[ix, iz];
+                    if (column == null) { grid.Heights[ix, iz] = float.PositiveInfinity; continue; }
+                    float top = float.NegativeInfinity;
+                    foreach (float y in column) top = Mathf.Max(top, y);
+                    float under = top;
+                    foreach (float y in column) if (y >= top - 0.08f && y < under) under = y;
+                    grid.Heights[ix, iz] = under;
+                }
+            return grid;
+        }
+
+        private static bool IsWheelOrLamp(Transform part, Transform root)
+        {
+            for (Transform t = part; t != null && t != root; t = t.parent)
+            {
+                string n = t.name.ToLowerInvariant();
+                if (n.StartsWith("wheel") || n == "tire" || n.StartsWith("flash") || n.Contains("light")) return true;
+            }
+            return false;
         }
 
         // The visual and its mesh child sit at the driver seat, unrotated and unscaled (the baked mesh is in seat space).

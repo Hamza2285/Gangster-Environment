@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Invector;
+using OpenworldCrime.Pedestrians;
 using UnityEngine;
 
 namespace OpenworldCrime.Vehicles
@@ -21,6 +22,7 @@ namespace OpenworldCrime.Vehicles
     /// - killed: iTS brakes the car to a stop (as for a carjack) and keeps it from being recycled; once stopped it is handed over
     ///   exactly like a takeover (drivable counterpart, <see cref="OnTakenOver"/>), whose driver door opens and the dead body
     ///   falls out (<see cref="TrafficVehicleDriver.DropDead"/>). The car is then an empty parked car the player can simply enter.
+    ///   A car without a drivable twin (police) has no door to open: the body drops beside it and it returns to the pool out of sight.
     /// Shot detail (window glass collider + driver hit zones) is only switched on near the player (<see cref="SetShotDetail"/>,
     /// driven by <see cref="TrafficTakeoverManager"/>'s low-frequency check); the metal body hitbox always stays on.
     /// </summary>
@@ -44,9 +46,8 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Real street pedestrians who drive this car: one is picked each time the car spawns (seated mesh at the wheel), " +
                  "and the same pedestrian is pulled out when the car is stolen.")]
         [SerializeField] private PedDriverRoster driverRoster;
-        [Tooltip("Highest driver head (driver seat space, y) this car's roof allows; taller drivers sit a little smaller. 0 = no " +
-                 "limit. Set by Build Pedestrian Drivers.")]
-        [SerializeField] private float driverCrownLimit;
+        [Tooltip("How each roster driver sits in this car so his head clears the roof (one per roster entry). Set by Build Pedestrian Drivers.")]
+        [SerializeField] private PedDriverRoster.SeatFit[] driverFits = new PedDriverRoster.SeatFit[0];
         [Tooltip("Hit zones and health of the seated driver (child of the bullet hitbox). Optional: without it the driver cannot be shot.")]
         [SerializeField] private SeatedDriverHealth driverHealth;
         [Tooltip("Window glass collider of the bullet hitbox (switched off with the driver zones while the car is far from the player).")]
@@ -67,6 +68,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private bool stealable = true;
         [SerializeField, Min(0f)] private float killedDriverRecycleTime = 15f;
         [SerializeField, Min(0f)] private float killedDriverKeepDistance = 15f;
+        [Tooltip("How far (m) from the seat, sideways, a dead driver's body drops when the car has no drivable twin.")]
+        [SerializeField, Min(0f)] private float deadBodySideDistance = 1.4f;
         [Tooltip("Drivable RCC counterpart of this car (same model), placed here when the player gets in.")]
         [SerializeField] private RCCVehicleAdapter drivablePrefab;
         [Tooltip("Where the drivable prefab's root goes. Place it so the drivable model overlaps this car's model exactly.")]
@@ -159,6 +162,7 @@ namespace OpenworldCrime.Vehicles
                 trafficAI.ignoreTrafficLight = baseIgnoreTrafficLight;
             }
             RestoreBrakes();
+            if (driverVisual != null) driverVisual.SetActive(true);
             PickOutfit();
             if (driverHealth != null)
             {
@@ -198,13 +202,12 @@ namespace OpenworldCrime.Vehicles
         }
 
 #if UNITY_EDITOR
-        public void EditorSetDriverRoster(PedDriverRoster roster, float crownLimit)
+        public void EditorSetDriverRoster(PedDriverRoster roster, PedDriverRoster.SeatFit[] fits)
         {
             driverRoster = roster;
-            driverCrownLimit = crownLimit;
+            driverFits = fits;
         }
         public GameObject EditorDriverVisual => driverVisual;
-        public float EditorDriverCrownLimit => driverCrownLimit;
 #endif
 
         public Transform GetInteractionPoint() => interactionPoint != null ? interactionPoint : transform;
@@ -315,6 +318,14 @@ namespace OpenworldCrime.Vehicles
         // No drivable twin (police car): it coasts to a stop with the slumped driver and goes back to the pool out of sight.
         private IEnumerator RecycleWhenOutOfSight()
         {
+            float timer = 0f;
+            while (CurrentSpeed > stoppedSpeed && timer < killedDriverStopTimeout)
+            {
+                timer += Time.deltaTime;
+                yield return null;
+            }
+            yield return DropDeadBody();
+
             var wait = new WaitForSeconds(1f);
             float age = 0f;
             while (age < killedDriverRecycleTime || !VehicleHealth.IsOutOfSight(transform.position, killedDriverKeepDistance))
@@ -324,6 +335,26 @@ namespace OpenworldCrime.Vehicles
             }
             handOverRoutine = null;
             ReturnToTraffic();
+        }
+
+        // The same person who sat at the wheel, full size: spawned beside the seat and killed, so he falls as a ragdoll.
+        private IEnumerator DropDeadBody()
+        {
+            if (driverVisual == null || !driverVisual.activeSelf) yield break;
+            driverVisual.SetActive(false);
+            if (driverHealth != null) driverHealth.gameObject.SetActive(false);
+
+            PedDriverRoster.Entry entry = driverRoster != null ? driverRoster.Get(currentDriver) : null;
+            if (entry == null || entry.pedPrefab == null || TrafficVehicleDriver.PersonFactory == null) yield break;
+            Transform seat = driverVisual.transform.parent;
+            Vector3 side = Vector3.Dot(seat.position - transform.position, transform.right) >= 0f ? transform.right : -transform.right;
+            Vector3 point = seat.position + side * deadBodySideDistance;
+            if (Physics.Raycast(point + Vector3.up * 2f, Vector3.down, out RaycastHit ground, 5f, 1, QueryTriggerInteraction.Ignore)) point = ground.point;
+            PedestrianWalker person = TrafficVehicleDriver.PersonFactory(entry.pedPrefab, point, seat.rotation);
+            if (person == null) yield break;
+            // One frame for the new character to initialise; damage before that does not count.
+            yield return null;
+            if (person != null && person.TryGetComponent(out PedestrianDamage body)) body.Kill(transform, point);
         }
 
         private void HandleWrecked()
@@ -406,7 +437,9 @@ namespace OpenworldCrime.Vehicles
             if (driverRoster != null && driverRoster.Count > 0)
             {
                 currentDriver = driverRoster.RandomIndex(policeDriver);
-                driverRoster.ApplySeated(driverVisual, currentDriver, driverCrownLimit);
+                driverRoster.ApplySeated(driverVisual, currentDriver, PedDriverRoster.FitOf(driverFits, currentDriver));
+                PedDriverRoster.Entry entry = driverRoster.Get(currentDriver);
+                if (driverHealth != null && entry != null) driverHealth.FitToDriver(entry.seatedHips, entry.seatedHeadCenter);
                 return;
             }
             if (driverOutfits == null || driverOutfits.Length == 0 || driverRenderers.Length == 0) return;

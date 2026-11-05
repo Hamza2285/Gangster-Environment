@@ -7,7 +7,7 @@ namespace OpenworldCrime.Controls
     /// <summary>
     /// Context-sensitive on-foot combat buttons (visuals only, event-driven):
     /// - unarmed: one attack button (punch), no aim / reload / fire buttons;
-    /// - gun out: AIM and RELOAD show; the two FIRE buttons (right and left thumb) show only while aiming.
+    /// - gun out: AIM, RELOAD and the right-thumb FIRE show (hip fire); the left-thumb FIRE shows only while aiming.
     /// </summary>
     public class MobileCombatButtons : MonoBehaviour
     {
@@ -49,7 +49,7 @@ namespace OpenworldCrime.Controls
             SetActive(punch, !armed);
             SetActive(aim, armed);
             SetActive(reload, armed);
-            SetActive(fireRight, aiming);
+            SetActive(fireRight, armed);
             SetActive(fireLeft, aiming);
         }
 

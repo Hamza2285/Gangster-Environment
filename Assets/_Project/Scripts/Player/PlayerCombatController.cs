@@ -40,6 +40,10 @@ namespace OpenworldCrime.Player
         /// </summary>
         public bool IsHipFiring => shooterInput != null && !shooterInput.isAimingByInput && shooterInput.IsAiming;
         public bool IsReloading => shooterInput != null && shooterInput.isReloading;
+        /// <summary>True while <see cref="SetCombatInputLocked"/> has combat input locked (weapon wheel open, entering a vehicle).</summary>
+        public bool IsCombatInputLocked { get; private set; }
+        /// <summary>False while a weapon change would fight an action in progress (reload, roll, equip animation, locked input).</summary>
+        public bool CanSwitchWeapon => !IsCombatInputLocked && shooterInput != null && !shooterInput.lockInventory && !shooterInput.isEquipping;
 
         private bool strafeLockedByPolicy;
 
@@ -50,6 +54,11 @@ namespace OpenworldCrime.Player
                 Debug.LogError($"[{nameof(PlayerCombatController)}] Missing Invector references on '{name}' " +
                                "(vThirdPersonController, vShooterMeleeInput, vShooterManager).", this);
                 enabled = false;
+                return;
+            }
+            if (controller.locomotionType == vThirdPersonMotor.LocomotionType.OnlyFree)
+            {
+                Debug.LogError($"[{nameof(PlayerCombatController)}] '{name}' has Locomotion Type = OnlyFree: Invector skips all aim input with it. Use FreeWithStrafe.", this);
             }
         }
 
@@ -109,6 +118,7 @@ namespace OpenworldCrime.Player
         public void SetCombatInputLocked(bool locked)
         {
             if (shooterInput == null) return;
+            IsCombatInputLocked = locked;
             shooterInput.SetLockCameraInput(locked);
             shooterInput.SetLockShooterInput(locked);
             shooterInput.SetLockMeleeInput(locked);

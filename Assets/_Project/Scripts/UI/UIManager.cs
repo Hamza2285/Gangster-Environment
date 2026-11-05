@@ -33,8 +33,8 @@ namespace OpenworldCrime.UI
         [Header("Weapon Wheel")]
         [SerializeField] private GameObject weaponWheelPanel;
         [SerializeField] private WeaponWheelView weaponWheelView;
-        [Tooltip("Hold to open, release to equip. Default: Left Alt / gamepad D-Pad Up (Tab and LB are already used by Invector).")]
-        [SerializeField] private GenericInput weaponWheelInput = new GenericInput("LeftAlt", false, false, "D-Pad Vertical", true, false, "D-Pad Vertical", true, false);
+        [Tooltip("Hold to open, release to equip. Default: Tab / gamepad D-Pad Up (GameplayUIBuilder moves Invector's own Tab bindings away).")]
+        [SerializeField] private GenericInput weaponWheelInput = new GenericInput("Tab", false, false, "D-Pad Vertical", true, false, "D-Pad Vertical", true, false);
         [SerializeField] private GenericInput wheelCursorX = new GenericInput("Mouse X", "RightAnalogHorizontal", "Mouse X");
         [SerializeField] private GenericInput wheelCursorY = new GenericInput("Mouse Y", "RightAnalogVertical", "Mouse Y");
         [Tooltip("Mouse delta to wheel-cursor scale.")]
@@ -257,12 +257,11 @@ namespace OpenworldCrime.UI
 
         private void RefreshWeaponInfo()
         {
-            bool showWeapon = weaponController.HasWeapon && !onFootHudHidden;
-            if (weaponInfoGroup != null) weaponInfoGroup.SetActive(showWeapon);
-            if (!showWeapon) return;
+            if (weaponInfoGroup != null) weaponInfoGroup.SetActive(!onFootHudHidden);
+            if (onFootHudHidden) return;
 
             if (weaponNameText != null) weaponNameText.text = weaponController.GetCurrentSlotName();
-            if (ammoText != null) ammoText.text = $"{weaponController.AmmoInClip} / {weaponController.ExtraAmmo}";
+            if (ammoText != null) ammoText.text = weaponController.HasWeapon ? $"{weaponController.AmmoInClip} / {weaponController.ExtraAmmo}" : string.Empty;
         }
 
         private void HandleVehicleFocusChanged(IVehicleInteractionTarget vehicle)

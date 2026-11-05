@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Invector.vCharacterController;
 using Invector.vItemManager;
 using Invector.vShooter;
 using UnityEngine;
@@ -11,6 +12,7 @@ namespace OpenworldCrime.Player
     /// Read side: which shooter weapon is equipped and how much ammo it has (events).
     /// Write side: <see cref="EquipSlot"/> equips a weapon-wheel slot through Invector's vItemManager
     /// equip API (the same path the Invector inventory uses) - it never spawns weapons itself.
+    /// Also reads the quick-switch inputs (number keys pick a wheel slot, the scroll wheel cycles the slots).
     /// </summary>
     [DisallowMultipleComponent]
     public class PlayerWeaponController : MonoBehaviour
@@ -40,6 +42,20 @@ namespace OpenworldCrime.Player
         [Tooltip("Weapon wheel slots, in wheel order (clockwise from the top).")]
         [SerializeField] private List<WeaponSlot> weaponSlots = new List<WeaponSlot>();
 
+        [Header("Quick Switch")]
+        [Tooltip("Blocks the quick switch while the player's input is locked (vehicles, taxi, map) or the weapon wheel is open.")]
+        [SerializeField] private PlayerManager playerManager;
+        [Tooltip("One input per weapon slot, in the same order.")]
+        [SerializeField] private GenericInput[] slotKeys =
+        {
+            new GenericInput("Alpha1", "", ""),
+            new GenericInput("Alpha2", "", ""),
+            new GenericInput("Alpha3", "", ""),
+        };
+        [SerializeField] private GenericInput cycleInput = new GenericInput("Mouse ScrollWheel", "", "");
+        [Tooltip("Seconds between scroll-wheel switches, so one flick moves one slot.")]
+        [SerializeField, Min(0f)] private float cycleCooldown = 0.2f;
+
         /// <summary>Raised when a shooter weapon is equipped. Args: weapon, isLeftHand.</summary>
         public event Action<vShooterWeapon, bool> OnWeaponEquipped;
         /// <summary>Raised when a shooter weapon is unequipped. Args: weapon, isLeftHand.</summary>
@@ -65,9 +81,11 @@ namespace OpenworldCrime.Player
         // (onUnequipWeapon fires before the weapon reference is cleared; reserve ammo totals update after
         // the ammo item events). Changes are therefore collected here and reported once in LateUpdate.
         private bool weaponStateDirty;
+        private float nextCycleTime;
 
         private void Awake()
         {
+            if (playerManager == null) Debug.LogWarning($"[{nameof(PlayerWeaponController)}] No PlayerManager on '{name}'; quick switch is off.", this);
             if (shooterManager == null || itemManager == null)
             {
                 Debug.LogError($"[{nameof(PlayerWeaponController)}] Missing Invector references on '{name}' (vShooterManager, vItemManager).", this);
@@ -97,6 +115,26 @@ namespace OpenworldCrime.Player
             itemManager.onAddItem.RemoveListener(HandleItemChanged);
             itemManager.onChangeItemAmount.RemoveListener(HandleItemChanged);
             itemManager.onDestroyItem.RemoveListener(HandleItemRemoved);
+        }
+
+        // Per-frame only for the quick-switch inputs.
+        private void Update()
+        {
+            if (playerManager == null || playerManager.IsInputLocked || playerManager.IsInVehicle || playerManager.CurrentState == PlayerState.Dead) return;
+            if (playerManager.Combat == null || !playerManager.Combat.CanSwitchWeapon || !CanChangeWeapon) return;
+
+            for (int i = 0; i < slotKeys.Length && i < weaponSlots.Count; i++)
+            {
+                if (!slotKeys[i].GetButtonDown()) continue;
+                if (i != GetCurrentSlotIndex() && IsSlotAvailable(i)) EquipSlot(i);
+                return;
+            }
+
+            float scroll = cycleInput.GetAxisRaw();
+            if (scroll == 0f || Time.unscaledTime < nextCycleTime) return;
+            nextCycleTime = Time.unscaledTime + cycleCooldown;
+            if (scroll > 0f) EquipNextSlot();
+            else EquipPreviousSlot();
         }
 
         // Single bool check per frame; the event is only raised when something actually changed.
@@ -174,14 +212,19 @@ namespace OpenworldCrime.Player
         }
 
         /// <summary>Equips the next available slot after the current one (wraps around; on-screen "next weapon" button).</summary>
-        public void EquipNextSlot()
+        public void EquipNextSlot() => CycleSlot(1);
+
+        /// <summary>Equips the previous available slot before the current one (wraps around).</summary>
+        public void EquipPreviousSlot() => CycleSlot(-1);
+
+        private void CycleSlot(int direction)
         {
             int count = weaponSlots.Count;
             if (count == 0 || !CanChangeWeapon) return;
             int current = GetCurrentSlotIndex();
             for (int step = 1; step <= count; step++)
             {
-                int index = ((current + step) % count + count) % count;
+                int index = ((current + step * direction) % count + count) % count;
                 if (index != current && IsSlotAvailable(index))
                 {
                     EquipSlot(index);

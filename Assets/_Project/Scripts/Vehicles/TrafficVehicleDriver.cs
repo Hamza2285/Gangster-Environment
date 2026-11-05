@@ -52,9 +52,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private EnemyVehicleImpact npcPrefab;
         [Tooltip("Static seated driver mesh under the DriverSeat (inactive by default). Shown while the NPC sits at the wheel.")]
         [SerializeField] private GameObject npcSeatedVisual;
-        [Tooltip("Highest driver head (driver seat space, y) this car's roof allows; taller pedestrians sit a little smaller. " +
-                 "0 = no limit. Set by Build Pedestrian Drivers.")]
-        [SerializeField] private float driverCrownLimit;
+        [Tooltip("How each roster driver sits in this car so his head clears the roof (one per roster entry). Set by Build Pedestrian Drivers.")]
+        [SerializeField] private PedDriverRoster.SeatFit[] driverFits = new PedDriverRoster.SeatFit[0];
         [Tooltip("Outfit used when no traffic car hands one over.")]
         [SerializeField] private Material defaultOutfit;
 
@@ -143,7 +142,7 @@ namespace OpenworldCrime.Vehicles
         public static Func<GameObject, Vector3, Quaternion, PedestrianWalker> PersonFactory;
 
 #if UNITY_EDITOR
-        public void EditorSetDriverCrownLimit(float crownLimit) => driverCrownLimit = crownLimit;
+        public void EditorSetDriverFits(PedDriverRoster.SeatFit[] fits) => driverFits = fits;
         public GameObject EditorSeatedVisual => npcSeatedVisual;
 #endif
 
@@ -260,10 +259,14 @@ namespace OpenworldCrime.Vehicles
             HasLivingDriver = seated;
             roster = driverRoster;
             rosterIndex = index;
+            if (seated && driverRoster != null && npcSeatedVisual != null)
+            {
+                driverRoster.ApplySeated(npcSeatedVisual, index, PedDriverRoster.FitOf(driverFits, index));
+                PedDriverRoster.Entry entry = driverRoster.Get(index);
+                if (seatedHealth != null && entry != null) seatedHealth.FitToDriver(entry.seatedHips, entry.seatedHeadCenter);
+            }
             SetSeatedHitZones(seated);
-            if (npcSeatedVisual == null) return;
-            if (seated && driverRoster != null) driverRoster.ApplySeated(npcSeatedVisual, index, driverCrownLimit);
-            npcSeatedVisual.SetActive(seated);
+            if (npcSeatedVisual != null) npcSeatedVisual.SetActive(seated);
         }
 
         /// <summary>Seats (shows) or removes the driver without any reaction. The outfit (null = default) is the traffic driver's.</summary>

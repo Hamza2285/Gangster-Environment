@@ -41,30 +41,34 @@ namespace OpenworldCrime.EditorTools
             public readonly float Brake;
             public readonly RCC_CarControllerV3.WheelType Drive;
             public readonly int TrafficFrequency;
+            public readonly float Scale;
 
             public CarDef(string source, string name, CarClass cls, float mass, float maxSpeed, float torque, float brake,
-                RCC_CarControllerV3.WheelType drive, int trafficFrequency)
+                RCC_CarControllerV3.WheelType drive, int trafficFrequency, float scale)
             {
                 Source = source; Name = name; Class = cls; Mass = mass; MaxSpeed = maxSpeed; Torque = torque; Brake = brake;
-                Drive = drive; TrafficFrequency = trafficFrequency;
+                Drive = drive; TrafficFrequency = trafficFrequency; Scale = scale;
             }
         }
 
         private static readonly CarDef[] Cars =
         {
-            //          source         name          class            mass   km/h  torque brake  drive                                    traffic freq
-            new CarDef("Car 1",      "Car1",       CarClass.Sports, 2100f, 250f, 540f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2),
-            new CarDef("Car 2",      "Car2",       CarClass.Sports, 1900f, 250f, 560f, 2900f, RCC_CarControllerV3.WheelType.RWD, 2),
-            new CarDef("Car 3",      "Car3",       CarClass.Super,  1950f, 310f, 760f, 3600f, RCC_CarControllerV3.WheelType.AWD, 1),
-            new CarDef("Car 4",      "Car4",       CarClass.Sedan,  2000f, 230f, 460f, 2800f, RCC_CarControllerV3.WheelType.RWD, 3),
-            new CarDef("Car 5",      "Car5",       CarClass.SUV,    2300f, 215f, 520f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2),
-            new CarDef("G Wagon",    "GWagon",     CarClass.SUV,    2600f, 195f, 560f, 3300f, RCC_CarControllerV3.WheelType.AWD, 2),
-            new CarDef("Khodge 2",   "Khodge2",    CarClass.Sports, 1600f, 280f, 600f, 3200f, RCC_CarControllerV3.WheelType.RWD, 2),
-            new CarDef("Land Sover", "LandSover",  CarClass.SUV,    2500f, 200f, 520f, 3200f, RCC_CarControllerV3.WheelType.AWD, 2),
-            new CarDef("New Car 1",  "NewCar1",    CarClass.Sports, 2100f, 250f, 540f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2),
-            new CarDef("New Car 3",  "NewCar3",    CarClass.Sports, 1900f, 250f, 560f, 2900f, RCC_CarControllerV3.WheelType.RWD, 2),
-            new CarDef("Talenter",   "Talenter",   CarClass.Sedan,  1800f, 230f, 460f, 2700f, RCC_CarControllerV3.WheelType.RWD, 3),
-            new CarDef("WMB",        "WMB",        CarClass.Sedan,  1950f, 240f, 480f, 2800f, RCC_CarControllerV3.WheelType.RWD, 3),
+            // Scale: uniform factor on the source model only (the vehicle root stays at 1), so every wheel, collider, seat, door and
+            // entry point below is fitted to the resized model. Chosen against a 1.75 m player: sedans and sports 4.4-4.9 m long and
+            // 1.8-1.95 m wide without mirrors, SUVs a little bigger.
+            //          source         name          class            mass   km/h  torque brake  drive                                    traffic freq  scale
+            new CarDef("Car 1",      "Car1",       CarClass.Sports, 2100f, 250f, 540f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2, 0.93f),
+            new CarDef("Car 2",      "Car2",       CarClass.Sports, 1900f, 250f, 560f, 2900f, RCC_CarControllerV3.WheelType.RWD, 2, 1f),
+            new CarDef("Car 3",      "Car3",       CarClass.Super,  1950f, 310f, 760f, 3600f, RCC_CarControllerV3.WheelType.AWD, 1, 0.97f),
+            new CarDef("Car 4",      "Car4",       CarClass.Sedan,  2000f, 230f, 460f, 2800f, RCC_CarControllerV3.WheelType.RWD, 3, 0.96f),
+            new CarDef("Car 5",      "Car5",       CarClass.SUV,    2300f, 215f, 520f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2, 0.96f),
+            new CarDef("G Wagon",    "GWagon",     CarClass.SUV,    2600f, 195f, 560f, 3300f, RCC_CarControllerV3.WheelType.AWD, 2, 1f),
+            new CarDef("Khodge 2",   "Khodge2",    CarClass.Sports, 1600f, 280f, 600f, 3200f, RCC_CarControllerV3.WheelType.RWD, 2, 0.86f),
+            new CarDef("Land Sover", "LandSover",  CarClass.SUV,    2500f, 200f, 520f, 3200f, RCC_CarControllerV3.WheelType.AWD, 2, 0.94f),
+            new CarDef("New Car 1",  "NewCar1",    CarClass.Sports, 2100f, 250f, 540f, 3000f, RCC_CarControllerV3.WheelType.AWD, 2, 0.84f),
+            new CarDef("New Car 3",  "NewCar3",    CarClass.Sports, 1900f, 250f, 560f, 2900f, RCC_CarControllerV3.WheelType.RWD, 2, 0.88f),
+            new CarDef("Talenter",   "Talenter",   CarClass.Sedan,  1800f, 230f, 460f, 2700f, RCC_CarControllerV3.WheelType.RWD, 3, 0.96f),
+            new CarDef("WMB",        "WMB",        CarClass.Sedan,  1950f, 240f, 480f, 2800f, RCC_CarControllerV3.WheelType.RWD, 3, 0.86f),
         };
 
         // Per class: suspension travel, centre of mass above the wheel centres, steering, high-speed steering, downforce.
@@ -194,7 +198,7 @@ namespace OpenworldCrime.EditorTools
             Transform t = inst.transform;
             t.localPosition = Vector3.zero;
             t.localRotation = Quaternion.identity;
-            t.localScale = src.transform.localScale;
+            t.localScale = src.transform.localScale * def.Scale;
 
             // The source game kept a hidden steering wheel per car (for its driver IK) when the wheel is part of the body mesh.
             Vector3? steeringHint = FindHiddenSteering(t);

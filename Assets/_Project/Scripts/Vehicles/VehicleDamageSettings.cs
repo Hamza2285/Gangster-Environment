@@ -10,13 +10,13 @@ namespace OpenworldCrime.Vehicles
     public class VehicleDamageSettings : ScriptableObject
     {
         [Header("Health")]
-        [Min(1f)] public float maxHealth = 400f;
+        [Min(1f)] public float maxHealth = 1200f;
         [Tooltip("Share of health at which the car starts smoking.")]
         [Range(0f, 1f)] public float smokeAtHealth = 0.5f;
         [Tooltip("Share of health at which the car catches fire.")]
         [Range(0f, 1f)] public float fireAtHealth = 0.2f;
         [Tooltip("Health lost per second while on fire, so a burning car always ends up exploding.")]
-        [Min(0f)] public float burnDamagePerSecond = 15f;
+        [Min(0f)] public float burnDamagePerSecond = 30f;
 
         [Header("Crash Damage")]
         [Tooltip("Impacts slower than this (m/s, along the contact normal) do no damage. 12 m/s = 43 km/h.")]
@@ -33,7 +33,7 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Damage to characters at the centre (falls off to 0 at the radius).")]
         [Min(0f)] public float explosionDamage = 150f;
         [Tooltip("Damage to other cars at the centre (falls off to 0 at the radius).")]
-        [Min(0f)] public float explosionCarDamage = 320f;
+        [Min(0f)] public float explosionCarDamage = 600f;
         [Tooltip("Impulse (per kg, m/s) on the wreck and on cars in the blast.")]
         [Min(0f)] public float explosionCarSpeed = 4f;
         [Tooltip("Speed (m/s) at which the blast throws pedestrians at the centre.")]

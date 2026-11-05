@@ -12,6 +12,16 @@ namespace OpenworldCrime.Vehicles
     [CreateAssetMenu(menuName = "OpenworldCrime/Vehicles/Ped Driver Roster", fileName = "PedDriverRoster")]
     public class PedDriverRoster : ScriptableObject
     {
+        /// <summary>How one driver sits in one car so his head clears its roof: moved down and reclined about the hips. Never scaled.</summary>
+        [Serializable]
+        public struct SeatFit
+        {
+            [Tooltip("Metres the seated driver is lowered.")]
+            public float drop;
+            [Tooltip("Degrees the seated driver is reclined about the hips.")]
+            public float recline;
+        }
+
         [Serializable]
         public class Entry
         {
@@ -25,8 +35,10 @@ namespace OpenworldCrime.Vehicles
             [Tooltip("Where the pedestrian's root goes in driver seat space so its hips sit where the player's hips sit (smaller " +
                      "people would otherwise sink into the seat). Used for the baked mesh and the spawned pedestrian alike.")]
             public Vector3 seatOffset;
-            [Tooltip("Seated hips (driver seat space): a car whose roof is too low for this pedestrian scales it about this point.")]
+            [Tooltip("Seated hips (driver seat space): the point the driver is reclined about.")]
             public Vector3 seatedHips;
+            [Tooltip("Centre of the seated head (driver seat space), where his head hit zone goes.")]
+            public Vector3 seatedHeadCenter;
             [Tooltip("Top of the seated pedestrian's head (driver seat space, y).")]
             public float seatedCrownY;
             public Material[] materials = new Material[0];
@@ -60,19 +72,18 @@ namespace OpenworldCrime.Vehicles
             return -1;
         }
 
-        /// <summary>
-        /// Scale (about the seated hips) that keeps entry's head under <paramref name="crownLimit"/> (the highest crown the car's
-        /// roof allows, seat space; 0 = no limit). 1 in most cars; only tall people in low cars sit a little smaller.
-        /// </summary>
-        public float SeatedScale(int index, float crownLimit)
+        /// <summary>The fit of entry <paramref name="index"/> in a car's list (no change when the car has none for him).</summary>
+        public static SeatFit FitOf(SeatFit[] fits, int index) => fits != null && index >= 0 && index < fits.Length ? fits[index] : default;
+
+        /// <summary>The visual's local pose for a fit: the mesh is in seat space, reclined about its hips, then lowered.</summary>
+        public static void GetSeatedPose(Vector3 hips, SeatFit fit, out Vector3 position, out Quaternion rotation)
         {
-            Entry e = Get(index);
-            if (e == null || crownLimit <= 0f || e.seatedCrownY <= crownLimit) return 1f;
-            return Mathf.Clamp((crownLimit - e.seatedHips.y) / Mathf.Max(0.1f, e.seatedCrownY - e.seatedHips.y), 0.75f, 1f);
+            rotation = Quaternion.Euler(-fit.recline, 0f, 0f);
+            position = hips - rotation * hips + Vector3.down * fit.drop;
         }
 
-        /// <summary>Puts entry's seated mesh and materials on a driver visual (the first MeshFilter / MeshRenderer under it).</summary>
-        public void ApplySeated(GameObject visual, int index, float crownLimit = 0f)
+        /// <summary>Puts entry's seated mesh and materials on a driver visual (the first MeshFilter / MeshRenderer under it), full size, posed for this car's roof.</summary>
+        public void ApplySeated(GameObject visual, int index, SeatFit fit = default)
         {
             Entry e = Get(index);
             if (visual == null || e == null || e.seatedMesh == null) return;
@@ -81,10 +92,9 @@ namespace OpenworldCrime.Vehicles
             if (filter == null || renderer == null) return;
             filter.sharedMesh = e.seatedMesh;
             renderer.sharedMaterials = e.materials;
-            // The visual sits on the driver seat with the mesh in seat space: scaling it about the hips keeps them on the seat.
-            float s = SeatedScale(index, crownLimit);
-            visual.transform.localScale = Vector3.one * s;
-            visual.transform.localPosition = e.seatedHips * (1f - s);
+            GetSeatedPose(e.seatedHips, fit, out Vector3 position, out Quaternion rotation);
+            visual.transform.localScale = Vector3.one;
+            visual.transform.SetLocalPositionAndRotation(position, rotation);
         }
 
 #if UNITY_EDITOR

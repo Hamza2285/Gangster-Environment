@@ -4,11 +4,9 @@ using UnityEngine;
 namespace OpenworldCrime.Vehicles
 {
     /// <summary>
-    /// Window glass collider of a vehicle's bullet hitbox. Invector's projectile crosses glass (bullet life settings: VehicleHitbox
-    /// layer, Glass tag) but continues only on its next frame, from where the glass was; on a fast car the window frame has moved
-    /// under that point by then. So when a bullet hits the glass, this continues the shot at that exact moment through the
-    /// cabin: if it reaches a seated driver's hit zone before any metal, the zone takes the hit (the zone ignores the same
-    /// bullet arriving again a frame later). No per-frame cost: it only runs when the glass is hit.
+    /// Window glass collider of a vehicle's bullet hitbox (the cabin). Invector's projectile stops here, so this continues the shot
+    /// at that moment through the cabin along the crosshair's line: if it reaches a seated driver's hit zone before a body panel,
+    /// the zone takes the hit and the car takes none. No per-frame cost: it only runs when the glass is hit.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Collider))]
@@ -16,7 +14,7 @@ namespace OpenworldCrime.Vehicles
     {
         private const int MaxHits = 8;
 
-        [Tooltip("Share of the bullet's damage left after passing the glass (keep in step with the bullet life settings).")]
+        [Tooltip("Share of the bullet's damage left after passing the glass.")]
         [SerializeField, Range(0f, 1f)] private float damageKeptThroughGlass = 0.85f;
         [Tooltip("How far (m) behind the glass a driver can be hit.")]
         [SerializeField, Min(0.1f)] private float reachBehindGlass = 2.5f;
@@ -45,10 +43,9 @@ namespace OpenworldCrime.Vehicles
         {
             if (damage == null || damage.damageValue <= 0f) return;
             _onStartReceiveDamage.Invoke(damage);
-            if (health != null) health.ApplyDamage(damage.damageValue * hullDamageShare, damage.sender);
+            bool reachedDriver = false;
 
-            Vector3 direction = damage.force.sqrMagnitude > 0.0001f ? damage.force.normalized
-                : damage.sender != null ? (damage.hitPosition - damage.sender.position).normalized : Vector3.zero;
+            Vector3 direction = ShotLine(damage);
             if (direction.sqrMagnitude > 0f)
             {
                 int count = Physics.RaycastNonAlloc(damage.hitPosition + direction * 0.005f, direction, hits, reachBehindGlass, hitboxLayers, QueryTriggerInteraction.Collide);
@@ -59,16 +56,36 @@ namespace OpenworldCrime.Vehicles
                 {
                     Collider hit = hits[i].collider;
                     if (hit == glassCollider || hits[i].distance >= nearest) continue;
-                    // Other panes are crossed as well; metal stops the shot.
+                    // Other panes are crossed as well; metal stops the shot, except the top of the lower body box: inside the cabin
+                    // that is the door sills' height, and the driver's lap and chest sit below it.
                     if (hit.GetComponent<VehicleGlassHit>() != null) continue;
+                    if (hit.GetComponent<VehicleHitZone>() != null && hits[i].normal.y > 0.7f) continue;
                     nearest = hits[i].distance;
                     zone = hit.GetComponent<SeatedDriverHitZone>();
                     zonePoint = hits[i].point;
                 }
-                if (zone != null) zone.ApplyDamage(damage, damageKeptThroughGlass, zonePoint);
+                if (zone != null)
+                {
+                    zone.ApplyDamage(damage, damageKeptThroughGlass, zonePoint);
+                    reachedDriver = true;
+                }
             }
 
+            if (!reachedDriver && health != null) health.ApplyDamage(damage.damageValue * hullDamageShare, damage.sender);
             _onReceiveDamage.Invoke(damage);
+        }
+
+        // The player's bullet flies from the muzzle to where the crosshair's ray met this box; beyond it the shot continues along
+        // the crosshair's ray, not the muzzle's line, so what is under the crosshair is what gets hit, however close he stands.
+        private static Vector3 ShotLine(vDamage damage)
+        {
+            if (damage.sender != null && damage.sender.CompareTag("Player"))
+            {
+                Camera view = Camera.main;
+                if (view != null) return (damage.hitPosition - view.transform.position).normalized;
+            }
+            if (damage.force.sqrMagnitude > 0.0001f) return damage.force.normalized;
+            return damage.sender != null ? (damage.hitPosition - damage.sender.position).normalized : Vector3.zero;
         }
     }
 }

@@ -12,7 +12,9 @@ namespace OpenworldCrime.Controls
     ///   mobile controller, the on-foot buttons show while walking and the RCC mobile canvas + exit button while driving.
     /// - Mobile off: keyboard / mouse only, no on-screen buttons.
     /// Invector's automatic device switching (vInput.OnGUI) is turned off so this checkbox is the only source of truth.
-    /// Toggle <see cref="useMobileControls"/> in the Inspector (also in play mode) or call <see cref="SetMobile"/>.
+    /// Touch devices always start in mobile mode. Elsewhere toggle <see cref="useMobileControls"/> in the Inspector (also in play
+    /// mode) or call <see cref="SetMobile"/>. Mobile mode needs the MOBILE_INPUT scripting define: without it Invector reports every
+    /// mobile button as held.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-10000)]
@@ -42,6 +44,7 @@ namespace OpenworldCrime.Controls
 
         private bool applied;
         private bool appliedMobile;
+        private bool cursorReleasedByEscape;
         private bool[] keyboardOnlyStartStates = new bool[0];
 #if UNITY_EDITOR
         // RCC keeps the controller type on its shared settings asset; put it back after play mode.
@@ -50,6 +53,7 @@ namespace OpenworldCrime.Controls
 
         private void Awake()
         {
+            if (Application.isMobilePlatform) useMobileControls = true;
             if (playerManager == null) Debug.LogWarning($"[{nameof(ControlsModeManager)}] No PlayerManager on '{name}'; on-foot / vehicle layouts won't switch.", this);
             if (onFootControls == null || rccCanvas == null) Debug.LogWarning($"[{nameof(ControlsModeManager)}] On-screen control roots are not all assigned on '{name}'.", this);
             // Remember how each keyboard-only HUD started (a canvas may be off by design) so keyboard mode restores exactly that.
@@ -102,6 +106,37 @@ namespace OpenworldCrime.Controls
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
+            else if (!useMobileControls)
+            {
+                UpdateDesktopCursor(Application.isFocused);
+            }
+        }
+
+        // RCC's scene manager unlocks the cursor on Esc and nothing locks it again, while Invector keeps it hidden: an invisible
+        // cursor that wanders onto a second monitor. A hidden cursor is therefore always locked here. Esc frees it and a click
+        // takes it back. Menus that show the cursor (map, inventory) are left alone because they make it visible.
+        private void UpdateDesktopCursor(bool focused)
+        {
+            if (!focused) return;
+
+            if (cursorReleasedByEscape)
+            {
+                if (!Input.GetMouseButtonDown(0)) return;
+                cursorReleasedByEscape = false;
+                Cursor.visible = false;
+                Cursor.lockState = CursorLockMode.Locked;
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape) && !Cursor.visible)
+            {
+                cursorReleasedByEscape = true;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+                return;
+            }
+
+            if (!Cursor.visible && Cursor.lockState != CursorLockMode.Locked) Cursor.lockState = CursorLockMode.Locked;
         }
 
         /// <summary>Switches between on-screen touch controls (true) and keyboard / mouse (false).</summary>
@@ -114,6 +149,13 @@ namespace OpenworldCrime.Controls
 
         private void Apply()
         {
+#if !MOBILE_INPUT
+            if (useMobileControls)
+            {
+                Debug.LogError($"[{nameof(ControlsModeManager)}] Mobile controls need the MOBILE_INPUT scripting define for this build target; staying on keyboard / mouse.", this);
+                useMobileControls = false;
+            }
+#endif
             applied = true;
             appliedMobile = useMobileControls;
             CrossPlatformInputManager.ResetAll();
