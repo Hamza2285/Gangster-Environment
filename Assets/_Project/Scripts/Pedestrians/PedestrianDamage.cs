@@ -77,6 +77,11 @@ namespace OpenworldCrime.Pedestrians
         [Tooltip("A car touching a body that is already down carries it along at most at this share of the car's speed.")]
         [SerializeField, Range(0f, 1f)] private float groundShoveSpeedShare = 0.4f;
 
+        [Header("Head Shots")]
+        [Tooltip("Bullets hitting this high (m above the feet) count as head shots.")]
+        [SerializeField, Min(0f)] private float headShotHeight = 1.45f;
+        [SerializeField, Min(1f)] private float headShotMultiplier = 2f;
+
         [Header("Death Impulse")]
         [Tooltip("Impulse on the hit limb on death, as a multiple of the killing vDamage.force (Invector's bullet also pushes it once).")]
         [SerializeField, Min(0f)] private float deathForceMultiplier = 1f;
@@ -121,6 +126,8 @@ namespace OpenworldCrime.Pedestrians
 
         private void Awake()
         {
+            // The spawner adds the root capsule at runtime (before this runs: pooled people wake up when first placed).
+            if (aliveCollider == null) aliveCollider = GetComponent<CapsuleCollider>();
             valid = character != null && ragdoll != null && aliveCollider != null;
             if (!valid)
             {
@@ -240,6 +247,39 @@ namespace OpenworldCrime.Pedestrians
             KnockDown(velocity, tumble, groundTime);
         }
 
+        /// <summary>Solid root capsule on or off (off while a carjacked driver is pulled through the car's body).</summary>
+        public void SetAliveColliderEnabled(bool on)
+        {
+            if (valid) aliveCollider.enabled = on;
+        }
+
+        /// <summary>Caught in an explosion: thrown away from it as a ragdoll and hurt (a body on the ground is only pushed).</summary>
+        public void ReceiveExplosion(Vector3 center, float damageValue, float throwSpeed)
+        {
+            if (!valid || !isActiveAndEnabled) return;
+            dirty = true;
+            lastThreat = center;
+            Vector3 away = BodyPosition - center;
+            away.y = 0f;
+            away = away.sqrMagnitude > 0.01f ? away.normalized : transform.forward;
+            if (IsDead || IsDown)
+            {
+                ShoveRagdoll(away * throwSpeed * groundShoveSpeedShare);
+                return;
+            }
+            KnockDown(away * throwSpeed + Vector3.up * Mathf.Max(minimumLift, throwSpeed * 0.5f), Vector3.Cross(away, Vector3.up) * maxTumble * 0.5f,
+                      minimumGroundTime + highImpactExtraGroundTime);
+            character.TakeDamage(new vDamage
+            {
+                damageValue = Mathf.Round(damageValue),
+                hitPosition = center,
+                damageType = "Explosion",
+                ignoreDefense = true,
+                activeRagdoll = false, // the ragdoll is driven here, not through Invector's onActiveRagdoll
+                hitReaction = false
+            });
+        }
+
         /// <summary>Kills the pedestrian at once (e.g. a traffic driver shot at the wheel falling out of the car).</summary>
         public void Kill(Transform sender, Vector3 hitPosition)
         {
@@ -302,6 +342,9 @@ namespace OpenworldCrime.Pedestrians
             dirty = true;
             lastDamage = damage;
             if (damage.sender != null) lastThreat = damage.sender.position;
+            // Walking people have one capsule hitbox (no bone colliders until hit): the head counts by the height of the hit.
+            if (damage.damageType != "Vehicle" && damage.damageType != "Explosion" && !IsDown && damage.hitPosition.y - transform.position.y >= headShotHeight)
+                damage.damageValue *= headShotMultiplier;
         }
 
         private void HandleDamage(vDamage damage)

@@ -89,6 +89,10 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Traffic cars within this distance (m) of the player get their window glass and driver hit zones; farther cars keep only the metal body hitbox.")]
         [SerializeField, Min(0f)] private float shotDetailRange = 60f;
 
+        [Header("Pedestrian Drivers")]
+        [Tooltip("Creates the real person when a traffic driver is pulled out or falls out of a car; he then joins the crowd.")]
+        [SerializeField] private PedestrianSpawner pedestrianSpawner;
+
         [Header("Ejected Drivers")]
         [Tooltip("Pulled-out drivers farther than this (m) are removed. 0 = never remove.")]
         [SerializeField, Min(0f)] private float driverDespawnDistance = 120f;
@@ -116,6 +120,7 @@ namespace OpenworldCrime.Vehicles
             TrafficVehicleAdapter.OnTakenOver += HandleTakenOver;
             TrafficVehicleDriver.OnDriverEjected += HandleDriverEjected;
             TrafficVehicleAdapter.DrivableProvider = TakePrewarmed;
+            if (pedestrianSpawner != null) TrafficVehicleDriver.PersonFactory = pedestrianSpawner.CreateScriptedPerson;
             checkRoutine = StartCoroutine(CheckRoutine());
         }
 
@@ -124,6 +129,7 @@ namespace OpenworldCrime.Vehicles
             TrafficVehicleAdapter.OnTakenOver -= HandleTakenOver;
             TrafficVehicleDriver.OnDriverEjected -= HandleDriverEjected;
             if (TrafficVehicleAdapter.DrivableProvider == TakePrewarmed) TrafficVehicleAdapter.DrivableProvider = null;
+            TrafficVehicleDriver.PersonFactory = null;
             if (checkRoutine != null)
             {
                 StopCoroutine(checkRoutine);

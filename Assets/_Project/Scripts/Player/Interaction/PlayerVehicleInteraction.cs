@@ -314,6 +314,7 @@ namespace OpenworldCrime.Player
         public event Action<VehicleInteractionState> OnStateChanged;
 
         public VehicleInteractionState State { get; private set; } = VehicleInteractionState.OnFoot;
+        private VehicleHealth ejectedFrom;
         public IVehicleController CurrentVehicle { get; private set; }
         public IVehicleInteractionTarget FocusedVehicle { get; private set; }
         public bool IsInVehicle => State == VehicleInteractionState.InVehicle;
@@ -390,8 +391,14 @@ namespace OpenworldCrime.Player
             moveReference = playerCamera != null ? playerCamera.transform : null;
         }
 
+        private void OnEnable()
+        {
+            VehicleHealth.OnAnyDestroyed += HandleVehicleDestroyed;
+        }
+
         private void OnDisable()
         {
+            VehicleHealth.OnAnyDestroyed -= HandleVehicleDestroyed;
             if (State == VehicleInteractionState.Approaching) CancelApproach();
             nearbyVehicles.Clear();
             SetFocus(null);
@@ -517,7 +524,7 @@ namespace OpenworldCrime.Player
         private static bool IsTargetGone(IVehicleInteractionTarget target)
         {
             var targetBehaviour = target as Behaviour;
-            return targetBehaviour == null || !targetBehaviour.isActiveAndEnabled;
+            return targetBehaviour == null || !targetBehaviour.isActiveAndEnabled || target.IsWrecked;
         }
 
         private IEnumerator ApproachRoutine(IVehicleInteractionTarget target)
@@ -1534,6 +1541,45 @@ namespace OpenworldCrime.Player
 
             SetState(VehicleInteractionState.InVehicle);
             OnVehicleEntered?.Invoke(vehicle);
+
+            // It blew up while he was climbing in.
+            VehicleHealth health = ((Component)vehicle).GetComponent<VehicleHealth>();
+            if (health != null && health.IsDestroyed) EjectFromWreck(vehicle, health);
+        }
+
+        /// <summary>True for the blast of a car the player was just thrown out of: its inside damage already covers it.</summary>
+        public bool WasEjectedFrom(VehicleHealth wreck) => wreck != null && ejectedFrom == wreck;
+
+        private void HandleVehicleDestroyed(VehicleHealth wreck)
+        {
+            if (State != VehicleInteractionState.InVehicle || CurrentVehicle == null) return;
+            if (((Component)CurrentVehicle).gameObject == wreck.gameObject) EjectFromWreck(CurrentVehicle, wreck);
+        }
+
+        // Out at once beside the car, and thrown down hurt (or dead): Settings' Player Inside Damage, as Invector damage.
+        private void EjectFromWreck(IVehicleController vehicle, VehicleHealth wreck)
+        {
+            ejectedFrom = wreck;
+            if (!TryGetClearExit(vehicle, vehicle.GetExitPoint(), out Vector3 exitPosition, out Quaternion exitRotation)
+                && !TryGetClearExit(vehicle, vehicle.GetAlternateExitPoint(), out exitPosition, out exitRotation))
+            {
+                Transform exit = vehicle.GetExitPoint();
+                exitPosition = GetGroundedPosition(exit.position);
+                exitRotation = exit.rotation;
+            }
+
+            SetState(VehicleInteractionState.Exiting);
+            OnVehicleExitStarted?.Invoke(vehicle);
+            vehicle.DisableControl();
+            playerCameraRoot.SetActive(true);
+            StartCoroutine(WreckEjectRoutine(vehicle, exitPosition, exitRotation, wreck));
+        }
+
+        private IEnumerator WreckEjectRoutine(IVehicleController vehicle, Vector3 exitPosition, Quaternion exitRotation, VehicleHealth wreck)
+        {
+            yield return InstantExitRoutine(vehicle, exitPosition, exitRotation);
+            float damage = wreck.Settings.playerInsideDamage * controller.MaxHealth;
+            controller.TakeDamage(VehicleExplosion.CreateDamage(wreck.transform.position, damage, wreck));
         }
 
         private void ShowCharacterAtSeat(IVehicleController vehicle)

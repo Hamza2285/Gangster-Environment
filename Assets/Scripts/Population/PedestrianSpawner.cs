@@ -339,6 +339,38 @@ public class PedestrianSpawner : MonoBehaviour
         _laneWalkers[walker.Lane].Add(walker);
     }
 
+    // Damage hooks (PedestrianDamageBridge): a walker that went down leaves its lane, comes back running, or goes back to the pool.
+    public void OnWalkerDowned(PedestrianWalker walker, PedestrianWalker.Mode before)
+    {
+        if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
+    }
+
+    public void RecoverWalker(PedestrianWalker walker, Vector3 threat)
+    {
+        walker.RecoverFromDown(threat, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax));
+    }
+
+    public void ReleaseDown(PedestrianWalker walker)
+    {
+        int index = _active.IndexOf(walker);
+        if (index < 0) return;
+        _active[index] = _active[_active.Count - 1];
+        _active.RemoveAt(_active.Count - 1);
+        Despawn(walker);
+    }
+
+    // A person outside the lanes for a scripted scene (a carjacked driver): already Down, it joins the crowd when it recovers.
+    public PedestrianWalker CreateScriptedPerson(GameObject prefab, Vector3 position, Quaternion rotation)
+    {
+        PedestrianWalker walker = CreatePerson(prefab);
+        _created++;
+        walker.transform.SetParent(_activeRoot, true);
+        walker.transform.SetPositionAndRotation(position, rotation);
+        walker.EnterDown();
+        _active.Add(walker);
+        return walker;
+    }
+
     public bool TrySampleOpenNavPoint(Vector3 around, float maxDistance, out Vector3 point)
     {
         NavMeshHit hit;
@@ -437,28 +469,33 @@ public class PedestrianSpawner : MonoBehaviour
         for (int i = 0; i < instantiatePerFrame && _created < amount && _active.Count + _inactive.Count + _parked.Count < _targetActive; i++, _created++)
         {
             GameObject prefab = peoplePrefabs[Random.Range(0, peoplePrefabs.Length)];
-            GameObject go = Instantiate(prefab, _poolRoot);
-
-            var capsule = go.AddComponent<CapsuleCollider>();
-            capsule.height = 1.8f;
-            capsule.radius = 0.3f;
-            capsule.center = new Vector3(0f, 0.9f, 0f);
-            var body = go.AddComponent<Rigidbody>();
-            body.isKinematic = true;
-            body.useGravity = false;
-
-            var agent = go.AddComponent<NavMeshAgent>();
-            agent.radius = 0.35f;
-            agent.height = 1.8f;
-            agent.stoppingDistance = 0.2f;
-            agent.autoBraking = false;
-            agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
-            agent.avoidancePriority = Random.Range(30, 70);
-
-            var walker = go.AddComponent<PedestrianWalker>();
-            walker.Setup(_network, this, agent);
-            _inactive.Enqueue(walker);
+            _inactive.Enqueue(CreatePerson(prefab));
         }
+    }
+
+    private PedestrianWalker CreatePerson(GameObject prefab)
+    {
+        GameObject go = Instantiate(prefab, _poolRoot);
+
+        var capsule = go.AddComponent<CapsuleCollider>();
+        capsule.height = 1.8f;
+        capsule.radius = 0.3f;
+        capsule.center = new Vector3(0f, 0.9f, 0f);
+        var body = go.AddComponent<Rigidbody>();
+        body.isKinematic = true;
+        body.useGravity = false;
+
+        var agent = go.AddComponent<NavMeshAgent>();
+        agent.radius = 0.35f;
+        agent.height = 1.8f;
+        agent.stoppingDistance = 0.2f;
+        agent.autoBraking = false;
+        agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
+        agent.avoidancePriority = Random.Range(30, 70);
+
+        var walker = go.AddComponent<PedestrianWalker>();
+        walker.Setup(_network, this, agent);
+        return walker;
     }
 
     private void SpawnPooled(Camera cam)

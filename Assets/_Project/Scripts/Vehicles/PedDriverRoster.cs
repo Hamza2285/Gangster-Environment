@@ -30,6 +30,10 @@ namespace OpenworldCrime.Vehicles
             [Tooltip("Top of the seated pedestrian's head (driver seat space, y).")]
             public float seatedCrownY;
             public Material[] materials = new Material[0];
+            [Tooltip("The damageable pedestrian prefab this entry was baked from: the real person pulled out of the car.")]
+            public GameObject pedPrefab;
+            [Tooltip("Police officer: drives police cars only.")]
+            public bool police;
         }
 
         [SerializeField] private Entry[] entries = new Entry[0];
@@ -40,6 +44,21 @@ namespace OpenworldCrime.Vehicles
         public RuntimeAnimatorController CarjackController => carjackController;
         public Entry Get(int index) => index >= 0 && index < entries.Length ? entries[index] : null;
         public int RandomIndex() => entries.Length > 0 ? UnityEngine.Random.Range(0, entries.Length) : -1;
+
+        /// <summary>A random civilian or police officer (a random anybody if the roster has none of that kind).</summary>
+        public int RandomIndex(bool police)
+        {
+            int count = 0;
+            for (int i = 0; i < entries.Length; i++) if (entries[i].police == police) count++;
+            if (count == 0) return RandomIndex();
+            int pick = UnityEngine.Random.Range(0, count);
+            for (int i = 0; i < entries.Length; i++)
+            {
+                if (entries[i].police != police) continue;
+                if (pick-- == 0) return i;
+            }
+            return -1;
+        }
 
         /// <summary>
         /// Scale (about the seated hips) that keeps entry's head under <paramref name="crownLimit"/> (the highest crown the car's

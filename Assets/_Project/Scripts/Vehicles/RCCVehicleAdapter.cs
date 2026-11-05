@@ -46,6 +46,12 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Optional NPC driver sitting at the wheel (vehicles taken over from traffic). Pulled out when the player gets in.")]
         [SerializeField] private TrafficVehicleDriver npcDriver;
 
+        [Header("Damage")]
+        [Tooltip("Health of this car. Blown up it is put to sleep as a wreck and removed once off camera.")]
+        [SerializeField] private VehicleHealth health;
+        [Tooltip("Seconds the wreck stays physical after the blast before it is put to sleep.")]
+        [SerializeField, Min(0f)] private float wreckSettleTime = 3f;
+
         [Header("Mounting")]
         [Tooltip("Mounted without a door (bikes): the player swings onto the seat and steps off instead of the car door clips.")]
         [SerializeField] private bool quickMount;
@@ -75,7 +81,9 @@ namespace OpenworldCrime.Vehicles
         public bool IsOccupied { get; private set; }
         public bool IsControlled { get; private set; }
         public float CurrentSpeed => carController != null ? Mathf.Abs(carController.speed) * KmhToMs : 0f;
-        public bool CanEnter => isValid && isActiveAndEnabled && !IsOccupied && CurrentSpeed <= maxEnterSpeed;
+        public bool CanEnter => isValid && isActiveAndEnabled && !IsOccupied && !IsWrecked && CurrentSpeed <= maxEnterSpeed;
+        /// <summary>Blown up: it cannot be entered or driven any more.</summary>
+        public bool IsWrecked => health != null && health.IsDestroyed;
         public bool CanExit => IsOccupied && CurrentSpeed <= maxExitSpeed;
         public bool IsReadyForEntry => CurrentSpeed <= maxEnterSpeed;
         public bool UsesQuickMount => quickMount;
@@ -114,6 +122,37 @@ namespace OpenworldCrime.Vehicles
             if (engineOffWhenParked) carController.KillEngine();
         }
 
+        private void OnEnable()
+        {
+            if (health == null) return;
+            health.OnDestroyedWreck += HandleWrecked;
+            health.OnWreckCleanup += HandleWreckCleanup;
+        }
+
+        // The player's side reacts first if he is inside (VehicleHealth.OnAnyDestroyed); the car only stops being a car here.
+        private void HandleWrecked()
+        {
+            if (!isValid) return;
+            StopRolling();
+            if (!IsControlled) carController.KillEngine();
+            if (npcDriver != null) npcDriver.SetSeated(false);
+            StartCoroutine(SleepWreckRoutine());
+        }
+
+        private IEnumerator SleepWreckRoutine()
+        {
+            yield return new WaitForSeconds(wreckSettleTime);
+            if (!IsOccupied) SetDormant(true);
+        }
+
+        // Two-step like the takeover manager's retirement: iTS' player sensors must lose the collider before it is destroyed.
+        private void HandleWreckCleanup()
+        {
+            if (IsOccupied) return;
+            transform.position += Vector3.down * 2000f;
+            Destroy(gameObject, 1.2f);
+        }
+
         public Transform GetDriverSeat() => driverSeat;
         public Transform GetEnterPoint() => enterPoint;
         public Transform GetExitPoint() => exitPoint;
@@ -138,8 +177,8 @@ namespace OpenworldCrime.Vehicles
         /// </summary>
         public void SetDormant(bool dormant)
         {
-            // A car still rolling on after a bail-out is never frozen mid-roll.
-            if (!isValid || dormant == IsDormant || (dormant && (IsOccupied || IsRolling))) return;
+            // A car still rolling on after a bail-out is never frozen mid-roll, and a wreck never wakes up.
+            if (!isValid || dormant == IsDormant || (dormant && (IsOccupied || IsRolling)) || (!dormant && IsWrecked)) return;
             IsDormant = dormant;
 
             if (dormant)
@@ -299,6 +338,9 @@ namespace OpenworldCrime.Vehicles
         private void OnDisable()
         {
             StopRolling();
+            if (health == null) return;
+            health.OnDestroyedWreck -= HandleWrecked;
+            health.OnWreckCleanup -= HandleWreckCleanup;
         }
 
         public void SetDriverVisualActive(bool active)

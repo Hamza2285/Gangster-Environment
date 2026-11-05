@@ -62,6 +62,7 @@ public static class GameInput
     public static bool Sprint => KeyHeld(KeyCode.LeftShift);
     public static bool JumpDown => KeyDown(KeyCode.Space);
     public static bool InteractDown => KeyDown(KeyCode.E);
+    public static bool WhistleDown => KeyDown(KeyCode.T);
     public static bool EnterDown => KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter);
     public static bool MapDown => KeyDown(KeyCode.M);
     public static bool CameraDown => KeyDown(KeyCode.C);

@@ -22,6 +22,10 @@ namespace OpenworldCrime.Vehicles
         [SerializeField, Min(0.1f)] private float reachBehindGlass = 2.5f;
         [Tooltip("Layers of the bullet hitbox (metal body, glass and driver zones).")]
         [SerializeField] private LayerMask hitboxLayers = 1 << 21;
+        [Tooltip("The car's health: shots on the cabin (roof, pillars, windows) also wear the car down. Optional.")]
+        [SerializeField] private VehicleHealth health;
+        [Tooltip("Share of the bullet's damage the car takes.")]
+        [SerializeField, Range(0f, 1f)] private float hullDamageShare = 0.5f;
 
         [SerializeField] private OnReceiveDamage _onStartReceiveDamage = new OnReceiveDamage();
         [SerializeField] private OnReceiveDamage _onReceiveDamage = new OnReceiveDamage();
@@ -41,6 +45,7 @@ namespace OpenworldCrime.Vehicles
         {
             if (damage == null || damage.damageValue <= 0f) return;
             _onStartReceiveDamage.Invoke(damage);
+            if (health != null) health.ApplyDamage(damage.damageValue * hullDamageShare, damage.sender);
 
             Vector3 direction = damage.force.sqrMagnitude > 0.0001f ? damage.force.normalized
                 : damage.sender != null ? (damage.hitPosition - damage.sender.position).normalized : Vector3.zero;

@@ -19,7 +19,7 @@ namespace OpenworldCrime.EditorTools
     /// seated driver dummy, door hinge, enter / exit / interaction points, cameras, lights and handling per car class.
     /// Menu: Tools > OpenworldCrime > Vehicles > Build Final Cars / Assign Final Cars To Traffic.
     /// </summary>
-    public static class FinalCarBuilder
+    public static partial class FinalCarBuilder
     {
         private const string SourceFolder = "Assets/GameObject";
         private const string DrivableFolder = "Assets/_Project/Prefabs/Vehicles/Drivable";
@@ -115,6 +115,8 @@ namespace OpenworldCrime.EditorTools
                 }
             }
             AssetDatabase.SaveAssets();
+            sb.Append(BuildCombat());
+            sb.AppendLine(PedDriverBuilder.RepatchPrefabs());
             return sb.ToString();
         }
 

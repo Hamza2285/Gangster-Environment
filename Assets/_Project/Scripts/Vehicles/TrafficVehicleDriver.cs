@@ -3,6 +3,7 @@ using System.Collections;
 using Invector;
 using Invector.vCharacterController;
 using OpenworldCrime.Combat;
+using OpenworldCrime.Pedestrians;
 using UnityEngine;
 
 namespace OpenworldCrime.Vehicles
@@ -19,7 +20,9 @@ namespace OpenworldCrime.Vehicles
         /// <summary>Left by the player: parked, never returns to traffic.</summary>
         Abandoned,
         /// <summary>The traffic driver was shot dead: the car brakes to a stop and is then handed over as an empty parked vehicle.</summary>
-        DriverKilled
+        DriverKilled,
+        /// <summary>Blown up: a burnt wreck until it is off camera, then it goes back to the iTS pool.</summary>
+        Wrecked
     }
 
     /// <summary>
@@ -45,7 +48,7 @@ namespace OpenworldCrime.Vehicles
     public class TrafficVehicleDriver : MonoBehaviour
     {
         [Header("NPC")]
-        [Tooltip("Character spawned when the driver is pulled out (EnemyDummy prefab with EnemyVehicleImpact).")]
+        [Tooltip("Fallback character for a pulled-out driver without a roster pedestrian (EnemyDummy prefab with EnemyVehicleImpact). Optional.")]
         [SerializeField] private EnemyVehicleImpact npcPrefab;
         [Tooltip("Static seated driver mesh under the DriverSeat (inactive by default). Shown while the NPC sits at the wheel.")]
         [SerializeField] private GameObject npcSeatedVisual;
@@ -136,6 +139,8 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Raised when a driver has been thrown out (the spawned character now lives on its own).</summary>
         public static event Action<EnemyDummy> OnDriverEjected;
+        /// <summary>Creates the real person of a roster driver (the pedestrian spawner, wired by the takeover manager).</summary>
+        public static Func<GameObject, Vector3, Quaternion, PedestrianWalker> PersonFactory;
 
 #if UNITY_EDITOR
         public void EditorSetDriverCrownLimit(float crownLimit) => driverCrownLimit = crownLimit;
@@ -188,7 +193,12 @@ namespace OpenworldCrime.Vehicles
         private int stumbleRightHash;
         private int flinchStateHash;
         private Material outfit;
-        private EnemyVehicleImpact heldNpc;
+        private Component heldNpc;
+        private PedestrianDamage heldPed;
+        private Avatar heldOriginalAvatar;
+        private RuntimeAnimatorController heldOriginalController;
+        private PedDriverRoster roster;
+        private int rosterIndex = -1;
         private Animator heldAnimator;
         private FootGroundClamp heldFeet;
         private int flinchLayer = -1;
@@ -201,8 +211,7 @@ namespace OpenworldCrime.Vehicles
         private bool shoveRequested;
         private Vector3 shoveDirection;
 
-        // A roster driver only changes how the seated driver looks; pulling him out uses the NPC prefab, because the
-        // street pedestrian system has no way to lend a walker to a scripted scene.
+        private bool CanSpawnDriver => npcPrefab != null || (PersonFactory != null && roster != null && roster.Get(rosterIndex) != null && roster.Get(rosterIndex).pedPrefab != null);
 
         private bool IsHolding => heldNpc != null;
         private Transform HeldTransform => heldNpc != null ? heldNpc.transform : null;
@@ -211,7 +220,6 @@ namespace OpenworldCrime.Vehicles
         {
             vehicle = GetComponent<IVehicleController>();
             if (vehicle == null) Debug.LogError($"[{nameof(TrafficVehicleDriver)}] No IVehicleController on '{name}'; the driver cannot be shown or pulled out.", this);
-            if (npcPrefab == null) Debug.LogWarning($"[{nameof(TrafficVehicleDriver)}] No NPC prefab on '{name}'; a pulled-out driver will just disappear.", this);
             if (npcSeatedVisual == null) Debug.LogWarning($"[{nameof(TrafficVehicleDriver)}] No NPC seated visual on '{name}'; the seated driver is invisible.", this);
             else npcSeatedVisual.SetActive(false);
             seatedStateHash = Animator.StringToHash(seatedStateName);
@@ -250,6 +258,8 @@ namespace OpenworldCrime.Vehicles
         public void SetSeatedPedestrian(bool seated, PedDriverRoster driverRoster, int index)
         {
             HasLivingDriver = seated;
+            roster = driverRoster;
+            rosterIndex = index;
             SetSeatedHitZones(seated);
             if (npcSeatedVisual == null) return;
             if (seated && driverRoster != null) driverRoster.ApplySeated(npcSeatedVisual, index, driverCrownLimit);
@@ -260,6 +270,8 @@ namespace OpenworldCrime.Vehicles
         public void SetSeated(bool seated, Material driverOutfit = null)
         {
             HasLivingDriver = seated;
+            roster = null;
+            rosterIndex = -1;
             if (driverOutfit != null) outfit = driverOutfit;
             SetSeatedHitZones(seated);
             if (npcSeatedVisual == null) return;
@@ -277,7 +289,7 @@ namespace OpenworldCrime.Vehicles
             HasLivingDriver = false;
             SetSeatedHitZones(false);
             if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
-            if (npcPrefab == null || !isActiveAndEnabled) return true;
+            if (!CanSpawnDriver || !isActiveAndEnabled) return true;
             deadRoutine = StartCoroutine(DeadFallOutRoutine(push));
             return true;
         }
@@ -305,12 +317,15 @@ namespace OpenworldCrime.Vehicles
             if (door != null && door.IsAvailable) door.Open(deadDoorOpenDuration);
 
             Transform seat = vehicle.GetDriverSeat();
-            EnemyVehicleImpact npc = Instantiate(npcPrefab, seat.position, seat.rotation, seat);
-            if (outfit != null) ApplyOutfit(npc.gameObject, outfit);
+            Component npc = SpawnDriver(seat, out Avatar originalAvatar, out RuntimeAnimatorController originalController);
+            if (npc == null)
+            {
+                deadRoutine = null;
+                yield break;
+            }
             Animator npcAnimator = npc.GetComponent<Animator>();
             FootGroundClamp feet = npc.GetComponent<FootGroundClamp>();
             EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
-            if (dummy != null && dummy.AliveCollider != null) dummy.AliveCollider.enabled = false;
             if (npcAnimator != null)
             {
                 npcAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
@@ -328,7 +343,7 @@ namespace OpenworldCrime.Vehicles
 
             // 1. Slides out over the sill (root motion warped onto the pull-out point, feet kept above the road).
             Vector3 target = GetGroundedPullOutPosition(seat);
-            npc.transform.SetParent(null, true);
+            if (npc is EnemyVehicleImpact) npc.transform.SetParent(null, true);
             if (feet != null) feet.SetGround(target.y);
             if (npcAnimator != null)
             {
@@ -383,6 +398,7 @@ namespace OpenworldCrime.Vehicles
             Animator bodyAnimator = npc.GetComponent<Animator>();
             Transform hips = bodyAnimator != null && bodyAnimator.isHuman ? bodyAnimator.GetBoneTransform(HumanBodyBones.Hips) : npc.transform;
             Vector3 tumble = Vector3.Cross(Vector3.up, side) * deadFallTumble;
+            if (originalController != null && bodyAnimator != null) RestorePersonAnimator(bodyAnimator, originalAvatar, originalController);
             Rigidbody[] limbs = npc.GetComponentsInChildren<Rigidbody>();
             var savedDepenetration = new float[limbs.Length];
             for (int i = 0; i < limbs.Length; i++)
@@ -422,14 +438,11 @@ namespace OpenworldCrime.Vehicles
             if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
 
             Transform seat = vehicle.GetDriverSeat();
-            if (npcPrefab == null) return false;
-
-            heldNpc = Instantiate(npcPrefab, seat.position, seat.rotation, seat);
-            if (outfit != null) ApplyOutfit(heldNpc.gameObject, outfit);
+            heldNpc = SpawnDriver(seat, out heldOriginalAvatar, out heldOriginalController);
+            if (heldNpc == null) return false;
+            heldPed = heldNpc.GetComponent<PedestrianDamage>();
             heldAnimator = heldNpc.GetComponent<Animator>();
             heldFeet = heldNpc.GetComponent<FootGroundClamp>();
-            EnemyDummy dummy = heldNpc.GetComponent<EnemyDummy>();
-            if (dummy != null && dummy.AliveCollider != null) dummy.AliveCollider.enabled = false;
             if (heldAnimator != null)
             {
                 heldCullingMode = heldAnimator.cullingMode;
@@ -474,6 +487,45 @@ namespace OpenworldCrime.Vehicles
             return true;
         }
 
+        // The same person who sat at the wheel: a roster pedestrian, put in the seat with the carjack controller (original Animator
+        // setup handed back once he falls), or the fallback NPC prefab. Solid body off while he is inside the car.
+        private Component SpawnDriver(Transform seat, out Avatar originalAvatar, out RuntimeAnimatorController originalController)
+        {
+            originalAvatar = null;
+            originalController = null;
+            PedDriverRoster.Entry entry = roster != null ? roster.Get(rosterIndex) : null;
+            if (entry != null && entry.pedPrefab != null && entry.humanoidAvatar != null && roster.CarjackController != null && PersonFactory != null)
+            {
+                PedestrianWalker walker = PersonFactory(entry.pedPrefab, seat.TransformPoint(entry.seatOffset), seat.rotation);
+                if (walker != null)
+                {
+                    Animator animator = walker.GetComponent<Animator>();
+                    originalAvatar = animator.avatar;
+                    originalController = animator.runtimeAnimatorController;
+                    animator.avatar = entry.humanoidAvatar;
+                    animator.runtimeAnimatorController = roster.CarjackController;
+                    PedestrianDamage ped = walker.GetComponent<PedestrianDamage>();
+                    if (ped != null) ped.SetAliveColliderEnabled(false);
+                    return walker;
+                }
+            }
+            if (npcPrefab == null) return null;
+            EnemyVehicleImpact npc = Instantiate(npcPrefab, seat.position, seat.rotation, seat);
+            if (outfit != null) ApplyOutfit(npc.gameObject, outfit);
+            EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
+            if (dummy != null && dummy.AliveCollider != null) dummy.AliveCollider.enabled = false;
+            return npc;
+        }
+
+        private static void RestorePersonAnimator(Animator animator, Avatar avatar, RuntimeAnimatorController controller)
+        {
+            animator.applyRootMotion = false;
+            animator.speed = 1f;
+            animator.cullingMode = AnimatorCullingMode.CullCompletely;
+            animator.avatar = avatar;
+            animator.runtimeAnimatorController = controller;
+        }
+
         private IEnumerator PullOutRoutine()
         {
             // At least one frame after spawning so Invector (vRagdoll) finishes initialising.
@@ -486,7 +538,7 @@ namespace OpenworldCrime.Vehicles
 
             Transform seat = vehicle.GetDriverSeat();
             Vector3 targetPosition = GetGroundedPullOutPosition(seat);
-            HeldTransform.SetParent(null, true);
+            if (heldNpc is EnemyVehicleImpact) HeldTransform.SetParent(null, true);
             if (heldFeet != null) heldFeet.SetGround(targetPosition.y);
 
             // Length of the pull-out clip (for timing). Read now: a freshly spawned Animator does not report it yet.
@@ -613,8 +665,10 @@ namespace OpenworldCrime.Vehicles
 
         private void Fall(Vector3 direction)
         {
-            EnemyVehicleImpact npc = heldNpc;
+            Component npc = heldNpc;
+            PedestrianDamage ped = heldPed;
             heldNpc = null;
+            heldPed = null;
             GrabTarget = null;
             IsPulledOut = false;
             PullProgress = 0f;
@@ -628,14 +682,23 @@ namespace OpenworldCrime.Vehicles
                 heldAnimator.applyRootMotion = heldRootMotion;
                 heldAnimator.cullingMode = heldCullingMode;
             }
+            Animator animator = heldAnimator;
             heldAnimator = null;
-            if (npc.transform.parent != null) npc.transform.SetParent(null, true);
+            if (npc is EnemyVehicleImpact && npc.transform.parent != null) npc.transform.SetParent(null, true);
 
             direction.y = 0f;
             direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
             Vector3 velocity = direction * fallSpeed + Vector3.up * fallUpSpeed;
             Vector3 tumble = Vector3.Cross(Vector3.up, direction) * fallTumble;
-            npc.Launch(velocity, tumble, groundTime, vehicle != null ? vehicle.transform : transform);
+            Transform car = vehicle != null ? vehicle.transform : transform;
+            if (ped != null)
+            {
+                // Down for a moment, then he gets up and runs from the car with the crowd (ped panic).
+                ped.KnockDownBy(velocity, tumble, groundTime, car.position);
+                if (animator != null) RestorePersonAnimator(animator, heldOriginalAvatar, heldOriginalController);
+                return;
+            }
+            if (npc is EnemyVehicleImpact impact) impact.Launch(velocity, tumble, groundTime, car);
 
             EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
             if (dummy != null) OnDriverEjected?.Invoke(dummy);

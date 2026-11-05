@@ -9,9 +9,12 @@ public class PedestrianWalker : MonoBehaviour
     const float LateralSpeed = 1.1f;
     const float ArriveDistance = 0.06f;
 
-    public enum Mode { Lane, Fleeing, Returning, Standing }
+    // Down: knocked over or dead; a ragdoll owns the body and the walker leaves it alone (see PedestrianDamageBridge).
+    public enum Mode { Lane, Fleeing, Returning, Standing, Down }
 
     public Mode State { get; private set; }
+    public PedestrianSpawner Owner { get { return _owner; } }
+    public event System.Action Despawned;
     public int Lane { get; private set; }
     public float Distance { get; private set; }
     public float GapAhead { get; set; }
@@ -224,6 +227,7 @@ public class PedestrianWalker : MonoBehaviour
     // A small push to keep two people from standing in each other; only a walker in the flow takes it.
     public void Nudge(Vector3 push)
     {
+        if (State == Mode.Down) return;
         transform.position += push;
         if (State == Mode.Lane) Lateral += Vector3.Dot(push, new Vector3(-Forward.z, 0f, Forward.x));
     }
@@ -231,6 +235,7 @@ public class PedestrianWalker : MonoBehaviour
     // Leaves the lane and runs away from the threat across any walkable surface. Returns false if no NavMesh here.
     public bool StartPanic(Vector3 threat, float duration, float runSpeed)
     {
+        if (State == Mode.Down) return false;
         _threat = threat;
         _panicUntil = Time.time + duration;
         if (State == Mode.Fleeing) return true;
@@ -250,6 +255,7 @@ public class PedestrianWalker : MonoBehaviour
 
     public void TickOffLane(float dt, Vector3 playerPosition, float calmDistance)
     {
+        if (State == Mode.Down) return;
         if (!_agent.enabled || !_agent.isOnNavMesh)
         {
             WantsRecycle = true;
@@ -299,6 +305,30 @@ public class PedestrianWalker : MonoBehaviour
     {
         LeaveNavMesh();
         State = Mode.Lane;
+        if (Despawned != null) Despawned();
+    }
+
+    // Knocked over, killed or held by a scripted scene: off the lane and NavMesh, standing still until told otherwise.
+    public void EnterDown()
+    {
+        if (State == Mode.Down) return;
+        Mode before = State;
+        LeaveNavMesh();
+        State = Mode.Down;
+        Velocity = Vector3.zero;
+        _animState = null;
+        _owner.OnWalkerDowned(this, before);
+    }
+
+    // Back on the feet: runs from the threat, or asks to be recycled if there is no NavMesh here.
+    public void RecoverFromDown(Vector3 threat, float duration, float runSpeed)
+    {
+        if (State != Mode.Down) return;
+        State = Mode.Returning;
+        _animState = null;
+        if (StartPanic(threat, duration, runSpeed)) return;
+        State = Mode.Down;
+        WantsRecycle = true;
     }
 
     private void PickFleeTarget()

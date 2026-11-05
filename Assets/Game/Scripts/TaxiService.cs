@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// E: whistle > taxi drives to the curb > walk up and press Enter > map opens > mark a destination
+// T: whistle > taxi drives to the curb > walk up and press Enter > map opens > mark a destination
 // > Esc closes the map > choose Watch the trip or Skip > arrive on the footpath.
 public class TaxiService : MonoBehaviour
 {
@@ -116,8 +116,8 @@ public class TaxiService : MonoBehaviour
         switch (CurrentState)
         {
             case State.Idle:
-                map.SetHint("E: whistle for a taxi     M: map" + GamePlayer.ExtraKeysHint);
-                if (GameInput.InteractDown && !map.IsMapOpen && !GamePlayer.MenuOpen && !GamePlayer.InVehicle) StartCoroutine(CallTaxi());
+                map.SetHint("T: whistle for a taxi     M: map" + GamePlayer.ExtraKeysHint);
+                if (GameInput.WhistleDown && !map.IsMapOpen && !GamePlayer.MenuOpen && !GamePlayer.InVehicle) StartCoroutine(CallTaxi());
                 break;
             case State.Whistling:
                 map.SetHint("");
@@ -187,9 +187,9 @@ public class TaxiService : MonoBehaviour
         offset.y = 0f;
         bool inRange = offset.magnitude <= enterDistance;
         string leaving = "     Leaving in " + Mathf.CeilToInt(waitLeft) + "s";
-        map.SetHint((inRange ? "Enter: get in the taxi" : "Walk to the taxi     E: whistle again") + leaving);
+        map.SetHint((inRange ? "Enter: get in the taxi" : "Walk to the taxi     T: whistle again") + leaving);
         if (inRange && GameInput.EnterDown) StartCoroutine(EnterTaxi());
-        else if (!inRange && GameInput.InteractDown) StartCoroutine(CallTaxi());
+        else if (!inRange && GameInput.WhistleDown) StartCoroutine(CallTaxi());
     }
 
     // Waited long enough: it pulls out and drives off down the road.

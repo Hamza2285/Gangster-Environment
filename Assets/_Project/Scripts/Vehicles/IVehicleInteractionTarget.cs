@@ -26,6 +26,8 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>True when the player may commit to getting in right now.</summary>
         bool CanEnter { get; }
+        /// <summary>Blown up: it cannot be entered.</summary>
+        bool IsWrecked { get; }
         /// <summary>True once a reserved vehicle is still enough for the enter animation to start.</summary>
         bool IsReadyForEntry { get; }
         /// <summary>Prompt kind shown while this vehicle is focused.</summary>

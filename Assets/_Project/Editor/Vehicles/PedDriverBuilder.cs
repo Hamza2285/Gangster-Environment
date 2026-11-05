@@ -22,14 +22,16 @@ namespace OpenworldCrime.EditorTools
     {
         private const string OutFolder = "Assets/_Project/Characters/PedDrivers";
         private const string RosterPath = "Assets/_Project/Data/Vehicles/PedDriverRoster.asset";
-        private const string CarjackControllerPath = "Assets/_Project/Animations/EnemyDummy.controller";
+        private const string CarjackControllerPath = "Assets/_Project/Animations/PedCarjack.controller";
+        private const string StumbleClipsPath = "Assets/Invector-3rdPersonController/Melee Combat/3DModels/Animations/Melee_CombatSet.fbx";
+        private const string IdleClipsPath = "Assets/Invector-3rdPersonController/Basic Locomotion/3D Models/Animations/Basic_FreeMovement.fbx";
         private const string SeatedClipPath = "Assets/CustomAnimations/Vehicle/Exiting Car.fbx";
         private const float SeatedLeanDegrees = 23f;
         private const float MaxLeanDegrees = 50f;
         // The fitted seated player's crown above his hips over his standing height (0.705 m / 1.76 m).
         private const float PlayerSeatedCrownRatio = 0.40f;
-        // The player's hips in driver seat space in the seated pose (VehicleFactory.ClipHipsOffset at the player's 0.93 scale).
-        private static readonly Vector3 PlayerSeatedHips = new Vector3(0.01f, 0.98f, -0.13f) * VehicleFactory.PlayerScale;
+        // The hips of the CarPlayer driver figure in driver seat space (measured on the final cars; every seat is fitted to it).
+        internal static readonly Vector3 PlayerSeatedHips = new Vector3(0f, 0.87f, -0.11f);
         private const float HeadLevelShare = 0.55f;
         // The seated player's crown above his hips (VehicleFactory's fitted rig): every roof clears it.
         // The seated player's crown relative to his hips (VehicleFactory's fitted rig), front to back.
@@ -40,28 +42,28 @@ namespace OpenworldCrime.EditorTools
         // Humanoid bone -> Biped bone names (first match wins).
         private static readonly (string human, string[] biped)[] BoneMap =
         {
-            ("Hips", new[] { "Bip01 Pelvis" }),
-            ("Spine", new[] { "Bip01 Spine" }),
-            ("Chest", new[] { "Bip01 Spine1" }),
-            ("UpperChest", new[] { "Bip01 Spine2" }),
-            ("Neck", new[] { "Bip01 Neck" }),
-            ("Head", new[] { "Bip01 Head" }),
-            ("LeftShoulder", new[] { "Bip01 L Clavicle" }),
-            ("LeftUpperArm", new[] { "Bip01 L UpperArm" }),
-            ("LeftLowerArm", new[] { "Bip01 L Forearm" }),
-            ("LeftHand", new[] { "Bip01 L Hand" }),
-            ("RightShoulder", new[] { "Bip01 R Clavicle" }),
-            ("RightUpperArm", new[] { "Bip01 R UpperArm" }),
-            ("RightLowerArm", new[] { "Bip01 R Forearm" }),
-            ("RightHand", new[] { "Bip01 R Hand" }),
-            ("LeftUpperLeg", new[] { "Bip01 L Thigh" }),
-            ("LeftLowerLeg", new[] { "Bip01 L Calf" }),
-            ("LeftFoot", new[] { "Bip01 L Foot" }),
-            ("LeftToes", new[] { "Bip01 L Toe0" }),
-            ("RightUpperLeg", new[] { "Bip01 R Thigh" }),
-            ("RightLowerLeg", new[] { "Bip01 R Calf" }),
-            ("RightFoot", new[] { "Bip01 R Foot" }),
-            ("RightToes", new[] { "Bip01 R Toe0" }),
+            ("Hips", new[] { "Bip01 Pelvis", "mixamorig:Hips" }),
+            ("Spine", new[] { "Bip01 Spine", "mixamorig:Spine" }),
+            ("Chest", new[] { "Bip01 Spine1", "mixamorig:Spine1" }),
+            ("UpperChest", new[] { "Bip01 Spine2", "mixamorig:Spine2" }),
+            ("Neck", new[] { "Bip01 Neck", "mixamorig:Neck" }),
+            ("Head", new[] { "Bip01 Head", "mixamorig:Head" }),
+            ("LeftShoulder", new[] { "Bip01 L Clavicle", "mixamorig:LeftShoulder" }),
+            ("LeftUpperArm", new[] { "Bip01 L UpperArm", "mixamorig:LeftArm" }),
+            ("LeftLowerArm", new[] { "Bip01 L Forearm", "mixamorig:LeftForeArm" }),
+            ("LeftHand", new[] { "Bip01 L Hand", "mixamorig:LeftHand" }),
+            ("RightShoulder", new[] { "Bip01 R Clavicle", "mixamorig:RightShoulder" }),
+            ("RightUpperArm", new[] { "Bip01 R UpperArm", "mixamorig:RightArm" }),
+            ("RightLowerArm", new[] { "Bip01 R Forearm", "mixamorig:RightForeArm" }),
+            ("RightHand", new[] { "Bip01 R Hand", "mixamorig:RightHand" }),
+            ("LeftUpperLeg", new[] { "Bip01 L Thigh", "mixamorig:LeftUpLeg" }),
+            ("LeftLowerLeg", new[] { "Bip01 L Calf", "mixamorig:LeftLeg" }),
+            ("LeftFoot", new[] { "Bip01 L Foot", "mixamorig:LeftFoot" }),
+            ("LeftToes", new[] { "Bip01 L Toe0", "mixamorig:LeftToeBase" }),
+            ("RightUpperLeg", new[] { "Bip01 R Thigh", "mixamorig:RightUpLeg" }),
+            ("RightLowerLeg", new[] { "Bip01 R Calf", "mixamorig:RightLeg" }),
+            ("RightFoot", new[] { "Bip01 R Foot", "mixamorig:RightFoot" }),
+            ("RightToes", new[] { "Bip01 R Toe0", "mixamorig:RightToeBase" }),
         };
 
         [MenuItem("Tools/OpenworldCrime/Vehicles/Build Pedestrian Drivers")]
@@ -74,8 +76,8 @@ namespace OpenworldCrime.EditorTools
             AnimationClip seated = null;
             foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(SeatedClipPath))
                 if (o is AnimationClip c && !c.name.StartsWith("__preview")) seated = c;
-            var controller = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(CarjackControllerPath);
-            if (seated == null || controller == null) return "[PedDriverBuilder] Missing the seated clip or the carjack controller.";
+            if (seated == null) return "[PedDriverBuilder] Missing the seated clip.";
+            RuntimeAnimatorController controller = BuildCarjackController(seated);
             EnsureFolder(OutFolder);
 
             var sb = new StringBuilder("[PedDriverBuilder]\n");
@@ -110,6 +112,36 @@ namespace OpenworldCrime.EditorTools
             sb.Append(PatchPrefabs(roster));
             return sb.ToString();
         }
+
+        // Seated (first frame of the exit clip), pulled out (the clip), then an idle and four directional stumbles.
+        private static RuntimeAnimatorController BuildCarjackController(AnimationClip seated)
+        {
+            if (AssetDatabase.LoadAssetAtPath<Object>(CarjackControllerPath) != null) AssetDatabase.DeleteAsset(CarjackControllerPath);
+            UnityEditor.Animations.AnimatorController controller = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(CarjackControllerPath);
+            UnityEditor.Animations.AnimatorStateMachine machine = controller.layers[0].stateMachine;
+            UnityEditor.Animations.AnimatorState seatedState = machine.AddState("Vehicle_Seated");
+            seatedState.motion = seated;
+            seatedState.speed = 0f;
+            machine.defaultState = seatedState;
+            machine.AddState("Vehicle_PulledOut").motion = seated;
+            machine.AddState("Idle").motion = FindClip(IdleClipsPath, "Idle") ?? seated;
+            machine.AddState("Carjack_StumbleForward").motion = FindClip(StumbleClipsPath, "Hit Big Back") ?? FindClip(StumbleClipsPath, "Back") ?? seated;
+            machine.AddState("Carjack_StumbleBackward").motion = FindClip(StumbleClipsPath, "Hit Big Front") ?? FindClip(StumbleClipsPath, "Front") ?? seated;
+            machine.AddState("Carjack_Stumble").motion = FindClip(StumbleClipsPath, "Hit Big Right") ?? FindClip(StumbleClipsPath, "Right") ?? seated;
+            machine.AddState("Carjack_StumbleRight").motion = FindClip(StumbleClipsPath, "Hit Big Left") ?? FindClip(StumbleClipsPath, "Left") ?? seated;
+            EditorUtility.SetDirty(controller);
+            AssetDatabase.SaveAssets();
+            return controller;
+        }
+
+        private static AnimationClip FindClip(string path, string nameContains)
+        {
+            foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(path))
+                if (o is AnimationClip c && !c.name.StartsWith("__preview") && c.name.Contains(nameContains)) return c;
+            return null;
+        }
+
+        private static string BipedOrMixamo(Dictionary<string, Transform> bones, string biped, string mixamo) => bones.ContainsKey(biped) ? biped : mixamo;
 
         private static PedDriverRoster.Entry BuildEntry(GameObject prefab, int index, AnimationClip seated, out string log)
         {
@@ -164,8 +196,8 @@ namespace OpenworldCrime.EditorTools
                 // The clip sits this rig bolt upright. It reclines (positive = back) from the default until the seated crown is
                 // as high above the hips, for the pedestrian's height, as the reclined player's (otherwise tall men would not fit
                 // under low roofs), but the head never goes much further back than his.
-                bones.TryGetValue("Bip01 Pelvis", out Transform pelvisBone);
-                bones.TryGetValue("Bip01 Head", out Transform headBone);
+                bones.TryGetValue(BipedOrMixamo(bones, "Bip01 Pelvis", "mixamorig:Hips"), out Transform pelvisBone);
+                bones.TryGetValue(BipedOrMixamo(bones, "Bip01 Head", "mixamorig:Head"), out Transform headBone);
                 float lean = SeatedLeanDegrees;
                 for (float tryLean = SeatedLeanDegrees; tryLean <= MaxLeanDegrees; tryLean += 3f)
                 {
@@ -183,7 +215,7 @@ namespace OpenworldCrime.EditorTools
                 inst.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
                 Lean(inst.transform, bones, lean);
                 // Hips onto the player's seated hips (the seats are fitted to them); the root moves by the same offset at runtime.
-                Vector3 seatOffset = bones.TryGetValue("Bip01 Pelvis", out Transform pelvis) ? PlayerSeatedHips - pelvis.position : Vector3.zero;
+                Vector3 seatOffset = bones.TryGetValue(BipedOrMixamo(bones, "Bip01 Pelvis", "mixamorig:Hips"), out Transform pelvis) ? PlayerSeatedHips - pelvis.position : Vector3.zero;
                 seatOffset.x = 0f;
 
                 var baked = new Mesh { name = prefab.name + "_Seated" };
@@ -231,6 +263,8 @@ namespace OpenworldCrime.EditorTools
                     seatedHips = hipsPoint,
                     seatedCrownY = top,
                     materials = smr.sharedMaterials,
+                    pedPrefab = prefab,
+                    police = prefab.name.Contains("Police"),
                 };
             }
             finally { Object.DestroyImmediate(inst); }
@@ -247,28 +281,29 @@ namespace OpenworldCrime.EditorTools
                 a.rotation = Quaternion.FromToRotation(current, worldDirection) * a.rotation;
             }
             Vector3 right = root.right, down = -root.up;
-            Aim("Bip01 L UpperArm", "Bip01 L Forearm", -right);
-            Aim("Bip01 L Forearm", "Bip01 L Hand", -right);
-            Aim("Bip01 R UpperArm", "Bip01 R Forearm", right);
-            Aim("Bip01 R Forearm", "Bip01 R Hand", right);
-            Aim("Bip01 L Thigh", "Bip01 L Calf", down);
-            Aim("Bip01 L Calf", "Bip01 L Foot", down);
-            Aim("Bip01 R Thigh", "Bip01 R Calf", down);
-            Aim("Bip01 R Calf", "Bip01 R Foot", down);
+            string B(string biped, string mixamo) => BipedOrMixamo(bones, biped, mixamo);
+            Aim(B("Bip01 L UpperArm", "mixamorig:LeftArm"), B("Bip01 L Forearm", "mixamorig:LeftForeArm"), -right);
+            Aim(B("Bip01 L Forearm", "mixamorig:LeftForeArm"), B("Bip01 L Hand", "mixamorig:LeftHand"), -right);
+            Aim(B("Bip01 R UpperArm", "mixamorig:RightArm"), B("Bip01 R Forearm", "mixamorig:RightForeArm"), right);
+            Aim(B("Bip01 R Forearm", "mixamorig:RightForeArm"), B("Bip01 R Hand", "mixamorig:RightHand"), right);
+            Aim(B("Bip01 L Thigh", "mixamorig:LeftUpLeg"), B("Bip01 L Calf", "mixamorig:LeftLeg"), down);
+            Aim(B("Bip01 L Calf", "mixamorig:LeftLeg"), B("Bip01 L Foot", "mixamorig:LeftFoot"), down);
+            Aim(B("Bip01 R Thigh", "mixamorig:RightUpLeg"), B("Bip01 R Calf", "mixamorig:RightLeg"), down);
+            Aim(B("Bip01 R Calf", "mixamorig:RightLeg"), B("Bip01 R Foot", "mixamorig:RightFoot"), down);
         }
 
         // Torso rotated back about the hips over the spine chain; the head turns part of it back to keep looking ahead.
         private static void Lean(Transform root, Dictionary<string, Transform> bones, float degrees)
         {
-            string[] spine = { "Bip01 Spine", "Bip01 Spine1", "Bip01 Spine2" };
+            string[] spine = bones.ContainsKey("Bip01 Spine") ? new[] { "Bip01 Spine", "Bip01 Spine1", "Bip01 Spine2" } : new[] { "mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2" };
             int links = 0;
             foreach (string s in spine) if (bones.ContainsKey(s)) links++;
             if (links == 0) return;
             foreach (string s in spine)
                 if (bones.TryGetValue(s, out Transform t)) t.rotation = Quaternion.AngleAxis(-degrees / links, root.right) * t.rotation;
-            if (bones.TryGetValue("Bip01 Head", out Transform head)) head.rotation = Quaternion.AngleAxis(degrees * HeadLevelShare, root.right) * head.rotation;
+            if (bones.TryGetValue(BipedOrMixamo(bones, "Bip01 Head", "mixamorig:Head"), out Transform head)) head.rotation = Quaternion.AngleAxis(degrees * HeadLevelShare, root.right) * head.rotation;
             // The arms keep reaching forward to the wheel instead of rising with the reclined torso.
-            foreach (string arm in new[] { "Bip01 L UpperArm", "Bip01 R UpperArm" })
+            foreach (string arm in new[] { BipedOrMixamo(bones, "Bip01 L UpperArm", "mixamorig:LeftArm"), BipedOrMixamo(bones, "Bip01 R UpperArm", "mixamorig:RightArm") })
                 if (bones.TryGetValue(arm, out Transform a)) a.rotation = Quaternion.AngleAxis(degrees, root.right) * a.rotation;
         }
 
@@ -341,6 +376,8 @@ namespace OpenworldCrime.EditorTools
                         var adapter = root.GetComponent<TrafficVehicleAdapter>();
                         if (adapter != null)
                         {
+                            // The police car is no final car: it keeps the limit its builder measured.
+                            if (limit <= 0f) limit = adapter.EditorDriverCrownLimit;
                             adapter.EditorSetDriverRoster(roster, limit);
                             NormaliseVisual(adapter.EditorDriverVisual, root.transform);
                             roster.ApplySeated(adapter.EditorDriverVisual, 0, limit);
@@ -371,6 +408,7 @@ namespace OpenworldCrime.EditorTools
             Transform seat = root.Find("DriverSeat");
             Transform model = root.Find("Model");
             Transform rig = root.Find("DriverSeat/CarPlayer/JasonSeated");
+            if (rig == null) rig = root.Find("DriverSeat/CarPlayer");
             if (seat == null || model == null || rig == null) return 0f;
             Transform head = null;
             foreach (Transform t in rig.GetComponentsInChildren<Transform>(true)) if (t.name == "mixamorig:Head") head = t;

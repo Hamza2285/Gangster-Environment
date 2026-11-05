@@ -6,28 +6,39 @@ using OpenworldCrime.Pedestrians;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.AI;
+using NavMeshBuilder = UnityEngine.AI.NavMeshBuilder;
 
 namespace OpenworldCrime.EditorTools
 {
     /// <summary>
     /// Builds damageable prefab variants of the PopulationSystem street characters (the source prefabs are never modified) and
-    /// points the Population prefab's PedestrianSpawner at them. Each variant gets the enemy hit setup adapted to the generic
-    /// Biped rig: kinematic 70 kg root body + capsule on the Enemy layer, Invector vCharacter health and vHitDamageParticle
-    /// (copied from the EnemyDummy prefab), and an 11-bone ragdoll on the BodyPart layer (Rigidbody, collider, CharacterJoint,
-    /// vDamageReceiver per bone; joint limits as Unity's ragdoll wizard) driven by <see cref="PedestrianRagdoll"/> and
-    /// <see cref="PedestrianDamage"/>. Re-running updates the existing variants in place (GUIDs and designer tweaks on other
-    /// components are kept; the generated values listed here are re-applied).
+    /// points the open scene's PedestrianSpawner at them. Each variant gets the enemy hit setup adapted to its rig (Biped or Mixamo):
+    /// Invector vCharacter health and vHitDamageParticle, and an 11-bone ragdoll on the BodyPart layer (Rigidbody, collider,
+    /// CharacterJoint, vDamageReceiver per bone; joint limits as Unity's ragdoll wizard) driven by <see cref="PedestrianRagdoll"/>,
+    /// <see cref="PedestrianDamage"/> and <see cref="PedestrianDamageBridge"/>. The root capsule, kinematic body and walker are the
+    /// spawner's (it adds them at runtime), and the variants inherit whatever changes on the source prefabs. Re-running updates the
+    /// existing variants in place (GUIDs and designer tweaks on other components are kept; the generated values are re-applied).
     /// </summary>
     public static class PedestrianVariantBuilder
     {
-        private const string PopulationPrefabPath = "Assets/Prefabs/Population/Population.prefab";
-        private const string VariantFolder = "Assets/Prefabs/Population/Pedestrians";
-        private const string EnemyPrefabPath = "Assets/_Project/Prefabs/Characters/EnemyDummy.prefab";
+        private const string VariantFolder = "Assets/_Project/Prefabs/Pedestrians";
+        private const string BloodSourcePath = "Assets/Invector-3rdPersonController/Shooter/Prefabs/Other/SimpleEnemy_TargetPractice.prefab";
         private const string VariantPrefix = "Ped_";
+        private const string PanicNavMeshPath = "Assets/_Project/Data/Pedestrians/PanicNavMesh.asset";
+        private static readonly string[] PanicNavMeshRoots = { "Traffic Road Colliders", "Walk Ground Colliders", "Environment Colliders" };
 
         private const int MaxHealth = 60;
-        private const float RootMass = 70f;
-        private const float HeadDamageMultiplier = 2f;
+
+        // Biped bone name -> Mixamo bone name.
+        private static readonly Dictionary<string, string> MixamoNames = new Dictionary<string, string>
+        {
+            { "Pelvis", "mixamorig:Hips" }, { "Spine1", "mixamorig:Spine1" }, { "Neck", "mixamorig:Neck" }, { "Head", "mixamorig:Head" }, { "HeadNub", "mixamorig:HeadTop_End" },
+            { "L Thigh", "mixamorig:LeftUpLeg" }, { "L Calf", "mixamorig:LeftLeg" }, { "L Foot", "mixamorig:LeftFoot" },
+            { "R Thigh", "mixamorig:RightUpLeg" }, { "R Calf", "mixamorig:RightLeg" }, { "R Foot", "mixamorig:RightFoot" },
+            { "L UpperArm", "mixamorig:LeftArm" }, { "L Forearm", "mixamorig:LeftForeArm" }, { "L Hand", "mixamorig:LeftHand" },
+            { "R UpperArm", "mixamorig:RightArm" }, { "R Forearm", "mixamorig:RightForeArm" }, { "R Hand", "mixamorig:RightHand" },
+        };
 
         private class Bone
         {
@@ -36,41 +47,87 @@ namespace OpenworldCrime.EditorTools
         }
 
         [MenuItem("Tools/OpenworldCrime/Population/Build Pedestrian Damage Variants")]
-        public static void BuildAll()
+        public static void BuildMenu() => Debug.Log(BuildForOpenScene());
+
+        /// <summary>Builds a variant per entry of the open scene's PedestrianSpawner and assigns them to it.</summary>
+        public static string BuildForOpenScene()
         {
-            GameObject population = PrefabUtility.LoadPrefabContents(PopulationPrefabPath);
-            try
-            {
-                var spawner = population.GetComponentInChildren<PedestrianSpawner>(true);
-                if (spawner == null)
-                {
-                    Debug.LogError($"[PedestrianVariantBuilder] No PedestrianSpawner in '{PopulationPrefabPath}'.");
-                    return;
-                }
-                var enemy = AssetDatabase.LoadAssetAtPath<GameObject>(EnemyPrefabPath);
-                EnsureFolder(VariantFolder);
+            var spawner = Object.FindFirstObjectByType<PedestrianSpawner>(FindObjectsInactive.Include);
+            if (spawner == null) return "[PedestrianVariantBuilder] No PedestrianSpawner in the open scene.";
+            var blood = AssetDatabase.LoadAssetAtPath<GameObject>(BloodSourcePath);
+            EnsureFolder(VariantFolder);
 
-                var built = new List<GameObject>();
-                foreach (GameObject entry in spawner.peoplePrefabs)
-                {
-                    if (entry == null) continue;
-                    GameObject source = entry.GetComponent<PedestrianDamage>() != null
-                        ? PrefabUtility.GetCorrespondingObjectFromSource(entry)
-                        : entry;
-                    GameObject variant = BuildVariant(source, enemy);
-                    built.Add(variant != null ? variant : entry);
-                }
-
-                spawner.peoplePrefabs = built.ToArray();
-                EditorUtility.SetDirty(spawner);
-                PrefabUtility.SaveAsPrefabAsset(population, PopulationPrefabPath);
-                Debug.Log($"[PedestrianVariantBuilder] {built.Count} pedestrian variants built in '{VariantFolder}' and assigned to the PedestrianSpawner.");
-            }
-            finally
+            var built = new List<GameObject>();
+            int failed = 0;
+            foreach (GameObject entry in spawner.peoplePrefabs)
             {
-                PrefabUtility.UnloadPrefabContents(population);
+                if (entry == null) continue;
+                GameObject source = entry.GetComponent<PedestrianDamage>() != null
+                    ? PrefabUtility.GetCorrespondingObjectFromSource(entry)
+                    : entry;
+                GameObject variant = BuildVariant(source, blood);
+                if (variant == null) failed++;
+                built.Add(variant != null ? variant : entry);
             }
+
+            spawner.peoplePrefabs = built.ToArray();
+            EditorUtility.SetDirty(spawner);
+            EditorSceneManager.MarkSceneDirty(spawner.gameObject.scene);
             AssetDatabase.SaveAssets();
+            return $"[PedestrianVariantBuilder] {built.Count - failed} pedestrian variants in '{VariantFolder}' assigned to the spawner ({failed} skipped).";
+        }
+
+        /// <summary>
+        /// Bakes the NavMesh that the spawner's panic (running from danger) needs, from the scene's collision roots, and assigns it.
+        /// It is only loaded while someone is off their lane.
+        /// </summary>
+        [MenuItem("Tools/OpenworldCrime/Population/Bake Panic NavMesh")]
+        public static void BakePanicNavMeshMenu() => Debug.Log(BakePanicNavMesh());
+
+        public static string BakePanicNavMesh()
+        {
+            var spawner = Object.FindFirstObjectByType<PedestrianSpawner>(FindObjectsInactive.Include);
+            if (spawner == null) return "[PedestrianVariantBuilder] No PedestrianSpawner in the open scene.";
+
+            var sources = new List<NavMeshBuildSource>();
+            var markups = new List<NavMeshBuildMarkup>();
+            Bounds bounds = new Bounds();
+            bool init = false;
+            foreach (string rootName in PanicNavMeshRoots)
+            {
+                GameObject root = GameObject.Find(rootName);
+                if (root == null) continue;
+                var part = new List<NavMeshBuildSource>();
+                NavMeshBuilder.CollectSources(root.transform, ~0, NavMeshCollectGeometry.PhysicsColliders, 0, markups, part);
+                sources.AddRange(part);
+                foreach (Collider c in root.GetComponentsInChildren<Collider>())
+                {
+                    if (!init) { bounds = c.bounds; init = true; }
+                    else bounds.Encapsulate(c.bounds);
+                }
+            }
+            if (sources.Count == 0) return "[PedestrianVariantBuilder] No colliders found under the panic NavMesh roots.";
+
+            NavMeshBuildSettings settings = NavMesh.GetSettingsByID(0);
+            settings.agentRadius = 0.35f;
+            settings.agentHeight = 1.8f;
+            settings.agentClimb = 0.4f;
+            settings.agentSlope = 40f;
+            settings.overrideVoxelSize = true;
+            settings.voxelSize = 0.2f;
+            settings.overrideTileSize = true;
+            settings.tileSize = 256;
+            NavMeshData data = NavMeshBuilder.BuildNavMeshData(settings, sources, bounds, Vector3.zero, Quaternion.identity);
+            if (data == null) return "[PedestrianVariantBuilder] Panic NavMesh bake failed.";
+
+            EnsureFolder(Path.GetDirectoryName(PanicNavMeshPath).Replace('\\', '/'));
+            if (AssetDatabase.LoadAssetAtPath<NavMeshData>(PanicNavMeshPath) != null) AssetDatabase.DeleteAsset(PanicNavMeshPath);
+            AssetDatabase.CreateAsset(data, PanicNavMeshPath);
+            spawner.panicNavMesh = data;
+            EditorUtility.SetDirty(spawner);
+            EditorSceneManager.MarkSceneDirty(spawner.gameObject.scene);
+            AssetDatabase.SaveAssets();
+            return $"[PedestrianVariantBuilder] Panic NavMesh baked from {sources.Count} sources over {bounds.size}, assigned to the spawner.";
         }
 
         private static GameObject BuildVariant(GameObject source, GameObject enemy)
@@ -109,21 +166,7 @@ namespace OpenworldCrime.EditorTools
                 return false;
             }
 
-            int enemyLayer = LayerMask.NameToLayer("Enemy");
             int bodyPartLayer = LayerMask.NameToLayer("BodyPart");
-            root.layer = enemyLayer;
-
-            // Root body: kinematic, moved by the walker; blocks the player and is what cars hit (VehicleCharacterImpact).
-            var capsule = GetOrAdd<CapsuleCollider>(root);
-            capsule.center = new Vector3(0f, 0.9f, 0f);
-            capsule.radius = 0.3f;
-            capsule.height = 1.8f;
-            capsule.isTrigger = false;
-            var rootBody = GetOrAdd<Rigidbody>(root);
-            rootBody.mass = RootMass;
-            rootBody.isKinematic = true;
-            rootBody.useGravity = false;
-            rootBody.interpolation = RigidbodyInterpolation.None;
 
             Vector3 right = t.right, up = t.up, forward = t.forward;
             float scale = 1f / Mathf.Max(0.001f, t.lossyScale.y);
@@ -174,14 +217,12 @@ namespace OpenworldCrime.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
 
             Rigidbody[] bodies = { hips.body, chest.body, headB.body, lThighB.body, lCalfB.body, rThighB.body, rCalfB.body, lArmB.body, lForeB.body, rArmB.body, rForeB.body };
-            foreach (Rigidbody b in bodies)
-            {
-                var receiver = GetOrAdd<vDamageReceiver>(b.gameObject);
-                receiver.damageMultiplier = b == headB.body ? HeadDamageMultiplier : 1f;
-            }
+            // Bones only take bullets on a body already on the ground; the head counts by height on a walking person (PedestrianDamage).
+            foreach (Rigidbody b in bodies) GetOrAdd<vDamageReceiver>(b.gameObject);
 
             var particles = GetOrAdd<vHitDamageParticle>(root);
             var enemyParticles = enemy != null ? enemy.GetComponent<vHitDamageParticle>() : null;
+            if (enemyParticles == null && particles.defaultDamageEffects.Count == 0) Debug.LogWarning($"[PedestrianVariantBuilder] No hit particle source for '{root.name}'.", root);
             if (enemyParticles != null) EditorUtility.CopySerialized(enemyParticles, particles);
 
             var ragdoll = GetOrAdd<PedestrianRagdoll>(root);
@@ -198,16 +239,21 @@ namespace OpenworldCrime.EditorTools
             var dso = new SerializedObject(damage);
             dso.FindProperty("character").objectReferenceValue = character;
             dso.FindProperty("ragdoll").objectReferenceValue = ragdoll;
-            dso.FindProperty("aliveCollider").objectReferenceValue = capsule;
             dso.ApplyModifiedPropertiesWithoutUndo();
+
+            var bridge = GetOrAdd<PedestrianDamageBridge>(root);
+            var bso = new SerializedObject(bridge);
+            bso.FindProperty("damage").objectReferenceValue = damage;
+            bso.ApplyModifiedPropertiesWithoutUndo();
             return true;
         }
 
         private static Transform Find(Transform root, string boneName)
         {
+            MixamoNames.TryGetValue(boneName, out string mixamo);
             foreach (Transform c in root.GetComponentsInChildren<Transform>(true))
             {
-                if (c.name == boneName || c.name.EndsWith(" " + boneName)) return c;
+                if (c.name == boneName || c.name == mixamo || c.name.EndsWith(" " + boneName)) return c;
             }
             return null;
         }

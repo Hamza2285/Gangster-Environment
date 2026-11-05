@@ -55,8 +55,18 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private bool panicWhenWounded = true;
         [Tooltip("Seconds a car with a killed driver gets to brake to a stop before it is handed over anyway.")]
         [SerializeField, Min(0.5f)] private float killedDriverStopTimeout = 6f;
+        [Tooltip("Officers instead of civilians from the roster (police cars).")]
+        [SerializeField] private bool policeDriver;
+
+        [Header("Damage")]
+        [Tooltip("Health of this car. Blown up it stays as a wreck (iTS brakes it, no driver can be stolen) until off camera, then returns to the iTS pool, so traffic keeps its count.")]
+        [SerializeField] private VehicleHealth health;
 
         [Header("Takeover")]
+        [Tooltip("Off for cars the player cannot steal (no drivable counterpart). A killed driver's car is then recycled once it is out of sight.")]
+        [SerializeField] private bool stealable = true;
+        [SerializeField, Min(0f)] private float killedDriverRecycleTime = 15f;
+        [SerializeField, Min(0f)] private float killedDriverKeepDistance = 15f;
         [Tooltip("Drivable RCC counterpart of this car (same model), placed here when the player gets in.")]
         [SerializeField] private RCCVehicleAdapter drivablePrefab;
         [Tooltip("Where the drivable prefab's root goes. Place it so the drivable model overlaps this car's model exactly.")]
@@ -95,9 +105,10 @@ namespace OpenworldCrime.Vehicles
         /// <summary>True once the driver was shot dead (until the car respawns in traffic).</summary>
         public bool IsDriverKilled { get; private set; }
         public float CurrentSpeed => body != null ? body.linearVelocity.magnitude : 0f;
+        public bool IsWrecked => health != null && health.IsDestroyed;
 
         public bool CanEnter => isValid && isActiveAndEnabled && State == TrafficVehicleState.TrafficControlled
-                                && trafficAI.IsEnabled && CurrentSpeed <= maxTakeoverSpeed;
+                                && !IsWrecked && trafficAI.IsEnabled && CurrentSpeed <= maxTakeoverSpeed;
         public bool IsReadyForEntry => CurrentSpeed <= stoppedSpeed;
         public VehicleEntryPrompt EntryPrompt => HasDriver ? VehicleEntryPrompt.Steal : VehicleEntryPrompt.Enter;
 
@@ -111,9 +122,15 @@ namespace OpenworldCrime.Vehicles
         private Vector3 killDirection;
         private Coroutine handOverRoutine;
         private bool shotDetail;
+        private Coroutine holdRoutine;
 
         private void Awake()
         {
+            if (driverVisual != null) driverRenderers = driverVisual.GetComponentsInChildren<Renderer>(true);
+            if (simpleCar != null) baseBrakeTorque = simpleCar.brakeTorque;
+            if (trafficAI != null) baseIgnoreTrafficLight = trafficAI.ignoreTrafficLight;
+            if (!stealable) return;
+
             // Validated up front, so a takeover can never leave a half-set-up vehicle behind.
             isValid = trafficAI != null && body != null && drivablePrefab != null && drivablePrefab.HasEntrySetup
                       && drivableAnchor != null && enterPoint != null;
@@ -127,10 +144,7 @@ namespace OpenworldCrime.Vehicles
             {
                 if (!c.isTrigger) solidColliders.Add(c);
             }
-            if (driverVisual != null) driverRenderers = driverVisual.GetComponentsInChildren<Renderer>(true);
-            if (simpleCar != null) baseBrakeTorque = simpleCar.brakeTorque;
-            else Debug.LogWarning($"[{nameof(TrafficVehicleAdapter)}] No TSSimpleCar on '{name}'; the car stops with iTS' full brake for the player.", this);
-            baseIgnoreTrafficLight = trafficAI.ignoreTrafficLight;
+            if (simpleCar == null) Debug.LogWarning($"[{nameof(TrafficVehicleAdapter)}] No TSSimpleCar on '{name}'; the car stops with iTS' full brake for the player.", this);
         }
 
         // iTS re-enables pooled cars through TSTrafficAI.Enable (GameObject.SetActive), so every reuse starts clean.
@@ -139,7 +153,11 @@ namespace OpenworldCrime.Vehicles
             State = TrafficVehicleState.TrafficControlled;
             IsDriverKilled = false;
             handOverRoutine = null;
-            if (trafficAI != null) trafficAI.ignoreTrafficLight = baseIgnoreTrafficLight;
+            if (trafficAI != null)
+            {
+                trafficAI.enabled = true;
+                trafficAI.ignoreTrafficLight = baseIgnoreTrafficLight;
+            }
             RestoreBrakes();
             PickOutfit();
             if (driverHealth != null)
@@ -147,6 +165,11 @@ namespace OpenworldCrime.Vehicles
                 driverHealth.ResetHealth();
                 driverHealth.OnWounded += HandleDriverWounded;
                 driverHealth.OnKilled += HandleDriverKilled;
+            }
+            if (health != null)
+            {
+                health.OnDestroyedWreck += HandleWrecked;
+                health.OnWreckCleanup += ReturnToTraffic;
             }
             // Detail starts off; the takeover manager's next range check switches it on near the player.
             shotDetail = true;
@@ -159,13 +182,19 @@ namespace OpenworldCrime.Vehicles
         {
             activeCars.Remove(this);
             OnCarDisabled?.Invoke(this);
+            holdRoutine = null;
             if (driverHealth != null)
             {
                 driverHealth.OnWounded -= HandleDriverWounded;
                 driverHealth.OnKilled -= HandleDriverKilled;
             }
+            if (health != null)
+            {
+                health.OnDestroyedWreck -= HandleWrecked;
+                health.OnWreckCleanup -= ReturnToTraffic;
+            }
             // Deactivated while reserved (e.g. scene teardown): make sure iTS owns the car again.
-            if ((State == TrafficVehicleState.BeingCarjacked || State == TrafficVehicleState.DriverKilled) && trafficAI != null) trafficAI.reservedForEventTrigger = false;
+            if ((State == TrafficVehicleState.BeingCarjacked || State == TrafficVehicleState.DriverKilled || State == TrafficVehicleState.Wrecked) && trafficAI != null) trafficAI.reservedForEventTrigger = false;
         }
 
 #if UNITY_EDITOR
@@ -175,6 +204,7 @@ namespace OpenworldCrime.Vehicles
             driverCrownLimit = crownLimit;
         }
         public GameObject EditorDriverVisual => driverVisual;
+        public float EditorDriverCrownLimit => driverCrownLimit;
 #endif
 
         public Transform GetInteractionPoint() => interactionPoint != null ? interactionPoint : transform;
@@ -187,8 +217,7 @@ namespace OpenworldCrime.Vehicles
             if (!isValid || State != TrafficVehicleState.TrafficControlled) return;
             State = TrafficVehicleState.BeingCarjacked;
             trafficAI.reservedForEventTrigger = true;
-            if (simpleCar != null) simpleCar.brakeTorque = baseBrakeTorque * reservedBrakeScale;
-            trafficAI.Pause();
+            HoldCar(baseBrakeTorque * reservedBrakeScale);
         }
 
         public void CancelEntryReservation()
@@ -196,6 +225,7 @@ namespace OpenworldCrime.Vehicles
             if (State != TrafficVehicleState.BeingCarjacked) return;
             State = TrafficVehicleState.TrafficControlled;
             trafficAI.reservedForEventTrigger = false;
+            ReleaseCar();
             RestoreBrakes();
             if (isActiveAndEnabled) trafficAI.UnPause();
         }
@@ -233,6 +263,12 @@ namespace OpenworldCrime.Vehicles
                 drivableBody.angularVelocity = body.angularVelocity;
             }
 
+            if (health != null)
+            {
+                VehicleHealth drivableHealth = drivable.GetComponent<VehicleHealth>();
+                if (drivableHealth != null) drivableHealth.CopyDamageFrom(health);
+            }
+
             TrafficVehicleDriver driver = drivable.GetNpcDriver();
             if (driver != null)
             {
@@ -252,6 +288,7 @@ namespace OpenworldCrime.Vehicles
         {
             if (on == shotDetail) return;
             shotDetail = on;
+            if (IsWrecked) on = false;
             if (glassCollider != null) glassCollider.enabled = on;
             if (driverHealth != null) driverHealth.gameObject.SetActive(on && HasDriver);
         }
@@ -267,13 +304,67 @@ namespace OpenworldCrime.Vehicles
             IsDriverKilled = true;
             killDirection = health.LastHitDirection;
             // Reserved for the player (he is walking to the door): the body falls out when the car is taken over.
-            if (!isValid || State != TrafficVehicleState.TrafficControlled || !isActiveAndEnabled) return;
+            if (trafficAI == null || State != TrafficVehicleState.TrafficControlled || !isActiveAndEnabled) return;
 
             State = TrafficVehicleState.DriverKilled;
             trafficAI.reservedForEventTrigger = true;
-            if (simpleCar != null) simpleCar.brakeTorque = baseBrakeTorque * reservedBrakeScale;
+            HoldCar(baseBrakeTorque * reservedBrakeScale);
+            handOverRoutine = StartCoroutine(isValid ? HandOverWhenStopped() : RecycleWhenOutOfSight());
+        }
+
+        // No drivable twin (police car): it coasts to a stop with the slumped driver and goes back to the pool out of sight.
+        private IEnumerator RecycleWhenOutOfSight()
+        {
+            var wait = new WaitForSeconds(1f);
+            float age = 0f;
+            while (age < killedDriverRecycleTime || !VehicleHealth.IsOutOfSight(transform.position, killedDriverKeepDistance))
+            {
+                yield return wait;
+                age += 1f;
+            }
+            handOverRoutine = null;
+            ReturnToTraffic();
+        }
+
+        private void HandleWrecked()
+        {
+            if (handOverRoutine != null) StopCoroutine(handOverRoutine);
+            handOverRoutine = null;
+            State = TrafficVehicleState.Wrecked;
+            if (driverHealth != null) driverHealth.gameObject.SetActive(false);
+            if (glassCollider != null) glassCollider.enabled = false;
+            if (trafficAI == null) return;
+            trafficAI.reservedForEventTrigger = true;
+            HoldCar(baseBrakeTorque);
+        }
+
+        // iTS' Pause alone does not hold: the AI goes back to driving after a few seconds. With the AI component off the car physics
+        // keep the last input, so it brakes at the given torque, and with full brakes once it has stopped (it never rolls away).
+        private void HoldCar(float brakeTorque)
+        {
             trafficAI.Pause();
-            handOverRoutine = StartCoroutine(HandOverWhenStopped());
+            trafficAI.enabled = false;
+            if (simpleCar == null) return;
+            simpleCar.brakeTorque = brakeTorque;
+            simpleCar.OnAIUpdate(0f, 1f, 0f, false);
+            if (holdRoutine != null) StopCoroutine(holdRoutine);
+            if (isActiveAndEnabled) holdRoutine = StartCoroutine(FullBrakeOnceStopped());
+        }
+
+        private IEnumerator FullBrakeOnceStopped()
+        {
+            var wait = new WaitForSeconds(0.25f);
+            while (CurrentSpeed > stoppedSpeed) yield return wait;
+            holdRoutine = null;
+            simpleCar.brakeTorque = baseBrakeTorque;
+            simpleCar.OnAIUpdate(0f, 1f, 0f, false);
+        }
+
+        private void ReleaseCar()
+        {
+            if (holdRoutine != null) StopCoroutine(holdRoutine);
+            holdRoutine = null;
+            if (trafficAI != null) trafficAI.enabled = true;
         }
 
         // Once the car has stopped it leaves traffic like a taken-over car: an empty drivable car the player can enter,
@@ -299,6 +390,7 @@ namespace OpenworldCrime.Vehicles
         private void ReturnToTraffic()
         {
             trafficAI.reservedForEventTrigger = false;
+            ReleaseCar();
             RestoreBrakes();
             trafficAI.Disable(true, true);
         }
@@ -313,7 +405,7 @@ namespace OpenworldCrime.Vehicles
         {
             if (driverRoster != null && driverRoster.Count > 0)
             {
-                currentDriver = driverRoster.RandomIndex();
+                currentDriver = driverRoster.RandomIndex(policeDriver);
                 driverRoster.ApplySeated(driverVisual, currentDriver, driverCrownLimit);
                 return;
             }
