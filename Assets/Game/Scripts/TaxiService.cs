@@ -117,7 +117,7 @@ public class TaxiService : MonoBehaviour
         {
             case State.Idle:
                 map.SetHint("E: whistle for a taxi     M: map" + GamePlayer.ExtraKeysHint);
-                if (GameInput.InteractDown && !map.IsMapOpen && !GamePlayer.MenuOpen) StartCoroutine(CallTaxi());
+                if (GameInput.InteractDown && !map.IsMapOpen && !GamePlayer.MenuOpen && !GamePlayer.InVehicle) StartCoroutine(CallTaxi());
                 break;
             case State.Whistling:
                 map.SetHint("");

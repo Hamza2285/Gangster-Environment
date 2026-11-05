@@ -21,6 +21,9 @@ public class PedestrianSpawner : MonoBehaviour
     const float GroupClearance = 2.2f;
     const float ArriveTimeout = 9f;
 
+    // Height of a person's body centre above their feet (aim lines, bullet paths).
+    public const float BodyCenterHeight = 0.9f;
+
     [Header("References")]
     public GameObject[] peoplePrefabs;
     public TSTrafficSpawner carSpawner;
@@ -100,6 +103,7 @@ public class PedestrianSpawner : MonoBehaviour
     private readonly Vector3[] _spots = new Vector3[3];
     private readonly Collider[] _overlap = new Collider[8];
     private float _groupTimer;
+    private int _maxAmount = int.MaxValue;
 
     public int CarSensorLayer
     {
@@ -157,7 +161,7 @@ public class PedestrianSpawner : MonoBehaviour
         _network = GetComponent<FootpathLaneNetwork>();
         if (matchCarDensity && carSpawner != null)
         {
-            amount = Mathf.CeilToInt(carSpawner.amount * peoplePerCar);
+            amount = Mathf.Min(_maxAmount, Mathf.CeilToInt(carSpawner.amount * peoplePerCar));
             spawnRadius = carSpawner.maxDistance;
         }
         _targetActive = matchCarDensity ? 0 : amount;
@@ -232,6 +236,87 @@ public class PedestrianSpawner : MonoBehaviour
             if (!walker.StartPanic(point, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax))) continue;
             if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
         }
+    }
+
+    // Density from the graphics quality profiles. Lowering it takes effect as people leave out of sight.
+    public void SetDensity(float newPeoplePerCar, int newMaxAmount)
+    {
+        peoplePerCar = Mathf.Max(0f, newPeoplePerCar);
+        _maxAmount = Mathf.Max(0, newMaxAmount);
+        amount = matchCarDensity && carSpawner != null
+            ? Mathf.Min(_maxAmount, Mathf.CeilToInt(carSpawner.amount * peoplePerCar))
+            : Mathf.Min(amount, _maxAmount);
+        if (!matchCarDensity) _targetActive = amount;
+    }
+
+    // Only people this close to the camera cast shadows (graphics quality profiles; 0 = none).
+    public void SetShadowDistance(float distance)
+    {
+        shadowDistance = Mathf.Max(0f, distance);
+    }
+
+    // Panics everyone within radius of the line from -> to (a bullet path), or only the one closest to from.
+    public int TriggerPanicAlongLine(Vector3 from, Vector3 to, float radius, Vector3 threat, bool closestOnly)
+    {
+        Vector3 line = to - from;
+        float length = line.magnitude;
+        if (length < 0.01f) return 0;
+        Vector3 dir = line / length;
+        float radiusSqr = radius * radius;
+        PedestrianWalker closest = null;
+        float closestAlong = float.MaxValue;
+        int count = 0;
+        for (int i = _active.Count - 1; i >= 0; i--)
+        {
+            PedestrianWalker walker = _active[i];
+            Vector3 body = walker.transform.position + Vector3.up * BodyCenterHeight;
+            float along = Vector3.Dot(body - from, dir);
+            if (along < 0f || along > length) continue;
+            if ((body - (from + dir * along)).sqrMagnitude > radiusSqr) continue;
+            if (closestOnly)
+            {
+                if (along < closestAlong) { closestAlong = along; closest = walker; }
+            }
+            else if (PanicWalker(walker, threat)) count++;
+        }
+        if (closest != null && PanicWalker(closest, threat)) count++;
+        return count;
+    }
+
+    // First person (closest to from) whose body centre is within radius of the line from -> to, or null.
+    public PedestrianWalker FindFirstAlongLine(Vector3 from, Vector3 to, float radius)
+    {
+        Vector3 line = to - from;
+        float length = line.magnitude;
+        if (length < 0.01f) return null;
+        Vector3 dir = line / length;
+        float radiusSqr = radius * radius;
+        PedestrianWalker closest = null;
+        float closestAlong = float.MaxValue;
+        for (int i = 0; i < _active.Count; i++)
+        {
+            PedestrianWalker walker = _active[i];
+            Vector3 body = walker.transform.position + Vector3.up * BodyCenterHeight;
+            float along = Vector3.Dot(body - from, dir);
+            if (along < 0f || along > length || along >= closestAlong) continue;
+            if ((body - (from + dir * along)).sqrMagnitude > radiusSqr) continue;
+            closestAlong = along;
+            closest = walker;
+        }
+        return closest;
+    }
+
+    public bool TriggerPanicFor(PedestrianWalker walker, Vector3 threat)
+    {
+        return walker != null && PanicWalker(walker, threat);
+    }
+
+    private bool PanicWalker(PedestrianWalker walker, Vector3 threat)
+    {
+        PedestrianWalker.Mode before = walker.State;
+        if (!walker.StartPanic(threat, Random.Range(panicDurationMin, panicDurationMax), Random.Range(runSpeedMin, runSpeedMax))) return false;
+        if (before == PedestrianWalker.Mode.Lane) _laneWalkers[walker.Lane].Remove(walker);
+        return true;
     }
 
     public bool EnsurePanicNavMesh()

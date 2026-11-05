@@ -138,7 +138,6 @@ namespace OpenworldCrime.Vehicles
         public static event Action<EnemyDummy> OnDriverEjected;
 
 #if UNITY_EDITOR
-        public void EditorSetDriverRoster(PedDriverRoster driverRoster) => roster = driverRoster;
         public void EditorSetDriverCrownLimit(float crownLimit) => driverCrownLimit = crownLimit;
         public GameObject EditorSeatedVisual => npcSeatedVisual;
 #endif
@@ -202,20 +201,11 @@ namespace OpenworldCrime.Vehicles
         private bool shoveRequested;
         private Vector3 shoveDirection;
 
-        // Real street pedestrian as the driver (PedDriverRoster). While pulled out it is a held walker of the PedestrianSpawner
-        // playing the carjack clips through its humanoid avatar; afterwards it is a normal walker again.
-        private PedDriverRoster roster;
-        private int pedIndex = -1;
-        private PedestrianWalker heldPed;
-        private Avatar heldPedAvatar;
-        private RuntimeAnimatorController heldPedController;
-        private Collider heldPedCapsule;
-        private Vector3 heldPedScale;
+        // A roster driver only changes how the seated driver looks; pulling him out uses the NPC prefab, because the
+        // street pedestrian system has no way to lend a walker to a scripted scene.
 
-        private bool IsHolding => heldNpc != null || heldPed != null;
-        private Transform HeldTransform => heldNpc != null ? heldNpc.transform : heldPed != null ? heldPed.transform : null;
-        private bool CanSpawnPedestrian => roster != null && roster.Get(pedIndex) != null && roster.Get(pedIndex).humanoidAvatar != null
-                                           && roster.CarjackController != null && PedestrianSpawner.Active != null;
+        private bool IsHolding => heldNpc != null;
+        private Transform HeldTransform => heldNpc != null ? heldNpc.transform : null;
 
         private void Awake()
         {
@@ -259,19 +249,16 @@ namespace OpenworldCrime.Vehicles
         /// </summary>
         public void SetSeatedPedestrian(bool seated, PedDriverRoster driverRoster, int index)
         {
-            roster = driverRoster;
-            pedIndex = index;
             HasLivingDriver = seated;
             SetSeatedHitZones(seated);
             if (npcSeatedVisual == null) return;
-            if (seated && roster != null) roster.ApplySeated(npcSeatedVisual, index, driverCrownLimit);
+            if (seated && driverRoster != null) driverRoster.ApplySeated(npcSeatedVisual, index, driverCrownLimit);
             npcSeatedVisual.SetActive(seated);
         }
 
         /// <summary>Seats (shows) or removes the driver without any reaction. The outfit (null = default) is the traffic driver's.</summary>
         public void SetSeated(bool seated, Material driverOutfit = null)
         {
-            pedIndex = -1;
             HasLivingDriver = seated;
             if (driverOutfit != null) outfit = driverOutfit;
             SetSeatedHitZones(seated);
@@ -290,125 +277,9 @@ namespace OpenworldCrime.Vehicles
             HasLivingDriver = false;
             SetSeatedHitZones(false);
             if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
-            if ((npcPrefab == null && !CanSpawnPedestrian) || !isActiveAndEnabled) return true;
-            deadRoutine = StartCoroutine(CanSpawnPedestrian ? DeadPedestrianFallOutRoutine(push) : DeadFallOutRoutine(push));
+            if (npcPrefab == null || !isActiveAndEnabled) return true;
+            deadRoutine = StartCoroutine(DeadFallOutRoutine(push));
             return true;
-        }
-
-        // ---------------------------------------------------------------------------------------------------------------
-        // Real pedestrian drivers
-
-        // Takes the driver's pedestrian from the spawner in the exact seated pose (humanoid avatar + carjack clips).
-        private PedestrianWalker SpawnPedestrianInSeat(Transform seat, out Animator animator)
-        {
-            animator = null;
-            PedDriverRoster.Entry entry = roster.Get(pedIndex);
-            // Same size and place as the seated mesh it replaces (scaled about the hips in a low-roofed car).
-            float scale = roster.SeatedScale(pedIndex, driverCrownLimit);
-            Vector3 rootInSeat = entry.seatedHips + (entry.seatOffset - entry.seatedHips) * scale;
-            PedestrianWalker walker = PedestrianSpawner.Active.AdoptDriver(entry.spawnerIndex, seat.TransformPoint(rootInSeat), seat.rotation);
-            if (walker == null) return null;
-            walker.transform.SetParent(seat, true);
-            heldPedScale = walker.transform.localScale;
-            if (scale < 1f) walker.transform.localScale = heldPedScale * scale;
-            animator = walker.GetComponentInChildren<Animator>();
-            heldPedCapsule = walker.GetComponent<CapsuleCollider>();
-            if (heldPedCapsule != null) heldPedCapsule.enabled = false;
-            if (animator != null)
-            {
-                heldPedAvatar = animator.avatar;
-                heldPedController = animator.runtimeAnimatorController;
-                animator.avatar = entry.humanoidAvatar;
-                animator.runtimeAnimatorController = roster.CarjackController;
-                animator.Rebind();
-                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-                animator.applyRootMotion = false;
-                animator.speed = 1f;
-                animator.Play(seatedStateHash, 0, 0f);
-                animator.Update(0f);
-                if (animator.GetComponent<FootGroundClamp>() == null) animator.gameObject.AddComponent<FootGroundClamp>();
-            }
-            return walker;
-        }
-
-        // Back to the pedestrian's own rig and walker animations (before its ragdoll / get-up / run take over).
-        private void RestorePedestrianRig(PedestrianWalker walker, Animator animator)
-        {
-            if (walker == null) return;
-            if (animator != null)
-            {
-                FootGroundClamp feet = animator.GetComponent<FootGroundClamp>();
-                if (feet != null) feet.Clear();
-                animator.speed = 1f;
-                animator.applyRootMotion = false;
-                if (heldPedAvatar != null) animator.avatar = heldPedAvatar;
-                if (heldPedController != null) animator.runtimeAnimatorController = heldPedController;
-                animator.Rebind();
-                animator.cullingMode = AnimatorCullingMode.CullCompletely;
-            }
-            if (walker.transform.parent != null && PedestrianSpawner.Active != null) walker.transform.SetParent(PedestrianSpawner.Active.ActiveRoot, true);
-            if (heldPedScale != Vector3.zero) walker.transform.localScale = heldPedScale;
-            heldPedScale = Vector3.zero;
-            if (heldPedCapsule != null) heldPedCapsule.enabled = true;
-            heldPedAvatar = null;
-            heldPedController = null;
-            heldPedCapsule = null;
-        }
-
-        // Same beats as DeadFallOutRoutine with the real pedestrian: slides out over the sill, then is killed (its own ragdoll).
-        private IEnumerator DeadPedestrianFallOutRoutine(Vector3 push)
-        {
-            VehicleDoor door = vehicle.GetDriverDoor();
-            if (door != null && door.IsAvailable) door.Open(deadDoorOpenDuration);
-            Transform seat = vehicle.GetDriverSeat();
-            PedestrianWalker walker = SpawnPedestrianInSeat(seat, out Animator animator);
-            if (walker == null)
-            {
-                deadRoutine = null;
-                yield break;
-            }
-            yield return null;
-
-            Vector3 target = GetGroundedPullOutPosition(seat);
-            walker.transform.SetParent(PedestrianSpawner.Active != null ? PedestrianSpawner.Active.ActiveRoot : null, true);
-            FootGroundClamp feet = animator != null ? animator.GetComponent<FootGroundClamp>() : null;
-            if (feet != null) feet.SetGround(target.y);
-            if (animator != null)
-            {
-                animator.Play(pulledOutStateHash, 0, 0f);
-                animator.Update(0f);
-                float stateLength = animator.GetCurrentAnimatorStateInfo(0).length;
-                float clipLength = stateLength > 0.1f ? stateLength : 5.8f;
-                animator.Play(seatedStateHash, 0, 0f);
-                animator.Update(0f);
-                animator.applyRootMotion = true;
-                animator.speed = Mathf.Max(0.1f, (deadCollapseTime - pullStartTime) * clipLength / deadSlideDuration);
-                animator.CrossFadeInFixedTime(pulledOutStateHash, pullCrossFade, 0, pullStartTime * clipLength / animator.speed);
-                float timer = 0f;
-                while (walker != null && timer < deadSlideDuration + 1f)
-                {
-                    AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
-                    bool inPull = info.shortNameHash == pulledOutStateHash;
-                    if (inPull && info.normalizedTime >= deadCollapseTime) break;
-                    if (inPull && !animator.IsInTransition(0))
-                        animator.MatchTarget(target, Quaternion.identity, AvatarTarget.Root, new MatchTargetWeightMask(Vector3.one, 0f),
-                            Mathf.Max(info.normalizedTime, pullStartTime), pullEndTime);
-                    timer += Time.deltaTime;
-                    yield return null;
-                }
-            }
-            if (walker == null)
-            {
-                deadRoutine = null;
-                yield break;
-            }
-
-            RestorePedestrianRig(walker, animator);
-            // Killed first (its ragdoll takes the body), then handed back: a dead walker stays a corpse until recycled.
-            var damage = walker.GetComponent<OpenworldCrime.Pedestrians.PedestrianDamage>();
-            if (damage != null) damage.Kill(vehicle.transform, seat.position);
-            walker.Release(vehicle.transform.position);
-            deadRoutine = null;
         }
 
         private void SetSeatedHitZones(bool active)
@@ -551,24 +422,6 @@ namespace OpenworldCrime.Vehicles
             if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
 
             Transform seat = vehicle.GetDriverSeat();
-            if (CanSpawnPedestrian)
-            {
-                heldPed = SpawnPedestrianInSeat(seat, out heldAnimator);
-                if (heldPed != null)
-                {
-                    heldFeet = heldAnimator != null ? heldAnimator.GetComponent<FootGroundClamp>() : null;
-                    heldCullingMode = AnimatorCullingMode.CullCompletely;
-                    heldRootMotion = false;
-                    flinchLayer = heldAnimator != null ? heldAnimator.GetLayerIndex(flinchLayerName) : -1;
-                    GrabTarget = heldAnimator != null && heldAnimator.isHuman
-                        ? heldAnimator.GetBoneTransform(HumanBodyBones.UpperChest) ?? heldAnimator.GetBoneTransform(HumanBodyBones.Chest)
-                        : heldPed.transform;
-                    IsPulledOut = false;
-                    PullProgress = 0f;
-                    shoveRequested = false;
-                    return true;
-                }
-            }
             if (npcPrefab == null) return false;
 
             heldNpc = Instantiate(npcPrefab, seat.position, seat.rotation, seat);
@@ -633,7 +486,7 @@ namespace OpenworldCrime.Vehicles
 
             Transform seat = vehicle.GetDriverSeat();
             Vector3 targetPosition = GetGroundedPullOutPosition(seat);
-            HeldTransform.SetParent(heldPed != null && PedestrianSpawner.Active != null ? PedestrianSpawner.Active.ActiveRoot : null, true);
+            HeldTransform.SetParent(null, true);
             if (heldFeet != null) heldFeet.SetGround(targetPosition.y);
 
             // Length of the pull-out clip (for timing). Read now: a freshly spawned Animator does not report it yet.
@@ -760,11 +613,6 @@ namespace OpenworldCrime.Vehicles
 
         private void Fall(Vector3 direction)
         {
-            if (heldPed != null)
-            {
-                FallPedestrian(direction);
-                return;
-            }
             EnemyVehicleImpact npc = heldNpc;
             heldNpc = null;
             GrabTarget = null;
@@ -791,38 +639,6 @@ namespace OpenworldCrime.Vehicles
 
             EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
             if (dummy != null) OnDriverEjected?.Invoke(dummy);
-        }
-
-        // The pulled-out pedestrian goes back to its own rig, is knocked down along the shove by its own ragdoll
-        // (PedestrianDamage) and, once up again, runs from the car like any frightened pedestrian.
-        private void FallPedestrian(Vector3 direction)
-        {
-            PedestrianWalker walker = heldPed;
-            Animator animator = heldAnimator;
-            heldPed = null;
-            heldAnimator = null;
-            heldFeet = null;
-            GrabTarget = null;
-            IsPulledOut = false;
-            PullProgress = 0f;
-            if (walker == null) return;
-            SetFlinchOn(animator, false);
-            RestorePedestrianRig(walker, animator);
-
-            direction.y = 0f;
-            direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
-            Vector3 threat = vehicle != null ? vehicle.transform.position : transform.position;
-            // Knocked down first, then handed back: PedestrianDamage gets it up and the walker runs once it is on its feet.
-            var damage = walker.GetComponent<OpenworldCrime.Pedestrians.PedestrianDamage>();
-            if (damage != null)
-                damage.KnockDownBy(direction * fallSpeed + Vector3.up * fallUpSpeed, Vector3.Cross(Vector3.up, direction) * fallTumble, groundTime, threat);
-            walker.Release(threat);
-        }
-
-        private void SetFlinchOn(Animator animator, bool on)
-        {
-            if (animator == null || flinchLayer < 0 || flinchLayer >= animator.layerCount) return;
-            animator.SetLayerWeight(flinchLayer, on ? flinchWeight : 0f);
         }
 
         private static void ApplyOutfit(GameObject root, Material material)

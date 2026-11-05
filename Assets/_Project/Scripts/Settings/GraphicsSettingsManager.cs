@@ -236,7 +236,6 @@ namespace OpenworldCrime.Settings
             {
                 pedestrianSpawner.SetDensity(p.PeoplePerCar, p.MaxPedestrians);
                 pedestrianSpawner.SetShadowDistance(p.PedestrianShadowDistance);
-                pedestrianSpawner.SetDetail(p.PedestrianHitboxDistance, p.PedestrianSpawnsPerSecond, p.PedestrianPrewarmPool);
             }
             if (breakablePropManager != null)
             {

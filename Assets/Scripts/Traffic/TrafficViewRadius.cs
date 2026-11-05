@@ -28,6 +28,13 @@ public class TrafficViewRadius : MonoBehaviour
     private int _cursor;
     private float _rescanTimer;
 
+    // Sets the show radius and hide margin (graphics quality profiles).
+    public void SetVisibleRadius(float radius, float margin)
+    {
+        visibleRadius = Mathf.Max(10f, radius);
+        hideMargin = Mathf.Max(1f, margin);
+    }
+
     private void OnEnable()
     {
         if (targetCamera == null)

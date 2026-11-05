@@ -12,7 +12,7 @@ namespace OpenworldCrime.EditorTools
     /// </summary>
     public static class OcclusionBakeTool
     {
-        public const float SmallestOccluder = 8f;
+        public const float SmallestOccluder = 10f;
         public const float SmallestHole = 0.5f;
         public const float BackfaceThreshold = 100f;
 

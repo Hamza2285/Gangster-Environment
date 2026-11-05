@@ -25,6 +25,9 @@ public static class GamePlayer
     // A full-screen menu is up, so the map and the taxi should keep out of the way.
     public static bool MenuOpen { get; set; }
 
+    // The player is driving, so nothing should whistle for a taxi.
+    public static bool InVehicle { get; set; }
+
     // Extra keys for the on-screen hint, from features this project may or may not have.
     public static string ExtraKeysHint { get; set; } = "";
 

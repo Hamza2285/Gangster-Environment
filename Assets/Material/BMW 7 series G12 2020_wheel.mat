@@ -1,0 +1,83 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: BMW 7 series G12 2020_wheel
+  m_Shader: {fileID: 23, guid: 0000000000000000f000000000000000, type: 0}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords:
+  - _METALLICGLOSSMAP
+  - _SPECGLOSSMAP
+  - _USE_COLOR
+  - _USE_MASK
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties:
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _Cube:
+        m_Texture: {fileID: 8900000, guid: 5342e9288f6c0f14ea771a1246dc71a4, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MainTex:
+        m_Texture: {fileID: 2800000, guid: e62c533a5de850a428970146515b1798, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: {}
+    m_Floats:
+      _BumpScale: 1
+      _Contrast: 0
+      _Cutoff: 0.5
+      _DetailNormalMapScale: 1
+      _DstBlend: 0
+      _FresnelPower: 1
+      _GlossMapScale: 1
+      _Glossiness: 0
+      _GlossyReflections: 1
+      _MaskIntensity: 0.5
+      _Metallic: 0.5
+      _Mode: 0
+      _OcclusionStrength: 1
+      _Parallax: 0.02
+      _SecondColorPos: 0.5
+      _Shininess: 0.266
+      _SmoothnessTextureChannel: 0
+      _SpecularHighlights: 1
+      _SrcBlend: 1
+      _ThirdColorPos: 0.5
+      _ThresholdOffset: 0.35
+      _ThresholdRange: 0.4
+      _UVSec: 0
+      _UseClipThreshold: 0
+      _UseColorMask: 1
+      _UseDirt: 0
+      _UseIridescent: 0
+      _ZWrite: 1
+    m_Colors:
+      _Color: {r: 1, g: 1, b: 1, a: 1}
+      _DecalColor: {r: 1, g: 1, b: 1, a: 1}
+      _DirtColor: {r: 0.4, g: 0.3, b: 0, a: 1}
+      _EmissionColor: {r: 0, g: 0, b: 0, a: 0}
+      _FirstColor: {r: 0.012, g: 0.851, b: 0.301, a: 1}
+      _MaskColor: {r: 1, g: 1, b: 1, a: 1}
+      _ReflectColor: {r: 0.05660379, g: 0.05660379, b: 0.05660379, a: 0.5}
+      _SecondColor: {r: 0, g: 0.631, b: 0.59, a: 1}
+      _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+      _ThirdColor: {r: 0, g: 0.354, b: 0.547, a: 1}
+  m_BuildTextureStacks: []

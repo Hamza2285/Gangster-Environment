@@ -40,10 +40,12 @@ namespace OpenworldCrime.EditorTools
             foreach (GameObject root in scene.GetRootGameObjects())
             {
                 bool dynamicRoot = System.Array.IndexOf(DynamicRoots, root.name) >= 0;
-                bool vegetation = System.Array.IndexOf(VegetationRoots, root.name.Trim()) >= 0;
+                bool vegetationRoot = System.Array.IndexOf(VegetationRoots, root.name.Trim()) >= 0;
                 foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
                 {
                     GameObject go = renderer.gameObject;
+                    // In scenes built from the "env" prefab the vegetation groups are one level down.
+                    bool vegetation = vegetationRoot || (root.name == "env" && IsUnderVegetationGroup(renderer.transform, root.transform));
                     StaticEditorFlags current = GameObjectUtility.GetStaticEditorFlags(go);
                     StaticEditorFlags wanted;
                     if (dynamicRoot || IsMoving(renderer.transform))
@@ -93,6 +95,12 @@ namespace OpenworldCrime.EditorTools
             sb.AppendLine($"  Occludee Static added: {occludeeAdded}; Reflection Probe Static added: {reflectionAdded}");
             foreach (KeyValuePair<string, int> pair in perRoot) sb.AppendLine($"    {pair.Key}: {pair.Value}");
             return sb.ToString();
+        }
+
+        private static bool IsUnderVegetationGroup(Transform t, Transform root)
+        {
+            while (t.parent != null && t.parent != root) t = t.parent;
+            return System.Array.IndexOf(VegetationRoots, t.name.Trim()) >= 0;
         }
 
         private static bool IsMoving(Transform t)

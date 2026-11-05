@@ -354,7 +354,6 @@ namespace OpenworldCrime.EditorTools
             Vector3 origin = cam != null ? cam.transform.position : Vector3.zero;
             foreach (PedestrianWalker w in UnityEngine.Object.FindObjectsByType<PedestrianWalker>(FindObjectsSortMode.None))
             {
-                if (w.State == PedestrianWalker.Mode.Down) continue;
                 if ((w.transform.position - origin).sqrMagnitude < 60f * 60f) combatTargets.Add(w);
             }
             combatTargets.Sort((a, b) => (a.transform.position - origin).sqrMagnitude.CompareTo((b.transform.position - origin).sqrMagnitude));
@@ -678,15 +677,14 @@ namespace OpenworldCrime.EditorTools
                 if (ai.TryGetComponent(out Rigidbody carBody) && carBody.isKinematic) carsKinematic++;
             }
             report.AppendLine($"    Traffic cars active {cars} (within 80 m {cars80}, within 160 m {cars160}, kinematic body {carsKinematic})");
-            int peds = 0, peds25 = 0, pedsDown = 0, pedBodies = 0;
+            int peds = 0, peds25 = 0, pedBodies = 0;
             foreach (PedestrianWalker w in UnityEngine.Object.FindObjectsByType<PedestrianWalker>(FindObjectsSortMode.None))
             {
                 peds++;
                 if (Vector3.Distance(w.transform.position, camPos) <= 25f) peds25++;
-                if (w.State == PedestrianWalker.Mode.Down) pedsDown++;
                 pedBodies += w.GetComponentsInChildren<Rigidbody>().Length;
             }
-            report.AppendLine($"    Pedestrians active {peds} (within 25 m {peds25}, down/dead {pedsDown}); rigidbodies on pedestrians {pedBodies}");
+            report.AppendLine($"    Pedestrians active {peds} (within 25 m {peds25}); rigidbodies on pedestrians {pedBodies}");
 
             int particles = 0, particlesPlaying = 0;
             foreach (ParticleSystem p in UnityEngine.Object.FindObjectsByType<ParticleSystem>(FindObjectsSortMode.None))
