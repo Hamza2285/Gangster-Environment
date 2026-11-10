@@ -22,7 +22,11 @@ namespace OpenworldCrime.Vehicles
         /// <summary>The traffic driver was shot dead: the car brakes to a stop and is then handed over as an empty parked vehicle.</summary>
         DriverKilled,
         /// <summary>Blown up: a burnt wreck until it is off camera, then it goes back to the iTS pool.</summary>
-        Wrecked
+        Wrecked,
+        /// <summary>The driver panicked and floors it away from the player: iTS AI off, driven by <see cref="TrafficPanicManager"/>.</summary>
+        Fleeing,
+        /// <summary>The driver panicked and brakes to a stop to get out and run; the car is then handed over as an empty parked vehicle.</summary>
+        BailingOut
     }
 
     /// <summary>
@@ -42,6 +46,8 @@ namespace OpenworldCrime.Vehicles
     /// While seated the driver can be shot through the windows (<see cref="SeatedDriverHealth"/>, cheap trigger hit zones):
     /// once dead, the driver door opens and a real NPC in the same outfit is spawned in the seated pose, killed through
     /// Invector's damage and falls out as a ragdoll (<see cref="DropDead"/>); the vehicle is then an empty parked car.
+    /// A panicking driver can also get out on his own (<see cref="BailOut"/>): the door opens, the same person climbs out with the
+    /// pull-out clip's motion (faster, no struggle) and then runs away as an ordinary street pedestrian; the door stays open.
     /// The driver never gets back in. Also reports the <see cref="TrafficVehicleState"/> of the vehicle.
     /// </summary>
     [DisallowMultipleComponent]
@@ -136,6 +142,12 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Seconds that gentle push-out lasts before the limbs get their normal physics back.")]
         [SerializeField, Min(0.1f)] private float deadSettleTime = 1.5f;
 
+        [Header("Bail Out (panic)")]
+        [Tooltip("Seconds the driver door takes to swing open when the driver gets out on his own.")]
+        [SerializeField, Min(0.05f)] private float bailDoorOpenDuration = 0.3f;
+        [Tooltip("Seconds the driver takes to climb out (the pull-out clip's motion from Pull Start Time to Pull End Time).")]
+        [SerializeField, Min(0.1f)] private float bailClimbOutDuration = 0.8f;
+
         /// <summary>Raised when a driver has been thrown out (the spawned character now lives on its own).</summary>
         public static event Action<EnemyDummy> OnDriverEjected;
         /// <summary>Creates the real person of a roster driver (the pedestrian spawner, wired by the takeover manager).</summary>
@@ -149,6 +161,8 @@ namespace OpenworldCrime.Vehicles
         public bool HasLivingDriver { get; private set; }
         /// <summary>True while a dead driver's body is being dropped out of the car.</summary>
         public bool IsDroppingDeadDriver => deadRoutine != null;
+        /// <summary>True while a panicking driver is climbing out on his own.</summary>
+        public bool IsBailingOut => bailRoutine != null;
         /// <summary>True from the pull-out until the driver has fallen.</summary>
         public bool IsEjecting => IsHolding;
         /// <summary>True once the pulled-out driver stands outside the car (ready to be shoved).</summary>
@@ -207,6 +221,7 @@ namespace OpenworldCrime.Vehicles
         private Coroutine pullRoutine;
         private Coroutine shoveRoutine;
         private Coroutine deadRoutine;
+        private Coroutine bailRoutine;
         private bool shoveRequested;
         private Vector3 shoveDirection;
 
@@ -242,6 +257,7 @@ namespace OpenworldCrime.Vehicles
         {
             if (seatedHealth != null) seatedHealth.OnKilled -= HandleSeatedDriverKilled;
             deadRoutine = null;
+            bailRoutine = null;
             // Never leave a half-pulled character hanging: let it fall where it is.
             if (!IsHolding) return;
             StopAllCoroutines();
@@ -294,6 +310,21 @@ namespace OpenworldCrime.Vehicles
             if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
             if (!CanSpawnDriver || !isActiveAndEnabled) return true;
             deadRoutine = StartCoroutine(DeadFallOutRoutine(push));
+            return true;
+        }
+
+        /// <summary>
+        /// The seated driver panics and gets out on his own: the driver door opens, he climbs out and runs away from
+        /// <paramref name="threat"/> as an ordinary street pedestrian (shootable, pooled). Returns false if nobody sits there.
+        /// </summary>
+        public bool BailOut(Vector3 threat)
+        {
+            if (!HasLivingDriver || vehicle == null || IsHolding || deadRoutine != null || bailRoutine != null) return false;
+            HasLivingDriver = false;
+            SetSeatedHitZones(false);
+            if (npcSeatedVisual != null) npcSeatedVisual.SetActive(false);
+            if (!CanSpawnDriver || !isActiveAndEnabled) return true;
+            bailRoutine = StartCoroutine(BailOutRoutine(threat));
             return true;
         }
 
@@ -426,6 +457,88 @@ namespace OpenworldCrime.Vehicles
                 if (limbs[i] != null) limbs[i].maxDepenetrationVelocity = savedDepenetration[i];
             }
             deadRoutine = null;
+        }
+
+        // Like the dead fall-out, but alive: the same person is spawned in the seated pose and climbs out with the pull-out clip's
+        // motion (warped onto the pull-out point, feet above the road), then gets his own Animator back and runs off through the
+        // pedestrian system. Shot while climbing out, he simply dies there (Invector ragdoll) and the routine lets go.
+        private IEnumerator BailOutRoutine(Vector3 threat)
+        {
+            VehicleDoor door = vehicle.GetDriverDoor();
+            if (door != null && door.IsAvailable) door.Open(bailDoorOpenDuration);
+
+            Transform seat = vehicle.GetDriverSeat();
+            Component npc = SpawnDriver(seat, out Avatar originalAvatar, out RuntimeAnimatorController originalController);
+            if (npc == null)
+            {
+                bailRoutine = null;
+                yield break;
+            }
+            Animator npcAnimator = npc.GetComponent<Animator>();
+            FootGroundClamp feet = npc.GetComponent<FootGroundClamp>();
+            PedestrianDamage ped = npc.GetComponent<PedestrianDamage>();
+            if (npcAnimator != null)
+            {
+                npcAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                npcAnimator.Play(seatedStateHash, 0, 0f);
+                npcAnimator.Update(0f);
+            }
+
+            // One frame for Invector to initialise, and for the door to start swinging.
+            yield return null;
+            Vector3 target = GetGroundedPullOutPosition(seat);
+            if (npc != null && npc is EnemyVehicleImpact) npc.transform.SetParent(null, true);
+            if (npc != null && feet != null) feet.SetGround(target.y);
+            if (npc != null && npcAnimator != null)
+            {
+                npcAnimator.Play(pulledOutStateHash, 0, 0f);
+                npcAnimator.Update(0f);
+                float stateLength = npcAnimator.GetCurrentAnimatorStateInfo(0).length;
+                float clipLength = stateLength > 0.1f ? stateLength : 5.8f;
+                npcAnimator.Play(seatedStateHash, 0, 0f);
+                npcAnimator.Update(0f);
+                npcAnimator.applyRootMotion = true;
+                npcAnimator.speed = Mathf.Max(0.1f, (pullEndTime - pullStartTime) * clipLength / bailClimbOutDuration);
+                npcAnimator.CrossFadeInFixedTime(pulledOutStateHash, pullCrossFade, 0, pullStartTime * clipLength / npcAnimator.speed);
+                float timer = 0f;
+                while (npc != null && timer < bailClimbOutDuration + 1f && (ped == null || !ped.IsDead))
+                {
+                    AnimatorStateInfo info = npcAnimator.GetCurrentAnimatorStateInfo(0);
+                    bool inPull = info.shortNameHash == pulledOutStateHash;
+                    if (inPull && info.normalizedTime >= pullEndTime) break;
+                    if (inPull && !npcAnimator.IsInTransition(0))
+                    {
+                        npcAnimator.MatchTarget(target, Quaternion.identity, AvatarTarget.Root, new MatchTargetWeightMask(Vector3.one, 0f),
+                            Mathf.Max(info.normalizedTime, pullStartTime), pullEndTime);
+                    }
+                    timer += Time.deltaTime;
+                    yield return null;
+                }
+            }
+            bailRoutine = null;
+            if (npc == null) yield break;
+            if (feet != null) feet.Clear();
+            if (npcAnimator != null && originalController != null) RestorePersonAnimator(npcAnimator, originalAvatar, originalController);
+            else if (npcAnimator != null)
+            {
+                npcAnimator.speed = 1f;
+                npcAnimator.applyRootMotion = false;
+            }
+            if (ped != null && ped.IsDead) yield break;
+
+            // On his feet outside the car: off he runs, like a pedestrian getting up after being knocked over.
+            Transform car = vehicle != null ? vehicle.transform : transform;
+            if (ped != null) ped.SetAliveColliderEnabled(true);
+            PedestrianWalker walker = npc as PedestrianWalker;
+            if (walker != null && walker.Owner != null)
+            {
+                walker.Owner.RecoverWalker(walker, threat);
+                yield break;
+            }
+            // Fallback NPC (no roster pedestrian): stumbles away from the car and gets up on his own.
+            if (npc is EnemyVehicleImpact impact) impact.Launch(ShoveDirection * fallSpeed + Vector3.up * fallUpSpeed, Vector3.zero, groundTime, car);
+            EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
+            if (dummy != null) OnDriverEjected?.Invoke(dummy);
         }
 
         /// <summary>

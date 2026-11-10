@@ -224,6 +224,56 @@ public class PedestrianWalker : MonoBehaviour
         PlayState("walk", Random.value);
     }
 
+    // Held at a spot by another system (AmbientPopulationManager): placed there at once, in the Standing state, until
+    // something makes them leave (panic, knock-down, recycling), which raises LeftHold.
+    public event System.Action LeftHold;
+    public bool IsHeld { get { return _held; } }
+    public const float HoldNavMeshReach = 6f;
+    private bool _held;
+    private bool _blendNextState;
+    private Vector3 _exitFrom;
+    private float _exitLeft;
+    private float _exitSeconds;
+
+    public void BeginHold(Vector3 position, Vector3 faceToward)
+    {
+        LeaveNavMesh();
+        State = Mode.Standing;
+        _spot = position;
+        _faceToward = faceToward;
+        ArrivedAtSpot = true;
+        _rejoining = false;
+        Lateral = 0f;
+        LateralTarget = 0f;
+        Velocity = Vector3.zero;
+        WantsRecycle = false;
+        if (_speed <= 0f) _speed = WalkClipSpeed;
+        _held = true;
+        _animState = null;
+        Vector3 facing = faceToward - position;
+        facing.y = 0f;
+        transform.SetPositionAndRotation(position, facing.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(facing) : transform.rotation);
+    }
+
+    public void MoveHold(Vector3 position)
+    {
+        _spot = position;
+        transform.position = position;
+    }
+
+    public void SetHoldFacing(Vector3 faceToward)
+    {
+        if (_held) _faceToward = faceToward;
+    }
+
+    private void ReleaseHold(bool blendOut)
+    {
+        if (!_held) return;
+        _held = false;
+        _blendNextState = blendOut;
+        if (LeftHold != null) LeftHold();
+    }
+
     // A small push to keep two people from standing in each other; only a walker in the flow takes it.
     public void Nudge(Vector3 push)
     {
@@ -241,6 +291,7 @@ public class PedestrianWalker : MonoBehaviour
         if (State == Mode.Fleeing) return true;
 
         if (!EnterNavMesh()) return false;
+        ReleaseHold(true);
         State = Mode.Fleeing;
         _agent.speed = runSpeed;
         _agent.acceleration = 12f;
@@ -260,6 +311,14 @@ public class PedestrianWalker : MonoBehaviour
         {
             WantsRecycle = true;
             return;
+        }
+
+        // Dashing from the seat to the mesh (see EnterNavMesh).
+        if (_exitLeft > 0f)
+        {
+            _exitLeft = Mathf.MoveTowards(_exitLeft, 0f, dt / _exitSeconds);
+            transform.position = Vector3.Lerp(_agent.nextPosition, _exitFrom, _exitLeft);
+            if (_exitLeft <= 0f) _agent.updatePosition = true;
         }
 
         float v = _agent.velocity.magnitude;
@@ -303,6 +362,8 @@ public class PedestrianWalker : MonoBehaviour
 
     public void OnDespawned()
     {
+        ReleaseHold(false);
+        _blendNextState = false;
         LeaveNavMesh();
         State = Mode.Lane;
         if (Despawned != null) Despawned();
@@ -313,6 +374,7 @@ public class PedestrianWalker : MonoBehaviour
     {
         if (State == Mode.Down) return;
         Mode before = State;
+        ReleaseHold(false);
         LeaveNavMesh();
         State = Mode.Down;
         Velocity = Vector3.zero;
@@ -389,7 +451,9 @@ public class PedestrianWalker : MonoBehaviour
     private bool EnterNavMesh()
     {
         NavMeshHit hit;
-        if (!_owner.EnsurePanicNavMesh() || !NavMesh.SamplePosition(transform.position, out hit, 3f, NavMesh.AllAreas)) return false;
+        Vector3 from = transform.position;
+        // People held at a seat may be a few metres from the mesh: they dash over to it instead of snapping.
+        if (!_owner.EnsurePanicNavMesh() || !NavMesh.SamplePosition(from, out hit, _held ? HoldNavMeshReach : 3f, NavMesh.AllAreas)) return false;
         _agent.enabled = true;
         if (!_agent.Warp(hit.position))
         {
@@ -397,6 +461,14 @@ public class PedestrianWalker : MonoBehaviour
             return false;
         }
         _stuckTime = 0f;
+        if (_held && (from - hit.position).sqrMagnitude > 0.04f)
+        {
+            _exitFrom = from;
+            _exitLeft = 1f;
+            _exitSeconds = Mathf.Max(0.25f, Vector3.Distance(from, hit.position) / RunClipSpeed);
+            _agent.updatePosition = false;
+            transform.position = from;
+        }
         return true;
     }
 
@@ -405,6 +477,8 @@ public class PedestrianWalker : MonoBehaviour
         if (_agent != null && _agent.enabled)
         {
             if (_agent.isOnNavMesh) _agent.ResetPath();
+            _agent.updatePosition = true;
+            _exitLeft = 0f;
             _agent.enabled = false;
         }
         gameObject.layer = _laneLayer;
@@ -436,6 +510,13 @@ public class PedestrianWalker : MonoBehaviour
         if (_animator == null || state == _animState) return;
         _animState = state;
         _animator.speed = 1f;
+        // Getting up from a seat blends out of the sitting pose instead of snapping.
+        if (_blendNextState)
+        {
+            _blendNextState = false;
+            _animator.CrossFadeInFixedTime(state, 0.25f, 0, 0f);
+            return;
+        }
         _animator.Play(state, 0, normalizedTime);
     }
 }

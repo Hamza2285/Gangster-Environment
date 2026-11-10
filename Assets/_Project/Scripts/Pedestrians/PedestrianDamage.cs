@@ -253,6 +253,19 @@ namespace OpenworldCrime.Pedestrians
             if (valid) aliveCollider.enabled = on;
         }
 
+        /// <summary>A seated person's solid capsule and far hitbox end at the head (height above the root); false restores the standing body.</summary>
+        public void SetSeatedBody(bool seated, float height)
+        {
+            if (!valid) return;
+            float h = seated ? height : ragdoll.FarHitboxHeight;
+            if (aliveCollider is CapsuleCollider capsule)
+            {
+                capsule.height = h;
+                capsule.center = new Vector3(0f, h * 0.5f, 0f);
+            }
+            ragdoll.SetFarHitboxHeight(h);
+        }
+
         /// <summary>Caught in an explosion: thrown away from it as a ragdoll and hurt (a body on the ground is only pushed).</summary>
         public void ReceiveExplosion(Vector3 center, float damageValue, float throwSpeed)
         {

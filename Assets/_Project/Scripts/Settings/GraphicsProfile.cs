@@ -87,8 +87,9 @@ namespace OpenworldCrime.Settings
         [SerializeField, Min(10f)] private float vegetationDistance = 240f;
 
         [Header("Vehicles and Objects")]
-        [Tooltip("Real-time headlights of the player's vehicle within this distance (m) of the camera. 0 = off.")]
-        [SerializeField, Min(0f)] private float realtimeLightDistance = 40f;
+        [Tooltip("Real-time headlights of the player's vehicle within this distance (m) of the camera. 0 = off, " +
+                 "-1 = each vehicle's own setting.")]
+        [SerializeField, Min(-1f)] private float realtimeLightDistance = 40f;
         [Tooltip("Unused drivable vehicles farther than this (m) go to sleep (RCC, wheels, audio and physics off).")]
         [SerializeField, Min(5f)] private float vehicleSleepDistance = 60f;
         [Tooltip("Broken props farther than this (m) are put back.")]

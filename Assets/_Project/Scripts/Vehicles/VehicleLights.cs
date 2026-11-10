@@ -27,10 +27,14 @@ namespace OpenworldCrime.Vehicles
     /// role) is switched between shared runtime variants of its own material (emission off / dim / full), so it stays SRP Batcher
     /// friendly and no per-car material copies are made. Only light slots are touched: the paint slot that TrafficCarPaint swaps
     /// is read back each time and never overwritten. Renderer enabling (TrafficViewRadius) is left alone.
-    /// State sources (all optional, set by Tools > OpenworldCrime > Vehicles > Setup Vehicle Lights):
-    /// - iTS traffic: brake from <see cref="TSTrafficAI.OnUpdateAI"/> (event, no polling);
-    /// - RCC drivable: brake / reverse / headlight switch read from RCC_CarControllerV3 (cheap compare per frame; only changes swap);
-    /// - night: the global <see cref="SetNightMode"/> hook (Phase 4 time-of-day system).
+    /// State sources (all optional, set by Tools > OpenworldCrime > Vehicles > Build Car Lamps (emission)):
+    /// - iTS traffic: brake from <see cref="TSTrafficAI.OnUpdateAI"/> (event, no polling), or <see cref="ReportBrake"/> while a
+    ///   script drives the car (panic flight, held for a carjack);
+    /// - RCC drivable: brake / reverse / headlight switch (RCC's low beam key) read from RCC_CarControllerV3 (cheap compare per
+    ///   frame while the engine runs, a few times a second when parked; only changes swap). Lamps only light with the engine
+    ///   running, so parked empty cars stay dark; starting the engine at night switches the headlights on;
+    /// - night: the global <see cref="SetNightMode"/> hook (VehicleNightLightsSync follows the day/night controller);
+    /// - wreck: <see cref="VehicleHealth.OnDestroyedWreck"/> puts every lamp out until the car is reused.
     /// Real-time Light components: everything in Other Realtime Lights is switched off for good; Realtime Headlights are only on for
     /// the vehicle the player drives, while the headlights are on and within Realtime Light Distance of the camera.
     /// </summary>
@@ -54,7 +58,7 @@ namespace OpenworldCrime.Vehicles
 
         [Header("Look")]
         [Tooltip("Emission strength (HDR multiplier) of a fully lit lamp.")]
-        [SerializeField, Min(0f)] private float fullIntensity = 2.5f;
+        [SerializeField, Min(0f)] private float fullIntensity = 4f;
         [Tooltip("Share of Full Intensity used for tail lights / dim lamps.")]
         [SerializeField, Range(0f, 1f)] private float dimShare = 0.3f;
 
@@ -63,6 +67,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private RCC_CarControllerV3 rccController;
         [Tooltip("Used to know whether the player drives this vehicle (real-time headlights).")]
         [SerializeField] private RCCVehicleAdapter drivableAdapter;
+        [Tooltip("Every lamp goes out when the car is wrecked.")]
+        [SerializeField] private VehicleHealth health;
         [Tooltip("iTS brake input above which the brake lights are on.")]
         [SerializeField, Range(0f, 1f)] private float brakeThreshold = 0.05f;
 
@@ -92,8 +98,10 @@ namespace OpenworldCrime.Vehicles
         private bool braking;
         private bool reversing;
         private bool realtimeOn;
-        private bool rccHeadlightSwitch;
+        private bool engineRunning;
+        private bool wrecked;
         private Transform cameraTransform;
+        private const float ParkedPollInterval = 0.3f;
 
         /// <summary>Sets the global night state (raises <see cref="OnNightModeChanged"/>). Called by the time-of-day system.</summary>
         public static void SetNightMode(bool night)
@@ -103,8 +111,8 @@ namespace OpenworldCrime.Vehicles
             OnNightModeChanged?.Invoke(night);
         }
 
-        public bool HeadlightsOn => headlightsOn;
-        public bool IsBraking => braking;
+        public bool HeadlightsOn => headlightsOn && !wrecked;
+        public bool IsBraking => braking && !wrecked;
 
         /// <summary>Overrides the real-time headlight distance of this vehicle.</summary>
         public void SetRealtimeLightDistance(float distance) => realtimeLightDistance = Mathf.Max(0f, distance);
@@ -149,11 +157,13 @@ namespace OpenworldCrime.Vehicles
         {
             OnNightModeChanged += HandleNightModeChanged;
             if (trafficAI != null) trafficAI.OnUpdateAI += HandleTrafficUpdate;
+            if (health != null) health.OnDestroyedWreck += HandleWrecked;
             braking = false;
             reversing = false;
+            wrecked = health != null && health.IsDestroyed;
             if (rccController != null && NightMode) rccController.lowBeamHeadLightsOn = true;
-            rccHeadlightSwitch = rccController != null && rccController.lowBeamHeadLightsOn;
-            headlightsOn = NightMode || rccHeadlightSwitch;
+            engineRunning = rccController != null && rccController.engineRunning;
+            headlightsOn = rccController != null ? rccController.lowBeamHeadLightsOn && engineRunning : NightMode;
             Apply(true);
             if (rccController != null) StartCoroutine(PollRccRoutine());
         }
@@ -162,26 +172,51 @@ namespace OpenworldCrime.Vehicles
         {
             OnNightModeChanged -= HandleNightModeChanged;
             if (trafficAI != null) trafficAI.OnUpdateAI -= HandleTrafficUpdate;
+            if (health != null) health.OnDestroyedWreck -= HandleWrecked;
             SetRealtimeHeadlights(false);
         }
 
-        // Only RCC vehicles poll (a few bool compares per frame, swaps only on change); traffic cars are purely event driven.
+        // Only RCC vehicles poll (a few bool compares per frame while the engine runs, a few times a second when parked; swaps only
+        // on change); traffic cars are purely event driven.
         private System.Collections.IEnumerator PollRccRoutine()
         {
+            var parkedWait = new WaitForSeconds(ParkedPollInterval);
             while (true)
             {
-                bool brake = rccController.brakeInput >= 0.1f && rccController.engineRunning;
-                bool reverse = rccController.direction == -1 && Mathf.Abs(rccController.speed) > 0.5f;
-                bool rccSwitch = rccController.lowBeamHeadLightsOn;
-                bool changed = brake != braking || reverse != reversing || rccSwitch != rccHeadlightSwitch;
+                bool engine = rccController.engineRunning;
+                // Engine started at night (the player got in): headlights on, as the night switch does for running cars.
+                if (engine && !engineRunning && NightMode) rccController.lowBeamHeadLightsOn = true;
+                engineRunning = engine;
+                bool brake = engine && rccController.brakeInput >= 0.1f;
+                bool reverse = engine && rccController.direction == -1 && Mathf.Abs(rccController.speed) > 0.5f;
+                bool lit = engine && rccController.lowBeamHeadLightsOn;
+                bool changed = brake != braking || reverse != reversing || lit != headlightsOn;
                 braking = brake;
                 reversing = reverse;
-                rccHeadlightSwitch = rccSwitch;
-                headlightsOn = NightMode || rccSwitch;
+                headlightsOn = lit;
                 if (changed) Apply(false);
                 UpdateRealtimeHeadlights();
-                yield return null;
+                if (engine) yield return null;
+                else yield return parkedWait;
             }
+        }
+
+        /// <summary>
+        /// Brake input from a script that drives a traffic car without the iTS AI (panic flight, a car held for a carjack or a
+        /// bail-out). Same threshold as the iTS brake.
+        /// </summary>
+        public void ReportBrake(float brake)
+        {
+            bool wasBraking = braking;
+            braking = brake > brakeThreshold;
+            if (braking != wasBraking) Apply(false);
+        }
+
+        private void HandleWrecked()
+        {
+            wrecked = true;
+            Apply(false);
+            SetRealtimeHeadlights(false);
         }
 
         private void HandleTrafficUpdate(float steering, float brake, float throttle, bool upsideDown)
@@ -193,9 +228,12 @@ namespace OpenworldCrime.Vehicles
 
         private void HandleNightModeChanged(bool night)
         {
-            if (rccController != null) rccController.lowBeamHeadLightsOn = night;
-            rccHeadlightSwitch = rccController != null && rccController.lowBeamHeadLightsOn;
-            headlightsOn = night || rccHeadlightSwitch;
+            if (rccController != null)
+            {
+                rccController.lowBeamHeadLightsOn = night;
+                headlightsOn = night && rccController.engineRunning;
+            }
+            else headlightsOn = night;
             Apply(false);
         }
 
@@ -221,6 +259,7 @@ namespace OpenworldCrime.Vehicles
 
         private Level GetLevel(VehicleLightRole role)
         {
+            if (wrecked) return Level.Off;
             switch (role)
             {
                 case VehicleLightRole.Headlight: return headlightsOn ? Level.Full : Level.Off;
@@ -275,7 +314,7 @@ namespace OpenworldCrime.Vehicles
             if (realtimeHeadlights.Length == 0) return;
             float maxDistance = RealtimeLightDistance;
             // A global 0 switches real-time headlights off; a vehicle's own 0 means no distance limit (original behaviour).
-            bool wanted = headlightsOn && drivableAdapter != null && drivableAdapter.IsControlled && GlobalRealtimeLightDistance != 0f;
+            bool wanted = headlightsOn && !wrecked && drivableAdapter != null && drivableAdapter.IsControlled && GlobalRealtimeLightDistance != 0f;
             if (wanted && maxDistance > 0f)
             {
                 if (cameraTransform == null && Camera.main != null) cameraTransform = Camera.main.transform;

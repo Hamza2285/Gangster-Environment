@@ -371,6 +371,36 @@ public class PedestrianSpawner : MonoBehaviour
         return walker;
     }
 
+    // For other systems that place people themselves (AmbientPopulationManager): a talking-capable person whose name contains
+    // the given text, from the pool or off a lane out of the camera's sight. Give them back with ReleaseDown. Null if nobody fits.
+    public PedestrianWalker TakeFromCrowd(string nameContains)
+    {
+        Camera cam = Cam;
+        if (cam == null) return null;
+        for (int i = _inactive.Count; i > 0; i--)
+        {
+            PedestrianWalker pooled = _inactive.Dequeue();
+            if (pooled.CanTalk && pooled.name.Contains(nameContains))
+            {
+                pooled.transform.SetParent(_activeRoot, true);
+                _active.Add(pooled);
+                return pooled;
+            }
+            _inactive.Enqueue(pooled);
+        }
+        int count = _active.Count;
+        int start = count > 0 ? Random.Range(0, count) : 0;
+        for (int i = 0; i < count; i++)
+        {
+            PedestrianWalker walker = _active[(start + i) % count];
+            if (walker.State != PedestrianWalker.Mode.Lane || walker.Rejoining || !walker.CanTalk || !walker.name.Contains(nameContains)) continue;
+            if (!IsHiddenFromCamera(cam, walker.transform.position)) continue;
+            _laneWalkers[walker.Lane].Remove(walker);
+            return walker;
+        }
+        return null;
+    }
+
     public bool TrySampleOpenNavPoint(Vector3 around, float maxDistance, out Vector3 point)
     {
         NavMeshHit hit;

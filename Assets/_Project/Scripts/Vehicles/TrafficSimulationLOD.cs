@@ -15,6 +15,7 @@ namespace OpenworldCrime.Vehicles
     ///   integrated from the AI's own throttle / brake output, at the car's resting height above the lane. The AI keeps making
     ///   every traffic decision (lights, queues, junction reservations, lane changes); it only runs every Far AI Tick Interval
     ///   physics steps. Visible far cars still spin their wheels and show brake lights (cheap transform writes, no physics).
+    ///   Far cars are also muted and lose their enter-vehicle trigger zone (Far Disabled Trigger Layers) until they come near.
     /// - Switching back to NEAR hands the current speed to the Rigidbody and re-enables the wheels, so a car never stops or
     ///   jumps on the switch; hysteresis keeps cars from flipping at the boundary.
     /// iTS has a far/close range callback (TSTrafficAI.OnFarRange / OnCloserRange) but its physics switch in TSSimpleCar is
@@ -43,7 +44,7 @@ namespace OpenworldCrime.Vehicles
         [SerializeField, Min(1)] private int carsCheckedPerFrame = 24;
         [Tooltip("Far cars run their AI only every N physics steps (1 = every step).")]
         [SerializeField, Range(1, 6)] private int farAiTickInterval = 3;
-        [Tooltip("Far cars that are not rendered (beyond the traffic view radius) are moved every N physics steps (one bigger step).")]
+        [Tooltip("Far cars that are not rendered (beyond the traffic view radius, or seen by no camera) are moved every N physics steps (one bigger step).")]
         [SerializeField, Range(1, 6)] private int hiddenMoveInterval = 3;
 
         [Header("Far Car Motion")]
@@ -59,6 +60,13 @@ namespace OpenworldCrime.Vehicles
         [SerializeField, Min(0.1f)] private float turnRatePerSpeed = 14f;
         [Tooltip("How fast (per second) a far car settles to the lane height and slope.")]
         [SerializeField, Min(0.1f)] private float heightFollow = 6f;
+
+        [Header("Far Car Extras")]
+        [Tooltip("Trigger colliders on these layers are switched off while a car is far (the player's enter-vehicle zone: " +
+                 "nobody can reach it there, and a moving trigger keeps making trigger pairs with the city).")]
+        [SerializeField] private LayerMask farDisabledTriggerLayers;
+        [Tooltip("Mute the car's sounds while it is far (engine loops are inaudible there but still mixed and updated).")]
+        [SerializeField] private bool muteFarCars = true;
 
         public enum Tier { Near, Far }
 
@@ -81,6 +89,9 @@ namespace OpenworldCrime.Vehicles
             public bool[] WheelIsFront;
             public Renderer WheelRenderer;
             public TSAntiRollBar[] AntiRoll;
+            public Collider[] FarOffTriggers;
+            public AudioSource[] Sounds;
+            public bool[] SoundWasPlaying;
             public CollisionDetectionMode Detection;
             public float RestHeight;
             public float MaxSpeed;
@@ -93,6 +104,7 @@ namespace OpenworldCrime.Vehicles
             public float Brake;
             public float Steering;
             public float WheelAngle;
+            public float Slope;
             public Func<Vector3> FarSpeed;
             public Func<Vector3> SavedSpeed;
             public TSTrafficAI.OnUpdateAIDelegate AiHandler;
@@ -170,6 +182,7 @@ namespace OpenworldCrime.Vehicles
                 Body = body,
                 Transform = ai.transform,
                 AntiRoll = ai.GetComponents<TSAntiRollBar>(),
+                Sounds = muteFarCars ? ai.GetComponentsInChildren<AudioSource>(true) : new AudioSource[0],
                 Detection = body.collisionDetectionMode,
                 MaxSpeed = Mathf.Max(5f, simple.maxSpeed)
             };
@@ -192,6 +205,13 @@ namespace OpenworldCrime.Vehicles
                 if (car.WheelRenderer == null) car.WheelRenderer = w.GetComponentInChildren<Renderer>(true);
             }
             car.RestHeight = ComputeRestHeight(car);
+            car.SoundWasPlaying = new bool[car.Sounds.Length];
+            var triggers = new List<Collider>();
+            foreach (Collider c in ai.GetComponentsInChildren<Collider>(true))
+            {
+                if (c.isTrigger && (farDisabledTriggerLayers.value & (1 << c.gameObject.layer)) != 0) triggers.Add(c);
+            }
+            car.FarOffTriggers = triggers.ToArray();
 
             // One delegate per car for its whole lifetime (no per-switch allocations).
             car.FarSpeed = () => new Vector3(0f, 0f, car.Speed);
@@ -288,6 +308,8 @@ namespace OpenworldCrime.Vehicles
             car.Tier = Tier.Far;
             Vector3 velocity = car.Body.linearVelocity;
             car.Speed = Mathf.Max(0f, Vector3.Dot(velocity, car.Transform.forward));
+            Vector3 heading = car.Body.rotation * Vector3.forward;
+            car.Slope = Mathf.Clamp(heading.y / Mathf.Max(0.01f, new Vector2(heading.x, heading.z).magnitude), -0.4f, 0.4f);
 
             car.SavedSpeed = car.Ai.UpdateCarSpeed;
             car.Ai.UpdateCarSpeed = car.FarSpeed;
@@ -302,7 +324,8 @@ namespace OpenworldCrime.Vehicles
             if (car.Ai != null)
             {
                 if (car.SavedSpeed != null) car.Ai.UpdateCarSpeed = car.SavedSpeed;
-                car.Ai.enabled = true;
+                // A car taken out of traffic while far (panic flight, bail-out) keeps its AI off: its new owner drives it.
+                if (car.Adapter == null || car.Adapter.State == TrafficVehicleState.TrafficControlled) car.Ai.enabled = true;
             }
             if (car.Body != null)
             {
@@ -327,6 +350,23 @@ namespace OpenworldCrime.Vehicles
                 if (car.AntiRoll[i] != null) car.AntiRoll[i].enabled = physics;
             if (car.Simple != null) car.Simple.enabled = physics;
             if (car.Impact != null) car.Impact.enabled = physics;
+            for (int i = 0; i < car.FarOffTriggers.Length; i++)
+                if (car.FarOffTriggers[i] != null) car.FarOffTriggers[i].enabled = physics;
+            for (int i = 0; i < car.Sounds.Length; i++)
+            {
+                AudioSource source = car.Sounds[i];
+                if (source == null) continue;
+                if (!physics)
+                {
+                    car.SoundWasPlaying[i] = source.isPlaying;
+                    source.enabled = false;
+                }
+                else
+                {
+                    source.enabled = true;
+                    if (car.SoundWasPlaying[i] && source.loop && !source.isPlaying) source.Play();
+                }
+            }
         }
 
         private void FixedUpdate()
@@ -336,8 +376,9 @@ namespace OpenworldCrime.Vehicles
             {
                 Car car = cars[i];
                 if (car.Tier != Tier.Far || car.Ai == null || !car.Ai.gameObject.activeInHierarchy) continue;
-                // Nobody sees a hidden car move: one bigger step every few physics steps is enough.
-                bool hidden = car.WheelRenderer != null && car.WheelRenderer.forceRenderingOff;
+                // Nobody sees a hidden car move (beyond the view radius, or seen by no camera and no shadow): one bigger step
+                // every few physics steps is enough.
+                bool hidden = car.WheelRenderer != null && (car.WheelRenderer.forceRenderingOff || !car.WheelRenderer.isVisible);
                 if (!hidden || hiddenMoveInterval <= 1) MoveFarCar(car, dt);
                 else if ((fixedStep + car.Index) % hiddenMoveInterval == 0) MoveFarCar(car, dt * hiddenMoveInterval);
             }
@@ -356,6 +397,8 @@ namespace OpenworldCrime.Vehicles
                 {
                     Car car = cars[i];
                     if (car.Ai == null) continue;
+                    // A car out of traffic (stopped for the player, driver killed, panicking) has its AI off on purpose.
+                    if (car.Adapter != null && car.Adapter.State != TrafficVehicleState.TrafficControlled) continue;
                     bool run = car.Tier == Tier.Near || farAiTickInterval <= 1 || (fixedStep + car.Index) % farAiTickInterval == 0;
                     if (car.Ai.enabled != run) car.Ai.enabled = run;
                 }
@@ -378,14 +421,28 @@ namespace OpenworldCrime.Vehicles
             Vector3 toTarget = target.point - position;
             toTarget.y = 0f;
 
-            Vector3 forward = car.Transform.forward;
+            // The body's pose, not the transform: with interpolation on, the transform holds the in-between render pose.
+            Vector3 forward = car.Body.rotation * Vector3.forward;
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
             forward.Normalize();
             if (toTarget.sqrMagnitude > 0.25f && speed > 0.05f)
             {
-                float maxDegrees = Mathf.Min(maxTurnRate, speed * turnRatePerSpeed) * dt;
-                forward = Vector3.RotateTowards(forward, toTarget.normalized, maxDegrees * Mathf.Deg2Rad, 0f);
+                float turnRate = Mathf.Min(maxTurnRate, speed * turnRatePerSpeed);
+                // A waypoint inside the turning circle can never be reached at this speed (the car would circle it): slow down
+                // to the speed whose turn passes through it, as a driver brakes for a tight corner.
+                float distance = toTarget.magnitude;
+                float sinAngle = Mathf.Abs(Vector3.Cross(forward, toTarget / distance).y);
+                if (sinAngle > 0.05f)
+                {
+                    float cornerSpeed = maxTurnRate * Mathf.Deg2Rad * distance / (2f * sinAngle);
+                    if (speed > cornerSpeed)
+                    {
+                        speed = Mathf.Max(Mathf.Min(speed, cornerSpeed), speed - brakeDeceleration * dt);
+                        car.Speed = speed;
+                    }
+                }
+                forward = Vector3.RotateTowards(forward, toTarget / distance, turnRate * dt * Mathf.Deg2Rad, 0f);
             }
             position += forward * (speed * dt);
 
@@ -405,10 +462,12 @@ namespace OpenworldCrime.Vehicles
                     slope = segment.y / flatLength;
                 }
             }
+            // Only height and slope are smoothed. The heading is used exactly as steered above: smoothing it as well cut the car's
+            // turn rate to a fraction, so far cars overshot every corner, circled their waypoint and drove off the road.
             float follow = 1f - Mathf.Exp(-heightFollow * dt);
             position.y = Mathf.Lerp(position.y, laneY + car.RestHeight, follow);
-            Vector3 look = new Vector3(forward.x, Mathf.Clamp(slope, -0.4f, 0.4f), forward.z);
-            Quaternion rotation = Quaternion.Slerp(car.Body.rotation, Quaternion.LookRotation(look, Vector3.up), follow);
+            car.Slope = Mathf.Lerp(car.Slope, Mathf.Clamp(slope, -0.4f, 0.4f), follow);
+            Quaternion rotation = Quaternion.LookRotation(new Vector3(forward.x, car.Slope, forward.z), Vector3.up);
 
             car.Body.MovePosition(position);
             car.Body.MoveRotation(rotation);

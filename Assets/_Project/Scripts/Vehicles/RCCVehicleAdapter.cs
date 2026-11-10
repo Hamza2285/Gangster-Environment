@@ -10,6 +10,7 @@ namespace OpenworldCrime.Vehicles
     /// never touches RCC. Lives on the vehicle root next to RCC_CarControllerV3. Not a Singleton.
     /// </summary>
     [DisallowMultipleComponent]
+    [DefaultExecutionOrder(-50)] // Awake before RCC's own, so the handling profile is in place when RCC initialises
     public class RCCVehicleAdapter : MonoBehaviour, IVehicleController
     {
         private const float KmhToMs = 1f / 3.6f;
@@ -23,6 +24,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private bool startEngineOnEnter = true;
         [Tooltip("Keep the engine off while nobody drives (at start and after the driver leaves).")]
         [SerializeField] private bool engineOffWhenParked = true;
+        [Tooltip("Shared driving feel (steering, grip, assists, suspension) applied when the car is created. Empty = the RCC values on this prefab.")]
+        [SerializeField] private VehicleHandlingProfile handlingProfile;
 
         [Header("Seat & Door Points")]
         [Tooltip("Character root anchor while seated (root of the seated pose, not the hips).")]
@@ -99,6 +102,10 @@ namespace OpenworldCrime.Vehicles
 
         private void Awake()
         {
+            // RCC's default: every RCC car that gets enabled (a parked car waking up, a pre-warmed car) claims the RCC camera and
+            // the player slot, even while the player drives another car. Here only EnableControl registers the player's car.
+            RCC_SceneManager.Instance.registerFirstVehicleAsPlayer = false;
+
             isValid = HasEntrySetup;
             if (!isValid)
             {
@@ -108,6 +115,7 @@ namespace OpenworldCrime.Vehicles
 
             vehicleColliders = GetComponentsInChildren<Collider>(true);
             body = GetComponent<Rigidbody>();
+            if (handlingProfile != null) handlingProfile.ApplyTo(carController, body);
             if (driverDummy != null) driverDummy.SetActive(false);
             if (rccCamera != null) rccCamera.gameObject.SetActive(false);
             // Parked until a driver takes control (RCC reads player input while canControl is set).
@@ -219,6 +227,14 @@ namespace OpenworldCrime.Vehicles
                 body.WakeUp();
             }
         }
+
+        /// <summary>Driving feel applied to this car when it was created (null = prefab values).</summary>
+        public VehicleHandlingProfile HandlingProfile => handlingProfile;
+
+#if UNITY_EDITOR
+        /// <summary>Editor only: lets the builder assign the handling profile.</summary>
+        public void EditorSetHandlingProfile(VehicleHandlingProfile profile) => handlingProfile = profile;
+#endif
 
         /// <summary>Assigns the scene RCC camera to a vehicle spawned at runtime (prefabs cannot reference scene objects).</summary>
         public void SetVehicleCamera(RCC_Camera vehicleCamera)

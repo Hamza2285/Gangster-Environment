@@ -106,12 +106,13 @@ namespace OpenworldCrime.Vehicles
             Vector3 before = previousVelocity + Vector3.Cross(previousAngularVelocity, point - previousCenterOfMass);
             Vector3 now = body.GetPointVelocity(point);
             Vector3 velocity = before.sqrMagnitude >= now.sqrMagnitude ? before : now;
+            Vector3 vehicleVelocity = velocity;
 
             Rigidbody other = collision.rigidbody;
             bool solidBody = other == null || other.isKinematic;
             if (!solidBody) velocity -= other.GetPointVelocity(point);
             float speed = velocity.magnitude;
-            if (speed < minimumContactSpeed) return;
+            if (speed < minimumContactSpeed && vehicleVelocity.sqrMagnitude < minimumContactSpeed * minimumContactSpeed) return;
 
             IVehicleImpactReceiver receiver = collision.collider.GetComponentInParent<IVehicleImpactReceiver>();
             if (receiver == null) return;
@@ -123,7 +124,7 @@ namespace OpenworldCrime.Vehicles
                 body.angularVelocity = Vector3.Lerp(body.angularVelocity, previousAngularVelocity, characterHitSpeedRetention);
             }
 
-            var impact = new VehicleImpact(velocity, point, body.mass, transform, this);
+            var impact = new VehicleImpact(velocity, point, body.mass, transform, this, vehicleVelocity);
             receiver.ReceiveVehicleImpact(impact);
 
             if ((isFirstContact || solidBody) && speed >= feedbackMinimumSpeed && Time.time - lastFeedbackTime >= feedbackCooldown)

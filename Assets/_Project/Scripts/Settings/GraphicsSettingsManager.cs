@@ -83,8 +83,9 @@ namespace OpenworldCrime.Settings
                 Debug.LogError($"[{nameof(GraphicsSettingsManager)}] No graphics profiles assigned on '{name}'.", this);
                 return;
             }
+            // Every system reference is optional: a scene wires only the systems its profiles should drive.
             if (trafficSpawner == null || trafficViewRadius == null || pedestrianSpawner == null || breakablePropManager == null || environmentVisibility == null)
-                Debug.LogWarning($"[{nameof(GraphicsSettingsManager)}] Some system references are missing on '{name}'; those systems keep their own values.", this);
+                Debug.Log($"[{nameof(GraphicsSettingsManager)}] Systems not assigned on '{name}' keep their own values.", this);
 
 #if UNITY_EDITOR
             originalQualityLevel = QualitySettings.GetQualityLevel();
@@ -185,6 +186,7 @@ namespace OpenworldCrime.Settings
             {
                 for (int i = 0; i < profiles.Length; i++)
                     if (profiles[i] != null && (profiles[i].name == forced || profiles[i].DisplayName == forced)) return profiles[i];
+                if (mobileProfile != null && (mobileProfile.name == forced || mobileProfile.DisplayName == forced)) return mobileProfile;
             }
             if (editorTestProfile != null) return editorTestProfile;
 #endif

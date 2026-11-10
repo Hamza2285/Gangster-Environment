@@ -207,6 +207,18 @@ namespace OpenworldCrime.Pedestrians
             ApplyHitboxes();
         }
 
+        /// <summary>Authored height of the far hitbox (a standing person).</summary>
+        public float FarHitboxHeight => farHitboxHeight;
+
+        /// <summary>Resizes the far hitbox (a seated person's ends at the head).</summary>
+        public void SetFarHitboxHeight(float height)
+        {
+            Initialize();
+            if (!(farHitbox is CapsuleCollider capsule)) return;
+            capsule.height = height;
+            capsule.center = new Vector3(0f, height * 0.5f, 0f);
+        }
+
         /// <summary>Hands the body to physics. Bodies start with the given velocity.</summary>
         public void Activate(Vector3 velocity)
         {

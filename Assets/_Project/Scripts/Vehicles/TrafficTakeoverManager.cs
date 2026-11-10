@@ -51,6 +51,11 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private Vector3 prewarmPosition = new Vector3(0f, -1000f, 0f);
         [Tooltip("Seconds after a pre-warmed vehicle was used before its replacement is created.")]
         [SerializeField, Min(0f)] private float replenishDelay = 3f;
+        [Tooltip("Creating a replacement costs a noticeable frame (a whole RCC car). It waits until the player moves slower than this (m/s): " +
+                 "a short stall while walking or standing is far less visible than one at driving speed.")]
+        [SerializeField, Min(0f)] private float replenishCalmSpeed = 6f;
+        [Tooltip("... but never longer than this (s), so the replacement is ready for the next takeover.")]
+        [SerializeField, Min(0f)] private float replenishMaxWait = 60f;
 
         [Header("Abandoned Vehicles")]
         [Tooltip("At most this many abandoned taken-over vehicles are kept.")]
@@ -148,12 +153,20 @@ namespace OpenworldCrime.Vehicles
         // Creates the instance active (so RCC's Awake/Start run now, not during a takeover), frozen far away, then parks it inactive.
         // Every rigidbody is frozen, not only the root: RCC's detachable parts hang on joints, and a joint is rebuilt from the
         // current pose when its object is re-activated, so a part that sagged while waiting would stay sagged for good.
+        // A replacement (delay > 0) waits for a calm moment and is spread over three frames: the copy is made under an inactive
+        // holder (no Awake yet), the next frame activates it (Awake / OnEnable), the frame after runs its Start.
         private IEnumerator PrewarmRoutine(RCCVehicleAdapter prefab, float delay)
         {
             prewarmed[prefab] = null;
-            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (delay > 0f)
+            {
+                yield return new WaitForSeconds(delay);
+                yield return WaitForCalmMoment();
+            }
 
-            RCCVehicleAdapter instance = Instantiate(prefab, prewarmPosition, Quaternion.identity, takenVehiclesParent);
+            var holder = new GameObject("Prewarm Holder");
+            holder.SetActive(false);
+            RCCVehicleAdapter instance = Instantiate(prefab, prewarmPosition, Quaternion.identity, holder.transform);
             instance.name = prefab.name;
             Rigidbody[] bodies = instance.GetComponentsInChildren<Rigidbody>(true);
             var kinematicStates = new bool[bodies.Length];
@@ -163,10 +176,34 @@ namespace OpenworldCrime.Vehicles
                 bodies[i].isKinematic = true;
             }
             prewarmedKinematicStates[prefab] = kinematicStates;
+            if (delay > 0f) yield return null;
+            if (instance != null) instance.transform.SetParent(takenVehiclesParent, true);
+            Destroy(holder);
             yield return null;
+            if (instance == null) yield break;
+            if (delay > 0f) yield return null;
             if (instance == null) yield break;
             instance.gameObject.SetActive(false);
             prewarmed[prefab] = instance;
+        }
+
+        private IEnumerator WaitForCalmMoment()
+        {
+            if (distanceReference == null || replenishCalmSpeed <= 0f) yield break;
+            const float sampleInterval = 0.25f;
+            var wait = new WaitForSeconds(sampleInterval);
+            float waited = 0f;
+            Vector3 last = distanceReference.position;
+            while (waited < replenishMaxWait)
+            {
+                yield return wait;
+                waited += sampleInterval;
+                if (distanceReference == null) yield break;
+                Vector3 now = distanceReference.position;
+                float speed = (now - last).magnitude / sampleInterval;
+                last = now;
+                if (speed < replenishCalmSpeed) yield break;
+            }
         }
 
         private RCCVehicleAdapter TakePrewarmed(RCCVehicleAdapter prefab)

@@ -111,6 +111,15 @@ namespace OpenworldCrime.Player
             if (impactRadius > 0f) pedestrians.TriggerPanic(to, impactRadius);
         }
 
+#if UNITY_EDITOR
+        public void EditorSetup(PlayerCombatController combatController, vShooterMeleeInput shooter, PedestrianSpawner spawner)
+        {
+            combat = combatController;
+            shooterInput = shooter;
+            pedestrians = spawner;
+        }
+#endif
+
         private void HandleAimChanged(bool aiming)
         {
             isAiming = aiming;

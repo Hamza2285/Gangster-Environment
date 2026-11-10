@@ -40,6 +40,9 @@ namespace OpenworldCrime.EditorTools
         private const float DriveSpeed = 22f;
         private const string PlayerPath = "Player/Player_Jason";
         private const string BikePath = "Vehicles/Drivable_Bike_Sport";
+        private const string QualityKey = "OWC.Perf.QualityLevel";
+        private const string OutputFolder = "Captures/Optimization";
+        private const string OriginalQualityKey = "OWC.Perf.OriginalQuality";
         private const int HierarchyFramesPerPhase = 90;
         private const float OcclusionOffSeconds = 4f;
         private const float CombatShotInterval = 0.4f;
@@ -70,6 +73,9 @@ namespace OpenworldCrime.EditorTools
         private static int pathIndex;
         private static double lastTick;
         private static bool mounted;
+        private static int originalQuality = -1;
+        private static int originalTargetFrameRate;
+        private static int originalVSync;
 
         private static float denseYaw, openYaw;
         private static readonly List<PedestrianWalker> combatTargets = new List<PedestrianWalker>();
@@ -101,6 +107,22 @@ namespace OpenworldCrime.EditorTools
         [MenuItem("Tools/OpenworldCrime/Performance/Run Perf Capture - High")]
         private static void RunHigh() => Run("run_high_" + DateTime.Now.ToString("HHmmss"), "High");
 
+        [MenuItem("Tools/OpenworldCrime/Performance/Run Perf Capture - Android Quality (Simple)")]
+        private static void RunAndroidQuality() => RunWithQualityLevel("android_" + DateTime.Now.ToString("HHmmss"), 2);
+
+        [MenuItem("Tools/OpenworldCrime/Performance/Run Perf Capture - PC Quality (Good)")]
+        private static void RunPcQuality() => RunWithQualityLevel("pc_" + DateTime.Now.ToString("HHmmss"), 3);
+
+        /// <summary>
+        /// Like <see cref="Run"/>, but forces a QualitySettings level (and its URP asset) for this play session; the editor's
+        /// level is put back afterwards. A graphics profile can be given as well (scenes with a GraphicsSettingsManager).
+        /// </summary>
+        public static void RunWithQualityLevel(string runLabel, int qualityLevel, string profile = null)
+        {
+            SessionState.SetInt(QualityKey, qualityLevel);
+            Run(runLabel, profile);
+        }
+
         /// <summary>
         /// Enters play mode and runs the capture; the report goes to Captures/perf_{runLabel}.txt. A profile name (Low, Medium,
         /// High) forces that graphics profile for this play session only (nothing in the scene changes).
@@ -116,6 +138,7 @@ namespace OpenworldCrime.EditorTools
             SessionState.SetBool(ActiveKey, true);
             if (string.IsNullOrEmpty(profile)) SessionState.EraseString(GraphicsSettingsManager.EditorProfileOverrideKey);
             else SessionState.SetString(GraphicsSettingsManager.EditorProfileOverrideKey, profile);
+            SessionState.SetInt(OriginalQualityKey, QualitySettings.GetQualityLevel());
             EditorApplication.EnterPlaymode();
         }
 
@@ -133,10 +156,20 @@ namespace OpenworldCrime.EditorTools
             label = SessionState.GetString(LabelKey, "capture");
             report.Clear();
             GraphicsSettingsManager settings = UnityEngine.Object.FindFirstObjectByType<GraphicsSettingsManager>();
+            originalQuality = SessionState.GetInt(OriginalQualityKey, -1);
+            int forcedQuality = SessionState.GetInt(QualityKey, -1);
+            SessionState.EraseInt(QualityKey);
+            if (forcedQuality >= 0 && forcedQuality < QualitySettings.names.Length) QualitySettings.SetQualityLevel(forcedQuality, true);
+            // Measure uncapped: the frame cap and vSync would hide the real frame cost.
+            originalTargetFrameRate = Application.targetFrameRate;
+            originalVSync = QualitySettings.vSyncCount;
+            Application.targetFrameRate = -1;
+            QualitySettings.vSyncCount = 0;
             report.AppendLine($"Perf capture '{label}'  {DateTime.Now:yyyy-MM-dd HH:mm:ss}  Unity {Application.unityVersion}");
             report.AppendLine($"Graphics profile: {(settings != null && settings.CurrentProfile != null ? settings.CurrentProfile.DisplayName : "none")}");
             report.AppendLine($"Quality level: {QualitySettings.names[QualitySettings.GetQualityLevel()]}  lodBias {QualitySettings.lodBias}  mipLimit {QualitySettings.globalTextureMipmapLimit}  vSync {QualitySettings.vSyncCount}");
             report.AppendLine($"Device: {SystemInfo.graphicsDeviceName}  RAM {SystemInfo.systemMemorySize} MB  VRAM {SystemInfo.graphicsMemorySize} MB  Game view {Screen.width}x{Screen.height}");
+            report.AppendLine($"Pipeline: {(QualitySettings.renderPipeline != null ? QualitySettings.renderPipeline.name : "default")}  frame cap during capture: off (game cap was {originalTargetFrameRate}, vSync {originalVSync})");
             report.AppendLine("Editor play mode: numbers include editor overhead (EditorLoop, inspector, scene view). Compare runs, not builds.");
             SetPhase(Phase.Warmup);
             EditorApplication.update += Tick;
@@ -252,7 +285,8 @@ namespace OpenworldCrime.EditorTools
                         Accumulate();
                         if (Elapsed >= DriveSeconds)
                         {
-                            EndSampling($"DRIVING ({(mounted ? "mounted Sport bike" : "MOUNT FAILED: player moved")} along iTS lanes at {DriveSpeed} m/s)", true);
+                            string driver = mounted ? "mounted " + (bike != null ? bike.name : "vehicle") : "MOUNT FAILED: player moved";
+                            EndSampling($"DRIVING ({driver} along iTS lanes at {DriveSpeed} m/s)", true);
                             Screenshot("drive");
                             SetPhase(Phase.Done);
                         }
@@ -314,9 +348,12 @@ namespace OpenworldCrime.EditorTools
             Vector3 origin = cam.transform.position;
             const int sectors = 12;
             var counts = new int[sectors];
-            foreach (Renderer r in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+            // Only the static city ("env" root when the scene has one), so traffic does not change the chosen views between runs.
+            GameObject envRoot = GameObject.Find("env");
+            Renderer[] candidates = envRoot != null ? envRoot.GetComponentsInChildren<Renderer>(true) : UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+            foreach (Renderer r in candidates)
             {
-                if (!r.enabled || r is SkinnedMeshRenderer || r is ParticleSystemRenderer) continue;
+                if (r is SkinnedMeshRenderer || r is ParticleSystemRenderer || !r.gameObject.activeInHierarchy) continue;
                 Vector3 d = r.bounds.center - origin;
                 d.y = 0f;
                 float dist = d.magnitude;
@@ -367,7 +404,7 @@ namespace OpenworldCrime.EditorTools
         private static void TickCombat()
         {
             double now = EditorApplication.timeSinceStartup;
-            GameObject playerGo = GameObject.Find(PlayerPath);
+            GameObject playerGo = FindPlayer();
             if (playerGo == null) return;
             if (now >= nextShot)
             {
@@ -741,19 +778,41 @@ namespace OpenworldCrime.EditorTools
         private static void StartMount()
         {
             mounted = false;
-            GameObject bikeGo = GameObject.Find(BikePath);
-            GameObject playerGo = GameObject.Find(PlayerPath);
+            GameObject playerGo = FindPlayer();
+            GameObject bikeGo = FindVehicle(playerGo);
             bike = bikeGo != null ? bikeGo.GetComponent<RCCVehicleAdapter>() : null;
             PlayerVehicleInteraction interaction = playerGo != null ? playerGo.GetComponent<PlayerVehicleInteraction>() : null;
             bool requested = bike != null && interaction != null && interaction.RequestEnter(bike);
             report.AppendLine();
-            report.AppendLine($"Mount request: {(requested ? "accepted" : "refused")}");
+            report.AppendLine($"Mount request ({(bikeGo != null ? bikeGo.name : "no vehicle")}): {(requested ? "accepted" : "refused")}");
+        }
+
+        private static GameObject FindPlayer()
+        {
+            GameObject go = GameObject.Find(PlayerPath);
+            if (go != null) return go;
+            PlayerVehicleInteraction interaction = UnityEngine.Object.FindFirstObjectByType<PlayerVehicleInteraction>();
+            return interaction != null ? interaction.gameObject : null;
+        }
+
+        // The Sport bike in scenes that have it, otherwise the nearest drivable (RCC) vehicle to the player.
+        private static GameObject FindVehicle(GameObject playerGo)
+        {
+            GameObject go = GameObject.Find(BikePath);
+            if (go != null || playerGo == null) return go;
+            float best = float.MaxValue;
+            foreach (RCCVehicleAdapter v in UnityEngine.Object.FindObjectsByType<RCCVehicleAdapter>(FindObjectsSortMode.None))
+            {
+                float d = (v.transform.position - playerGo.transform.position).sqrMagnitude;
+                if (d < best) { best = d; go = v.gameObject; }
+            }
+            return go;
         }
 
         private static void PrepareDrive()
         {
             mounted = bike != null && bike.IsControlled;
-            GameObject playerGo = GameObject.Find(PlayerPath);
+            GameObject playerGo = FindPlayer();
             mover = mounted ? bike.transform : playerGo != null ? playerGo.transform : null;
             if (mover == null) return;
 
@@ -846,8 +905,8 @@ namespace OpenworldCrime.EditorTools
 
         private static void Screenshot(string suffix)
         {
-            Directory.CreateDirectory("Captures");
-            ScreenCapture.CaptureScreenshot(Path.Combine("Captures", $"perf_{label}_{suffix}.png"));
+            Directory.CreateDirectory(OutputFolder);
+            ScreenCapture.CaptureScreenshot(Path.Combine(OutputFolder, $"perf_{label}_{suffix}.png"));
         }
 
         private static void Finish(string error)
@@ -860,12 +919,20 @@ namespace OpenworldCrime.EditorTools
             DisposeRecorders();
             ProfilerDriver.enabled = false;
             if (error != null) report.AppendLine("ABORTED: " + error);
-            Directory.CreateDirectory("Captures");
-            string file = Path.Combine("Captures", $"perf_{label}.txt");
+            Directory.CreateDirectory(OutputFolder);
+            string file = Path.Combine(OutputFolder, $"perf_{label}.txt");
             File.WriteAllText(file, report.ToString());
             Debug.Log($"[PerfCapture] Report written to {Path.GetFullPath(file)}");
             bike = null;
             mover = null;
+            Application.targetFrameRate = originalTargetFrameRate;
+            QualitySettings.vSyncCount = originalVSync;
+            SessionState.EraseInt(OriginalQualityKey);
+            if (originalQuality >= 0)
+            {
+                int restore = originalQuality;
+                EditorApplication.delayCall += () => QualitySettings.SetQualityLevel(restore, true);
+            }
             if (EditorApplication.isPlaying) EditorApplication.delayCall += () => { if (EditorApplication.isPlaying) EditorApplication.ExitPlaymode(); };
         }
     }

@@ -95,6 +95,44 @@ namespace OpenworldCrime.EditorTools
         [MenuItem("Tools/OpenworldCrime/Vehicles/Assign Final Cars To Traffic")]
         public static void AssignTrafficMenu() => Debug.Log(AssignToOpenScene());
 
+        [MenuItem("Tools/OpenworldCrime/Vehicles/Assign Handling Profiles To Drivable Cars")]
+        public static void AssignHandlingMenu() => Debug.Log(AssignHandlingProfiles());
+
+        // Driving feel per class (VehicleHandlingProfile assets, applied by RCCVehicleAdapter at runtime): tune these, no rebuild.
+        private const string HandlingFolder = "Assets/_Project/Data/Vehicles/Handling";
+        private static string HandlingProfilePath(CarClass c) =>
+            $"{HandlingFolder}/VehicleHandling_{(c == CarClass.SUV ? "SUV" : c == CarClass.Sedan ? "Sedan" : "Sports")}.asset";
+
+        private static VehicleHandlingProfile LoadHandlingProfile(CarClass c)
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VehicleHandlingProfile>(HandlingProfilePath(c));
+            if (profile == null) Debug.LogWarning($"[FinalCarBuilder] Handling profile missing: {HandlingProfilePath(c)}; the car keeps its RCC values.");
+            return profile;
+        }
+
+        /// <summary>Puts the class handling profile on every existing drivable final car (no rebuild).</summary>
+        public static string AssignHandlingProfiles()
+        {
+            var sb = new StringBuilder("[FinalCarBuilder] Handling profiles:\n");
+            foreach (CarDef def in Cars)
+            {
+                string path = $"{DrivableFolder}/Drivable_{def.Name}.prefab";
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(path) == null) { sb.AppendLine($"  {path}: missing"); continue; }
+                GameObject root = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    var adapter = root.GetComponent<RCCVehicleAdapter>();
+                    VehicleHandlingProfile profile = LoadHandlingProfile(def.Class);
+                    if (adapter == null || profile == null) { sb.AppendLine($"  {path}: skipped"); continue; }
+                    adapter.EditorSetHandlingProfile(profile);
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                    sb.AppendLine($"  Drivable_{def.Name}: {profile.name}");
+                }
+                finally { PrefabUtility.UnloadPrefabContents(root); }
+            }
+            return sb.ToString();
+        }
+
         /// <summary>Builds the drivable and traffic prefab of every car. Returns a per-car report.</summary>
         public static string BuildAll()
         {
@@ -121,6 +159,10 @@ namespace OpenworldCrime.EditorTools
             AssetDatabase.SaveAssets();
             sb.Append(BuildCombat());
             sb.AppendLine(PedDriverBuilder.RepatchPrefabs());
+            // Last, on the finished prefabs: the colour variant slots.
+            sb.AppendLine(FinalCarPaint.WirePrefabs());
+            // The lamps (emission per car, front / rear split meshes, VehicleLights) on the finished prefabs.
+            sb.AppendLine(VehicleLampBuilder.BuildAll());
             return sb.ToString();
         }
 
@@ -435,11 +477,12 @@ namespace OpenworldCrime.EditorTools
             float metallic = src.HasProperty("_Metallic") ? Mathf.Min(src.GetFloat("_Metallic"), 0.7f) : reflective ? 0.35f : 0f;
             float smooth = src.HasProperty("_Glossiness") ? Mathf.Clamp(src.GetFloat("_Glossiness"), 0.15f, 0.85f) : reflective ? 0.72f : 0.3f;
 
-            // Emission only where the source had it switched on (lamps).
-            bool emissive = src.IsKeywordEnabled("_EMISSION") && src.HasProperty("_EmissionColor") && src.GetColor("_EmissionColor").maxColorComponent > 0.01f;
-            dst.SetTexture("_EmissionMap", emissive && src.HasProperty("_EmissionMap") ? src.GetTexture("_EmissionMap") : null);
-            dst.SetColor("_EmissionColor", emissive ? src.GetColor("_EmissionColor") : Color.black);
-            if (emissive) dst.EnableKeyword("_EMISSION"); else dst.DisableKeyword("_EMISSION");
+            // Lamps keep the source's emission mask but start unlit: VehicleLights (set up by VehicleLampBuilder) switches the
+            // emission per car (headlights, tail / brake lights). Nothing else glows.
+            bool lamp = n.Contains("light") && src.HasProperty("_EmissionMap") && src.GetTexture("_EmissionMap") != null;
+            dst.SetTexture("_EmissionMap", lamp ? src.GetTexture("_EmissionMap") : null);
+            dst.SetColor("_EmissionColor", Color.black);
+            dst.DisableKeyword("_EMISSION");
             dst.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
 
             if (glass)
@@ -485,6 +528,7 @@ namespace OpenworldCrime.EditorTools
                 dst.SetShaderPassEnabled("DepthOnly", true);
             }
             dst.enableInstancing = true;
+            FinalCarPaint.ApplyIfBody(dst);
             EditorUtility.SetDirty(dst);
             materialCache[src] = dst;
             return dst;
@@ -597,6 +641,7 @@ namespace OpenworldCrime.EditorTools
                 var so = new SerializedObject(adapter);
                 so.FindProperty("driverDoor").objectReferenceValue = door;
                 so.ApplyModifiedPropertiesWithoutUndo();
+                adapter.EditorSetHandlingProfile(LoadHandlingProfile(def.Class));
 
                 root.GetComponent<Rigidbody>().mass = def.Mass;
                 ApplyHandling(rcc, def, body);

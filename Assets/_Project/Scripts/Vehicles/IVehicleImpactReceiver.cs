@@ -17,15 +17,22 @@ namespace OpenworldCrime.Vehicles
         /// </summary>
         public readonly VehicleCharacterImpact Source;
 
+        /// <summary>
+        /// The vehicle's own velocity (m/s) at the contact point going into the hit. <see cref="Velocity"/> is relative to the hit
+        /// object after the solver ran, so it is almost zero for a light dynamic body (the player) the car has just knocked along.
+        /// </summary>
+        public readonly Vector3 VehicleVelocity;
+
         public float Speed => Velocity.magnitude;
 
-        public VehicleImpact(Vector3 velocity, Vector3 point, float vehicleMass, Transform vehicle, VehicleCharacterImpact source = null)
+        public VehicleImpact(Vector3 velocity, Vector3 point, float vehicleMass, Transform vehicle, VehicleCharacterImpact source = null, Vector3 vehicleVelocity = default)
         {
             Velocity = velocity;
             Point = point;
             VehicleMass = vehicleMass;
             Vehicle = vehicle;
             Source = source;
+            VehicleVelocity = vehicleVelocity;
         }
     }
 

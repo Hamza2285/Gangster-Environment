@@ -20,6 +20,7 @@ namespace OpenworldCrime.Vehicles
     public class VehicleHealth : MonoBehaviour
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int BurntId = Shader.PropertyToID("_Burnt");
 
         [SerializeField] private VehicleDamageSettings settings;
         [Tooltip("Destroyed version of this car (visual only). Empty = the car's own model is darkened and kept as the wreck.")]
@@ -31,6 +32,8 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Raised once when a car blows up (any car). Used by the player's side to get out of it.</summary>
         public static event Action<VehicleHealth> OnAnyDestroyed;
+        /// <summary>Raised when this car takes damage. Args: amount, who did it (may be null).</summary>
+        public event Action<float, Transform> OnDamaged;
         /// <summary>Raised when the stage changes (never for the reset of a pooled car).</summary>
         public event Action<VehicleDamageStage> OnStageChanged;
         /// <summary>Raised once when this car blows up.</summary>
@@ -93,14 +96,25 @@ namespace OpenworldCrime.Vehicles
             float speed = Mathf.Abs(Vector3.Dot(collision.relativeVelocity, collision.GetContact(0).normal));
             if (speed < settings.crashMinimumSpeed) return;
             lastCrashTime = Time.time;
-            ApplyDamage((speed - settings.crashMinimumSpeed) * settings.crashDamagePerSpeed, collision.transform);
+            LastDamageWasCrash = true;
+            ApplyHealthDamage((speed - settings.crashMinimumSpeed) * settings.crashDamagePerSpeed, collision.transform);
         }
 
-        /// <summary>Takes damage (bullets, crashes, other explosions).</summary>
+        /// <summary>True while <see cref="OnDamaged"/> reports crash damage (a collision), false for bullets, fire and explosions.</summary>
+        public bool LastDamageWasCrash { get; private set; }
+
+        /// <summary>Takes damage (bullets, other explosions). Crashes come through the collision callback.</summary>
         public void ApplyDamage(float amount, Transform sender)
+        {
+            LastDamageWasCrash = false;
+            ApplyHealthDamage(amount, sender);
+        }
+
+        private void ApplyHealthDamage(float amount, Transform sender)
         {
             if (!valid || IsDestroyed || amount <= 0f) return;
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
+            OnDamaged?.Invoke(amount, sender);
             UpdateStage();
         }
 
@@ -256,6 +270,8 @@ namespace OpenworldCrime.Vehicles
                 color.b *= settings.burntTint.b;
                 renderer.GetPropertyBlock(block, m);
                 block.SetColor(BaseColorId, color);
+                // Car paint keeps its clear coat otherwise: a burnt car must not stay glossy.
+                if (materials[m].HasProperty(BurntId)) block.SetFloat(BurntId, 1f);
                 renderer.SetPropertyBlock(block, m);
             }
         }
