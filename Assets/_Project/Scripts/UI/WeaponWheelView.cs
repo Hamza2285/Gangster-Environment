@@ -18,6 +18,8 @@ namespace OpenworldCrime.UI
         {
             public Image background;
             public Text label;
+            [Tooltip("Optional weapon icon.")]
+            public Image icon;
         }
 
         [Header("Slots (clockwise from top)")]
@@ -44,9 +46,19 @@ namespace OpenworldCrime.UI
         private readonly List<string> names = new List<string>();
 
         /// <summary>Sets label and availability for one slot.</summary>
-        public void SetSlot(int index, string displayName, bool available)
+        public void SetSlot(int index, string displayName, bool available) => SetSlot(index, displayName, available, null);
+
+        /// <summary>Sets label, availability and icon (hidden when null) for one slot.</summary>
+        public void SetSlot(int index, string displayName, bool available, Sprite iconSprite)
         {
             if (index < 0 || index >= slots.Count) return;
+            Image iconImage = slots[index].icon;
+            if (iconImage != null)
+            {
+                iconImage.sprite = iconSprite;
+                iconImage.enabled = iconSprite != null;
+                iconImage.color = available ? Color.white : new Color(1f, 1f, 1f, 0.35f);
+            }
             while (availability.Count <= index) { availability.Add(false); names.Add(string.Empty); }
             availability[index] = available;
             names[index] = displayName;

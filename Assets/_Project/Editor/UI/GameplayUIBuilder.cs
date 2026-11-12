@@ -22,6 +22,7 @@ namespace OpenworldCrime.EditorTools
     /// - Keys: frees Tab (weapon wheel), the scroll wheel and 1/2/3 (quick switch) from Invector's defaults.
     /// - UIManager with the HUD (weapon, ammo), weapon wheel and vehicle prompt, under ///Manager///.
     /// - ControlsModeManager, the touch controls canvas (MobileCombatButtons) and the touch aim assist.
+    /// - The small GTA-style crosshair on Player_Jason.prefab (<see cref="CrosshairStyleBuilder"/>).
     /// Menu: Tools > OpenworldCrime > Player > Setup Combat UI In Open Scene.
     /// </summary>
     public static class GameplayUIBuilder
@@ -65,6 +66,7 @@ namespace OpenworldCrime.EditorTools
             var sb = new StringBuilder("[GameplayUIBuilder]\n");
             EnsureVirtualInputNames(sb);
             ConfigurePlayer(player, sb);
+            sb.Append(CrosshairStyleBuilder.Style());
             TuneAimCamera(sb);
             UseStraightBullets(sb);
             UIManager ui = BuildGameplayUI(managerRoot.transform, player, playerManager);

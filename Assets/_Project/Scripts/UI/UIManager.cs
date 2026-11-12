@@ -1,6 +1,8 @@
 using Invector.vCharacterController;
 using Invector.vShooter;
+using OpenworldCrime.Economy;
 using OpenworldCrime.Player;
+using OpenworldCrime.Shop;
 using OpenworldCrime.Vehicles;
 using UnityEngine;
 using UnityEngine.UI;
@@ -29,6 +31,23 @@ namespace OpenworldCrime.UI
         [SerializeField] private GameObject weaponInfoGroup;
         [SerializeField] private Text weaponNameText;
         [SerializeField] private Text ammoText;
+        [Tooltip("Optional icon of the equipped weapon (catalog weapons).")]
+        [SerializeField] private Image weaponIcon;
+        [Tooltip("Cash display (MoneyManager).")]
+        [SerializeField] private Text moneyText;
+
+        [Header("Interaction Prompt")]
+        [Tooltip("Shown while an interactable (shop door, counter, range...) is in range. On touch screens the panel itself is the button.")]
+        [SerializeField] private PlayerInteractionController interactionController;
+        [SerializeField] private GameObject interactPromptPanel;
+        [SerializeField] private Text interactPromptText;
+        [SerializeField] private string interactKeyHint = "  [E]";
+
+        [Header("Full-screen Menus")]
+        [Tooltip("Gun shop menu panel (visuals: WeaponShopView). Opened while the WeaponShopController reports the shop open.")]
+        [SerializeField] private GameObject weaponShopPanel;
+        [Tooltip("Hidden while a full-screen menu (shop) is open, restored afterwards (e.g. touch controls, Invector HUD).")]
+        [SerializeField] private GameObject[] hiddenDuringMenus = new GameObject[0];
 
         [Header("Weapon Wheel")]
         [SerializeField] private GameObject weaponWheelPanel;
@@ -41,6 +60,8 @@ namespace OpenworldCrime.UI
         [SerializeField, Min(0.001f)] private float mouseSensitivity = 0.08f;
         [Tooltip("Slow motion while the wheel is open (1 = off).")]
         [SerializeField, Range(0.05f, 1f)] private float wheelTimeScale = 0.3f;
+        [Tooltip("While the wheel is open, cycles the weapon inside the highlighted group (catalog wheel).")]
+        [SerializeField] private GenericInput wheelCycleInput = new GenericInput("Mouse ScrollWheel", "", "");
 
         [Header("Vehicle")]
         [SerializeField] private PlayerVehicleInteraction vehicleInteraction;
@@ -67,6 +88,9 @@ namespace OpenworldCrime.UI
         private bool onFootHudHidden;
         private bool[] onFootHudWasActive;
         private float vehicleMessageTimer;
+        private float nextWheelCycleTime;
+        private bool menuOpen;
+        private bool[] menuHiddenWasActive;
 
         private void Awake()
         {
@@ -81,6 +105,9 @@ namespace OpenworldCrime.UI
             onFootHudWasActive = new bool[onFootHudObjects.Length];
             if (vehiclePromptPanel != null) vehiclePromptPanel.SetActive(false);
             if (vehicleMessagePanel != null) vehicleMessagePanel.SetActive(false);
+            if (interactPromptPanel != null) interactPromptPanel.SetActive(false);
+            if (weaponShopPanel != null) weaponShopPanel.SetActive(false);
+            menuHiddenWasActive = new bool[hiddenDuringMenus.Length];
             if (vehicleInteraction == null)
             {
                 Debug.LogWarning($"[{nameof(UIManager)}] No PlayerVehicleInteraction assigned on '{name}'; vehicle prompt/HUD switching is disabled.", this);
@@ -100,6 +127,10 @@ namespace OpenworldCrime.UI
             weaponController.OnWeaponEquipped += HandleWeaponChanged;
             weaponController.OnWeaponUnequipped += HandleWeaponChanged;
             weaponController.OnAmmoChanged += HandleAmmoChanged;
+            weaponController.OnSlotsChanged += HandleSlotsChanged;
+            MoneyManager.OnMoneyChanged += HandleMoneyChanged;
+            WeaponShopController.OnShopOpenChanged += HandleShopOpenChanged;
+            if (interactionController != null) interactionController.OnFocusChanged += HandleInteractFocusChanged;
 
             if (vehicleInteraction != null)
             {
@@ -125,7 +156,11 @@ namespace OpenworldCrime.UI
                 weaponController.OnWeaponEquipped -= HandleWeaponChanged;
                 weaponController.OnWeaponUnequipped -= HandleWeaponChanged;
                 weaponController.OnAmmoChanged -= HandleAmmoChanged;
+                weaponController.OnSlotsChanged -= HandleSlotsChanged;
             }
+            MoneyManager.OnMoneyChanged -= HandleMoneyChanged;
+            WeaponShopController.OnShopOpenChanged -= HandleShopOpenChanged;
+            if (interactionController != null) interactionController.OnFocusChanged -= HandleInteractFocusChanged;
             if (vehicleInteraction != null)
             {
                 vehicleInteraction.OnVehicleFocusChanged -= HandleVehicleFocusChanged;
@@ -142,6 +177,7 @@ namespace OpenworldCrime.UI
             if (hudPanel != null) hudPanel.SetActive(true);
             RefreshHealth();
             RefreshWeaponInfo();
+            if (MoneyManager.Instance != null) HandleMoneyChanged(MoneyManager.Instance.Balance, 0);
         }
 
         // Per-frame only for the hold-to-open wheel input/cursor and the vehicle message timer.
@@ -167,6 +203,15 @@ namespace OpenworldCrime.UI
 
             UpdateWheelCursor();
             weaponWheelView.UpdateSelection(wheelCursor);
+
+            // GTA V: scroll inside the highlighted group while the wheel is open.
+            float scroll = wheelCycleInput.GetAxisRaw();
+            int highlighted = weaponWheelView.HighlightedIndex;
+            if (scroll != 0f && highlighted >= 0 && Time.unscaledTime >= nextWheelCycleTime)
+            {
+                nextWheelCycleTime = Time.unscaledTime + 0.15f;
+                if (weaponController.CycleWithinSlot(highlighted, scroll > 0f ? 1 : -1)) FillWheelSlots();
+            }
         }
 
         private bool CanOpenWeaponWheel()
@@ -181,12 +226,7 @@ namespace OpenworldCrime.UI
             IsWeaponWheelOpen = true;
             wheelCursor = Vector2.zero;
 
-            var slots = weaponController.WeaponSlots;
-            for (int i = 0; i < weaponWheelView.SlotCount; i++)
-            {
-                bool hasSlot = i < slots.Count;
-                weaponWheelView.SetSlot(i, hasSlot ? slots[i].DisplayName : string.Empty, hasSlot && weaponController.IsSlotAvailable(i));
-            }
+            FillWheelSlots();
             weaponWheelView.SetHighlighted(weaponController.GetCurrentSlotIndex());
             weaponWheelView.UpdateSelection(wheelCursor);
             weaponWheelPanel.SetActive(true);
@@ -200,6 +240,77 @@ namespace OpenworldCrime.UI
                 Time.timeScale = timeScaleBeforeWheel * wheelTimeScale;
                 Time.fixedDeltaTime = fixedDeltaTimeBeforeWheel * wheelTimeScale;
             }
+        }
+
+        private void FillWheelSlots()
+        {
+            var slots = weaponController.WeaponSlots;
+            for (int i = 0; i < weaponWheelView.SlotCount; i++)
+            {
+                bool hasSlot = i < slots.Count;
+                string label = string.Empty;
+                if (hasSlot)
+                {
+                    label = slots[i].Category.HasValue && slots[i].Selected != null
+                        ? PlayerWeaponController.CategoryLabel(slots[i].Category.Value) + "\n" + slots[i].DisplayName
+                        : slots[i].DisplayName;
+                }
+                weaponWheelView.SetSlot(i, label, hasSlot && weaponController.IsSlotAvailable(i), hasSlot ? slots[i].Icon : null);
+            }
+            if (weaponWheelView.HighlightedIndex >= 0) weaponWheelView.SetHighlighted(weaponWheelView.HighlightedIndex);
+        }
+
+        private void HandleSlotsChanged()
+        {
+            if (IsWeaponWheelOpen) FillWheelSlots();
+            RefreshWeaponInfo();
+        }
+
+        private void HandleMoneyChanged(int balance, int delta)
+        {
+            if (moneyText != null) moneyText.text = "$" + balance.ToString("N0");
+        }
+
+        private void HandleInteractFocusChanged(IPlayerInteractable focus)
+        {
+            if (interactPromptPanel == null) return;
+            bool show = focus != null && !menuOpen;
+            if (show && interactPromptText != null)
+            {
+                bool touch = vInput.instance != null && vInput.instance.inputDevice == InputDevice.Mobile;
+                interactPromptText.text = touch ? focus.InteractionPrompt : focus.InteractionPrompt + interactKeyHint;
+            }
+            interactPromptPanel.SetActive(show);
+        }
+
+        private void HandleShopOpenChanged(bool open)
+        {
+            if (weaponShopPanel != null) weaponShopPanel.SetActive(open);
+            SetMenuOpen(open);
+        }
+
+        private void SetMenuOpen(bool open)
+        {
+            if (menuOpen == open) return;
+            menuOpen = open;
+            if (open && IsWeaponWheelOpen) CloseWeaponWheel(false);
+            if (hudPanel != null) hudPanel.SetActive(!open);
+            if (open && interactPromptPanel != null) interactPromptPanel.SetActive(false);
+            for (int i = 0; i < hiddenDuringMenus.Length; i++)
+            {
+                GameObject target = hiddenDuringMenus[i];
+                if (target == null) continue;
+                if (open)
+                {
+                    menuHiddenWasActive[i] = target.activeSelf;
+                    target.SetActive(false);
+                }
+                else
+                {
+                    target.SetActive(menuHiddenWasActive[i]);
+                }
+            }
+            if (!open && interactionController != null) HandleInteractFocusChanged(interactionController.CurrentFocus);
         }
 
         private void CloseWeaponWheel(bool equipSelection)
@@ -260,7 +371,13 @@ namespace OpenworldCrime.UI
             if (weaponInfoGroup != null) weaponInfoGroup.SetActive(!onFootHudHidden);
             if (onFootHudHidden) return;
 
-            if (weaponNameText != null) weaponNameText.text = weaponController.GetCurrentSlotName();
+            var definition = weaponController.GetCurrentWeaponDefinition();
+            if (weaponNameText != null) weaponNameText.text = definition != null ? definition.displayName : weaponController.GetCurrentSlotName();
+            if (weaponIcon != null)
+            {
+                weaponIcon.sprite = definition != null ? definition.icon : null;
+                weaponIcon.enabled = weaponIcon.sprite != null;
+            }
             if (ammoText != null) ammoText.text = weaponController.HasWeapon ? $"{weaponController.AmmoInClip} / {weaponController.ExtraAmmo}" : string.Empty;
         }
 

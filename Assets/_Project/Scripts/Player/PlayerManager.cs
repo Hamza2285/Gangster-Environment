@@ -113,6 +113,43 @@ namespace OpenworldCrime.Player
             OnInputLockChanged?.Invoke(locked);
         }
 
+        /// <summary>True while the player is held in place (e.g. at a shooting range bench): see <see cref="SetMovementLocked"/>.</summary>
+        public bool IsMovementLocked { get; private set; }
+
+        // useInput values of Invector's sprint / jump / roll / crouch inputs before the movement lock.
+        private readonly bool[] movementInputsBeforeLock = new bool[4];
+
+        /// <summary>
+        /// Holds the player in place while keeping aiming, looking, shooting, reloading and weapon switching:
+        /// Invector's move input is locked and its sprint / jump / roll / crouch inputs are switched off (restored on unlock).
+        /// </summary>
+        public void SetMovementLocked(bool locked)
+        {
+            if (IsMovementLocked == locked) return;
+            IsMovementLocked = locked;
+            GenericInput[] inputs = { input.sprintInput, input.jumpInput, input.rollInput, input.crouchInput };
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (locked)
+                {
+                    movementInputsBeforeLock[i] = inputs[i].useInput;
+                    inputs[i].useInput = false;
+                }
+                else
+                {
+                    inputs[i].useInput = movementInputsBeforeLock[i];
+                }
+            }
+            input.lockMoveInput = locked;
+            if (locked)
+            {
+                controller.input = Vector3.zero;
+                controller.isSprinting = false;
+                if (controller.isCrouching) controller.Crouch(); // toggles back to standing
+                controller.StopCharacter();
+            }
+        }
+
         /// <summary>Marks the player as getting in / driving / getting out of a vehicle (set by PlayerVehicleInteraction).</summary>
         public void SetInVehicle(bool inVehicle)
         {
