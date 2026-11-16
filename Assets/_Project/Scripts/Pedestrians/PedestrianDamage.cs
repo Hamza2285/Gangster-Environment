@@ -122,6 +122,11 @@ namespace OpenworldCrime.Pedestrians
         public event Action<Vector3> OnDied;
         /// <summary>Raised when the pedestrian takes damage and survives (e.g. shot or bumped). Arg: damage source position.</summary>
         public event Action<Vector3> OnHurt;
+        /// <summary>
+        /// Raised for every damage a living pedestrian takes (any pedestrian, e.g. for crime reporting). Args: the pedestrian, the
+        /// Invector damage (sender, type), whether it killed him. Hits on a body that was already dead are not reported.
+        /// </summary>
+        public static event Action<PedestrianDamage, vDamage, bool> OnAnyDamaged;
 
         public bool IsDead => character == null || character.isDead;
         public bool IsDown => ragdoll != null && (ragdoll.IsActive || ragdoll.IsFrozen);
@@ -130,6 +135,7 @@ namespace OpenworldCrime.Pedestrians
 
         private vDamage lastDamage;
         private float lastVehicleHitTime = -100f;
+        private bool deadBeforeHit;
         private Coroutine recoverRoutine;
         private Vector3 lastThreat;
         private bool dirty;
@@ -280,8 +286,11 @@ namespace OpenworldCrime.Pedestrians
             ragdoll.SetFarHitboxHeight(h);
         }
 
-        /// <summary>Caught in an explosion: thrown away from it as a ragdoll and hurt (a body on the ground is only pushed).</summary>
-        public void ReceiveExplosion(Vector3 center, float damageValue, float throwSpeed)
+        /// <summary>
+        /// Caught in an explosion: thrown away from it as a ragdoll and hurt (a body on the ground is only pushed). sender: who caused
+        /// the blast (carried on the damage, e.g. for crime reports), may be null.
+        /// </summary>
+        public void ReceiveExplosion(Vector3 center, float damageValue, float throwSpeed, Transform sender = null)
         {
             if (!valid || !isActiveAndEnabled) return;
             dirty = true;
@@ -299,6 +308,7 @@ namespace OpenworldCrime.Pedestrians
             character.TakeDamage(new vDamage
             {
                 damageValue = Mathf.Round(damageValue),
+                sender = sender,
                 hitPosition = center,
                 damageType = "Explosion",
                 ignoreDefense = true,
@@ -367,6 +377,7 @@ namespace OpenworldCrime.Pedestrians
         private void HandleStartDamage(vDamage damage)
         {
             dirty = true;
+            deadBeforeHit = IsDead;
             lastDamage = damage;
             if (damage.sender != null) lastThreat = damage.sender.position;
             // Walking people have one capsule hitbox (no bone colliders until hit): the head counts by the height of the hit.
@@ -376,6 +387,7 @@ namespace OpenworldCrime.Pedestrians
 
         private void HandleDamage(vDamage damage)
         {
+            if (!deadBeforeHit) OnAnyDamaged?.Invoke(this, damage, IsDead);
             if (IsDead) return;
             // Health is already reduced here (and onDead raised for a killing shot), so this is a survivor.
             if (knockDownWhenShot && !IsDown && damage.damageType == shotDamageType)
@@ -520,5 +532,8 @@ namespace OpenworldCrime.Pedestrians
                 if (bones[i] != null) Physics.IgnoreCollision(aliveCollider, bones[i], true);
             }
         }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => OnAnyDamaged = null;
     }
 }
