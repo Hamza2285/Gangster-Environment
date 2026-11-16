@@ -61,7 +61,8 @@ public class BikeCrash : MonoBehaviour
     {
         if (Crashed) return;
         var other = collision.rigidbody;
-        if (other == null || other.GetComponent<PlayerCarController>() == null) return;
+        // The player's car: the RCC cars he drives (or the old simple car controller).
+        if (other == null || (other.GetComponent<RCC_CarControllerV3>() == null && other.GetComponent<PlayerCarController>() == null)) return;
         float impact = collision.relativeVelocity.magnitude;
         if (impact < minImpactSpeed) return;
 

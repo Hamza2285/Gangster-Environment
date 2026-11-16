@@ -1842,17 +1842,20 @@ namespace OpenworldCrime.Player
             SetFocus(best);
         }
 
-        // On the driver's side of the vehicle and close to its driver door; getting in from the opposite side is not offered.
+        // Close to the driver door, or anywhere close around the vehicle (any side, front or back): the approach then walks
+        // round the car to the driver door (VehicleApproachPath), GTA style.
+        [SerializeField, Min(1f)] private float anySideRange = 4.2f;
+
         private bool IsAtDriverDoor(IVehicleInteractionTarget vehicle, Vector3 position)
         {
             Transform door = GetApproachGoal(vehicle);
             if (door == null) return false;
             Vector3 toDoor = door.position - position;
             toDoor.y = 0f;
-            if (toDoor.sqrMagnitude > driverDoorRange * driverDoorRange) return false;
-            Transform car = vehicle.transform;
-            float doorSide = car.InverseTransformPoint(door.position).x;
-            return Mathf.Sign(car.InverseTransformPoint(position).x) == Mathf.Sign(doorSide);
+            if (toDoor.sqrMagnitude <= driverDoorRange * driverDoorRange) return true;
+            Vector3 toCar = vehicle.transform.position - position;
+            toCar.y = 0f;
+            return toCar.sqrMagnitude <= anySideRange * anySideRange;
         }
 
         // One-shot re-seed after exiting: trigger enter events are not guaranteed while collisions were ignored.

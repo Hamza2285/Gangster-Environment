@@ -12,6 +12,15 @@ namespace OpenworldCrime.Vehicles
     [DisallowMultipleComponent]
     public class WindshieldCrashSensor : MonoBehaviour
     {
+        // Speed (km/h) the car must have been doing just before the hit.
+        public static float MinSpeedKmh = 95f;
+        // Speed (km/h) the car must lose in the hit along its forward direction.
+        public static float MinSpeedLossKmh = 65f;
+        // A moving thing counts as a crash only if it is at least this heavy (kg): another car, not a bin.
+        public static float MinOtherMass = 400f;
+        // Something fixed counts only if it is at least this big (m across): a wall, not a sign post.
+        public static float MinStaticSize = 1.5f;
+
         private Rigidbody body;
         private PlayerVehicleInteraction driver;
         private Vector3 velocityBefore;
@@ -43,6 +52,7 @@ namespace OpenworldCrime.Vehicles
         private void OnCollisionEnter(Collision collision)
         {
             if (driver == null || body == null || !driver.IsInVehicle || collision.contactCount == 0) return;
+            if (!IsSolid(collision)) return;
 
             // Head-on: the contact is in the front half of the car and the car was moving forward into it.
             Vector3 forward = transform.forward;
@@ -52,7 +62,25 @@ namespace OpenworldCrime.Vehicles
             if (before <= 0f) return;
             float after = Vector3.Dot(body.linearVelocity, forward);
             float lostKmh = (before - after) * 3.6f;
+            if (before * 3.6f < MinSpeedKmh || lostKmh < MinSpeedLossKmh) return;
             driver.TryWindshieldEject(velocityBefore, lostKmh);
+        }
+
+        // Another car or something big and fixed (a wall, a building, a barrier). Not people, not props that break or
+        // fall over, not small light things.
+        private static bool IsSolid(Collision collision)
+        {
+            var other = collision.collider;
+            if (other == null || other.isTrigger) return false;
+            if (other.GetComponentInParent<Pedestrians.PedestrianDamage>() != null) return false;
+            if (other.GetComponentInParent<Environment.BreakableProp>() != null) return false;
+            if (other.GetComponentInParent<CharacterController>() != null) return false;
+            if (other.GetComponentInParent<Invector.vCharacterController.vCharacter>() != null) return false;
+            var otherBody = collision.rigidbody;
+            if (otherBody != null && !otherBody.isKinematic) return otherBody.mass >= MinOtherMass;
+            if (otherBody != null && otherBody.GetComponentInParent<IVehicleController>() != null) return true;
+            Vector3 size = other.bounds.size;
+            return Mathf.Max(size.x, size.y, size.z) >= MinStaticSize && size.y >= 0.6f;
         }
 
         // The windscreen in pieces, flying on with the driver.

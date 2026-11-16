@@ -29,7 +29,7 @@ public static class BikePrefabBuilder
     static readonly BikeModel Sport = new BikeModel
     {
         name = "SportBike",
-        fbx = "Assets/PopulationSystem/Models/Bike 1/Bike_1.fbx",
+        fbx = "Assets/Bike 1/Bike_1.fbx",
         material = "Assets/PopulationSystem/Models/Bike 1/materials/Material #24.mat",
         scale = 0.76f,
         seat = new Vector3(0f, 1.04f, -0.47f),
@@ -45,7 +45,7 @@ public static class BikePrefabBuilder
     static readonly BikeModel Chopper = new BikeModel
     {
         name = "Chopper",
-        fbx = "Assets/PopulationSystem/Models/Bike 2/Bike_2.fbx",
+        fbx = "Assets/Bike 2/Bike_2.fbx",
         material = "Assets/PopulationSystem/Models/Bike 2/materials/02 - Default.mat",
         scale = 0.65f,
         seat = new Vector3(0f, 0.92f, -0.78f),
@@ -64,14 +64,64 @@ public static class BikePrefabBuilder
         public string paint, rider, suffix;
     }
 
+    // Paint jobs that ship with the models, plus recoloured copies (the painted panels' hue turned; chrome, tyres and
+    // black trim are left alone because they have little colour).
+    const string PaintDir = OutDir + "/Paint";
+
+    class Recolour
+    {
+        public string source, name;
+        public float hue;
+    }
+
+    static readonly Recolour[] Recolours =
+    {
+        new Recolour { source = "Assets/Bike 1/crb97-t1.png", name = "Sport_Green", hue = 120f },
+        new Recolour { source = "Assets/Bike 1/crb97-t1.png", name = "Sport_Purple", hue = 280f },
+        new Recolour { source = "Assets/Bike 2/bike_t1.png", name = "Chopper_Red", hue = 130f },
+        new Recolour { source = "Assets/Bike 2/bike_t1.png", name = "Chopper_Green", hue = 245f },
+        new Recolour { source = "Assets/Bike 2/bike_t1.png", name = "Chopper_Purple", hue = 50f },
+    };
+
     static readonly Variant[] Variants =
     {
-        new Variant { model = Sport, paint = "Assets/PopulationSystem/Models/Bike 1/textures/crb97-t2.png", rider = "Man_22", suffix = "A" },
-        new Variant { model = Sport, paint = "Assets/PopulationSystem/Models/Bike 1/crb97-t1.png", rider = "Girl_33", suffix = "B" },
-        new Variant { model = Chopper, paint = "Assets/PopulationSystem/Models/Bike 2/textures/bike_t3.png", rider = "Man_55", suffix = "A" },
-        new Variant { model = Chopper, paint = "Assets/PopulationSystem/Models/Bike 2/bike_t1.png", rider = "Man_88", suffix = "B" },
-        new Variant { model = Chopper, paint = "Assets/PopulationSystem/Models/Bike 2/bike_t5.png", rider = "Girl_66", suffix = "C" },
+        new Variant { model = Sport, paint = "Assets/Bike 1/crb97-t1.png", rider = "Man_22", suffix = "Red" },
+        new Variant { model = Sport, paint = "Assets/Bike 1/hcbr-t3.png", rider = "Man_11", suffix = "Black" },
+        new Variant { model = Sport, paint = "Assets/Bike 1/hcbr-t4.png", rider = "Girl_33", suffix = "Blue" },
+        new Variant { model = Sport, paint = PaintDir + "/Sport_Green.png", rider = "Man_33", suffix = "Green" },
+        new Variant { model = Sport, paint = PaintDir + "/Sport_Purple.png", rider = "Girl_11", suffix = "Purple" },
+        new Variant { model = Chopper, paint = "Assets/Bike 2/bike_t1.png", rider = "Man_55", suffix = "Blue" },
+        new Variant { model = Chopper, paint = "Assets/Bike 2/bike_t2.png", rider = "Man_88", suffix = "Yellow" },
+        new Variant { model = Chopper, paint = PaintDir + "/Chopper_Red.png", rider = "Girl_66", suffix = "Red" },
+        new Variant { model = Chopper, paint = PaintDir + "/Chopper_Green.png", rider = "Man_44", suffix = "Green" },
+        new Variant { model = Chopper, paint = PaintDir + "/Chopper_Purple.png", rider = "Man_99", suffix = "Purple" },
     };
+
+    static void MakeRecolours()
+    {
+        Directory.CreateDirectory(PaintDir);
+        foreach (var r in Recolours)
+        {
+            string outPath = PaintDir + "/" + r.name + ".png";
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.LoadImage(File.ReadAllBytes(r.source));
+            var pixels = texture.GetPixels32();
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color c = pixels[i];
+                Color.RGBToHSV(c, out float h, out float sat, out float v);
+                if (sat < 0.3f) continue;
+                Color shifted = Color.HSVToRGB(Mathf.Repeat(h + r.hue / 360f, 1f), sat, v);
+                shifted.a = c.a;
+                pixels[i] = shifted;
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            File.WriteAllBytes(outPath, texture.EncodeToPNG());
+            Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(outPath);
+        }
+    }
 
     // Bikes keep the base car's proven weight, suspension and engine: a light body gets shoved off its lane
     // by 2.5 t cars and is less stable on car-tuned wheels. Weight isn't visible; the model and lean are.
@@ -83,6 +133,7 @@ public static class BikePrefabBuilder
         Directory.CreateDirectory(OutDir);
         Directory.CreateDirectory(OutDir + "/Materials");
         AssetDatabase.Refresh();
+        MakeRecolours();
         var built = new List<string>();
         foreach (var v in Variants) built.Add(Build(v));
         Debug.Log("[Bikes] Built " + built.Count + " bike prefabs: " + string.Join(", ", built.ToArray()));
@@ -109,7 +160,7 @@ public static class BikePrefabBuilder
             if (prefab == null || prefab.GetComponent<BikeRig>() == null) continue;
             var entry = System.Activator.CreateInstance(entryType);
             entryType.GetField("cars").SetValue(entry, prefab);
-            entryType.GetField("frequency").SetValue(entry, 0);
+            entryType.GetField("frequency").SetValue(entry, 1);
             list.Add(entry);
             added++;
         }
@@ -180,6 +231,13 @@ public static class BikePrefabBuilder
 
             // Paint.
             var baseMat = AssetDatabase.LoadAssetAtPath<Material>(m.material);
+            if (baseMat == null)
+            {
+                // A plain URP paint when the model's own material is not there.
+                baseMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                baseMat.SetFloat("_Smoothness", 0.62f);
+                baseMat.SetFloat("_Metallic", 0.25f);
+            }
             var paintTex = AssetDatabase.LoadAssetAtPath<Texture2D>(v.paint);
                 string matPath = OutDir + "/Materials/" + name + ".mat";
             var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);

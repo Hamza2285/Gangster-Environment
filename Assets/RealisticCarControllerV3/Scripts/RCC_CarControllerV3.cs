@@ -2170,10 +2170,14 @@ public class RCC_CarControllerV3 : RCC_Core {
 	/// <param name="collision">Collision.</param>
 	void OnCollisionEnter (Collision collision){
 
-		CollisionParticles (collision.contacts [0].point);
-		
+		// (Game change) No sparks for every touch: only for real hits on solid things, never on people.
 		if (collision.contacts.Length < 1 || collision.relativeVelocity.magnitude < minimumCollisionForce)
 			return;
+
+		bool hitPerson = false;
+		var hitAnimator = collision.collider != null ? collision.collider.GetComponentInParent<Animator> () : null;
+		if (hitAnimator != null && hitAnimator.isHuman)
+			hitPerson = true;
 
 		if(OnRCCPlayerCollision != null && this == RCC_SceneManager.Instance.activePlayerVehicle)
 			OnRCCPlayerCollision (this, collision);
@@ -2183,7 +2187,8 @@ public class RCC_CarControllerV3 : RCC_Core {
 
 		if (((1 << collision.gameObject.layer) & damageFilter) != 0) {
 			
-			CollisionParticles (collision.contacts [0].point);
+			if (!hitPerson)
+				CollisionParticles (collision.contacts [0].point);
 		
 			Vector3 colRelVel = collision.relativeVelocity;
 			colRelVel *= 1f - Mathf.Abs (Vector3.Dot (transform.up, collision.contacts [0].normal));
