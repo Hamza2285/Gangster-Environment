@@ -103,7 +103,8 @@ public class TrafficFlowKeeper : MonoBehaviour
         for (int i = 0; i < cars.Count; i++)
         {
             Car car = cars[i];
-            if (car.ai == null || !car.ai.isActiveAndEnabled || car.body == null) continue;
+            // A kinematic body is a far-away car moved by the traffic LOD, not by physics: nothing to un-stick.
+            if (car.ai == null || !car.ai.isActiveAndEnabled || car.body == null || car.body.isKinematic) continue;
             if (car.body.linearVelocity.magnitude > StoppedSpeed)
             {
                 car.stoppedSince = -1f;

@@ -80,7 +80,7 @@ public class BikeCrash : MonoBehaviour
         Vector3 bikeVelocity = _body.linearVelocity;
 
         // The car ploughs on rather than stopping dead against a 2.5 t traffic bike.
-        if (car != null && car.linearVelocity.sqrMagnitude < (travel * carCarryOn).sqrMagnitude)
+        if (car != null && !car.isKinematic && car.linearVelocity.sqrMagnitude < (travel * carCarryOn).sqrMagnitude)
             car.linearVelocity = travel * carCarryOn;
 
         Vector3 push = new Vector3(travel.x, 0f, travel.z);

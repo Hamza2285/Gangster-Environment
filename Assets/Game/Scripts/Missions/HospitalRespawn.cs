@@ -40,6 +40,11 @@ public class HospitalRespawn : MonoBehaviour
         var player = GamePlayer.Current;
         var controller = player != null ? player.transform.GetComponent<vThirdPersonController>() : null;
         if (controller != watched) Watch(controller);
+
+        // Invector only raises onDead when its dead flag flips, so a character switched in with a stale flag never raises
+        // it. Zero health is the death that counts.
+        if (!respawning && watched != null && watched.isActiveAndEnabled && watched.currentHealth <= 0f)
+            StartCoroutine(Respawn(watched));
     }
 
     void Watch(vThirdPersonController controller)
@@ -49,6 +54,8 @@ public class HospitalRespawn : MonoBehaviour
         if (watched == null) return;
         watched.removeComponentsAfterDie = false;
         watched.onDead.AddListener(OnDead);
+        // A character that was switched off keeps whatever dead flag it was saved with; alive means alive.
+        if (watched.isDead && watched.currentHealth > 0f) watched.isDead = false;
     }
 
     void OnDead(GameObject _)
@@ -58,6 +65,7 @@ public class HospitalRespawn : MonoBehaviour
 
     IEnumerator Respawn(vThirdPersonController controller)
     {
+        if (respawning) yield break;
         respawning = true;
 
         var mission = FindFirstObjectByType<AmbulanceMission>();

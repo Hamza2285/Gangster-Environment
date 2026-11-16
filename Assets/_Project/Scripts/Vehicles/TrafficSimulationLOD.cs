@@ -364,7 +364,8 @@ namespace OpenworldCrime.Vehicles
                 else
                 {
                     source.enabled = true;
-                    if (car.SoundWasPlaying[i] && source.loop && !source.isPlaying) source.Play();
+                    // A car being despawned is already inactive here; only an active source can play.
+                    if (car.SoundWasPlaying[i] && source.loop && !source.isPlaying && source.isActiveAndEnabled) source.Play();
                 }
             }
         }
