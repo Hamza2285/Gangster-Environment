@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Invector.vCharacterController;
 using Invector.vItemManager;
 using Invector.vShooter;
+using OpenworldCrime.Weapons;
 using UnityEngine;
 
 namespace OpenworldCrime.Player
@@ -27,7 +28,45 @@ namespace OpenworldCrime.Player
 
             public string DisplayName => displayName;
             public int ItemId => itemId;
-            public bool IsUnarmed => itemId < 0;
+            public bool IsUnarmed => itemId < 0 && !IsCategorySlot;
+
+            /// <summary>Catalog mode: the GTA weapon group this slot stands for (null for hand-authored slots).</summary>
+            public WeaponCategory? Category { get; private set; }
+            /// <summary>Catalog mode: the weapon of this group that the slot currently equips.</summary>
+            public WeaponDefinition Selected { get; private set; }
+            public Sprite Icon => Selected != null ? Selected.icon : null;
+            private bool IsCategorySlot => Category.HasValue && Category.Value != WeaponCategory.Unarmed;
+
+            public WeaponSlot() { }
+
+            internal WeaponSlot(WeaponCategory category)
+            {
+                Category = category;
+                SetSelected(null);
+            }
+
+            internal void SetSelected(WeaponDefinition weapon)
+            {
+                Selected = weapon;
+                itemId = weapon != null ? weapon.itemId : -1;
+                displayName = weapon != null ? weapon.displayName : CategoryLabel(Category ?? WeaponCategory.Unarmed);
+            }
+        }
+
+        /// <summary>Short wheel / HUD label for a weapon group.</summary>
+        public static string CategoryLabel(WeaponCategory category)
+        {
+            switch (category)
+            {
+                case WeaponCategory.Unarmed: return "Unarmed";
+                case WeaponCategory.Melee: return "Melee";
+                case WeaponCategory.Pistol: return "Pistols";
+                case WeaponCategory.SMG: return "SMGs";
+                case WeaponCategory.Shotgun: return "Shotguns";
+                case WeaponCategory.AssaultRifle: return "Rifles";
+                case WeaponCategory.Sniper: return "Snipers";
+                default: return "Heavy";
+            }
         }
 
         [Header("Invector References")]
@@ -39,8 +78,12 @@ namespace OpenworldCrime.Player
         [SerializeField, Min(0)] private int weaponEquipAreaIndex = 0;
         [Tooltip("Play Invector's draw/holster animations when equipping from the weapon wheel.")]
         [SerializeField] private bool playEquipAnimations = true;
-        [Tooltip("Weapon wheel slots, in wheel order (clockwise from the top).")]
+        [Tooltip("Weapon wheel slots, in wheel order (clockwise from the top). Ignored when an Arsenal is assigned: the wheel then has one slot per WeaponCategory, filled from the catalog.")]
         [SerializeField] private List<WeaponSlot> weaponSlots = new List<WeaponSlot>();
+        [Tooltip("Catalog-driven GTA wheel: one slot per weapon group; pressing a group's key again cycles inside the group.")]
+        [SerializeField] private PlayerArsenal arsenal;
+        [Tooltip("Start the game with no weapon in hand (attack = punch), GTA style.")]
+        [SerializeField] private bool startUnarmed = true;
 
         [Header("Quick Switch")]
         [Tooltip("Blocks the quick switch while the player's input is locked (vehicles, taxi, map) or the weapon wheel is open.")]
@@ -73,9 +116,22 @@ namespace OpenworldCrime.Player
         public int ExtraAmmo => shooterManager != null && CurrentWeapon != null ? shooterManager.ExtraAmmo : 0;
 
         public IReadOnlyList<WeaponSlot> WeaponSlots => weaponSlots;
+        /// <summary>Raised when the wheel slots' contents change (weapon bought, group selection changed).</summary>
+        public event Action OnSlotsChanged;
+        public bool UsesCategories => arsenal != null;
 
         /// <summary>False while Invector's inventory window is open (the wheel must not fight it).</summary>
-        public bool CanChangeWeapon => itemManager != null && itemManager.inventory != null && !itemManager.inventory.isOpen;
+        public bool CanChangeWeapon => !WeaponsBlocked && itemManager != null && itemManager.inventory != null && !itemManager.inventory.isOpen;
+
+        /// <summary>True while weapons are forced holstered (e.g. inside a shop outside its shooting range).</summary>
+        public bool WeaponsBlocked { get; private set; }
+
+        /// <summary>Forces weapons holstered (instantly) and blocks drawing them until unblocked.</summary>
+        public void SetWeaponsBlocked(bool blocked)
+        {
+            WeaponsBlocked = blocked;
+            if (blocked) Unarm(true);
+        }
 
         // Invector raises its equip/unequip/ammo notifications before it finishes updating its own state
         // (onUnequipWeapon fires before the weapon reference is cleared; reserve ammo totals update after
@@ -83,8 +139,11 @@ namespace OpenworldCrime.Player
         private bool weaponStateDirty;
         private float nextCycleTime;
 
+        private readonly List<WeaponDefinition> categoryBuffer = new List<WeaponDefinition>();
+
         private void Awake()
         {
+            if (arsenal != null && arsenal.Catalog != null) BuildCategorySlots();
             if (playerManager == null) Debug.LogWarning($"[{nameof(PlayerWeaponController)}] No PlayerManager on '{name}'; quick switch is off.", this);
             if (shooterManager == null || itemManager == null)
             {
@@ -103,6 +162,11 @@ namespace OpenworldCrime.Player
             itemManager.onAddItem.AddListener(HandleItemChanged);
             itemManager.onChangeItemAmount.AddListener(HandleItemChanged);
             itemManager.onDestroyItem.AddListener(HandleItemRemoved);
+            if (arsenal != null)
+            {
+                arsenal.OnArsenalReady += HandleArsenalReady;
+                arsenal.OnArsenalChanged += RefreshCategorySlots;
+            }
         }
 
         private void OnDisable()
@@ -115,6 +179,11 @@ namespace OpenworldCrime.Player
             itemManager.onAddItem.RemoveListener(HandleItemChanged);
             itemManager.onChangeItemAmount.RemoveListener(HandleItemChanged);
             itemManager.onDestroyItem.RemoveListener(HandleItemRemoved);
+            if (arsenal != null)
+            {
+                arsenal.OnArsenalReady -= HandleArsenalReady;
+                arsenal.OnArsenalChanged -= RefreshCategorySlots;
+            }
         }
 
         // Per-frame only for the quick-switch inputs.
@@ -126,7 +195,14 @@ namespace OpenworldCrime.Player
             for (int i = 0; i < slotKeys.Length && i < weaponSlots.Count; i++)
             {
                 if (!slotKeys[i].GetButtonDown()) continue;
-                if (i != GetCurrentSlotIndex() && IsSlotAvailable(i)) EquipSlot(i);
+                if (i != GetCurrentSlotIndex())
+                {
+                    if (IsSlotAvailable(i)) EquipSlot(i);
+                }
+                else if (UsesCategories && CycleWithinSlot(i, 1))
+                {
+                    EquipSlot(i);
+                }
                 return;
             }
 
@@ -150,7 +226,106 @@ namespace OpenworldCrime.Player
         {
             if (!IsValidSlotIndex(slotIndex)) return false;
             WeaponSlot slot = weaponSlots[slotIndex];
-            return slot.IsUnarmed || (itemManager != null && itemManager.ContainItem(slot.ItemId));
+            if (slot.Category.HasValue && slot.Category.Value == WeaponCategory.Unarmed) return true;
+            return slot.IsUnarmed || (slot.ItemId >= 0 && itemManager != null && itemManager.ContainItem(slot.ItemId));
+        }
+
+        /// <summary>
+        /// Catalog mode: moves the slot's selection to the next/previous owned weapon of its group (does not equip).
+        /// Returns true when the selection changed.
+        /// </summary>
+        public bool CycleWithinSlot(int slotIndex, int direction)
+        {
+            if (!UsesCategories || !IsValidSlotIndex(slotIndex)) return false;
+            WeaponSlot slot = weaponSlots[slotIndex];
+            if (!slot.Category.HasValue) return false;
+            arsenal.Catalog.GetCategory(slot.Category.Value, categoryBuffer);
+            int count = categoryBuffer.Count;
+            if (count < 2) return false;
+            int current = Mathf.Max(0, categoryBuffer.IndexOf(slot.Selected));
+            for (int step = 1; step < count; step++)
+            {
+                WeaponDefinition candidate = categoryBuffer[((current + step * direction) % count + count) % count];
+                if (!arsenal.OwnsWeapon(candidate)) continue;
+                slot.SetSelected(candidate);
+                OnSlotsChanged?.Invoke();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Catalog mode: makes <paramref name="weapon"/> its group's wheel choice and equips it.</summary>
+        public bool EquipWeapon(WeaponDefinition weapon)
+        {
+            if (!UsesCategories || weapon == null) return false;
+            for (int i = 0; i < weaponSlots.Count; i++)
+            {
+                if (weaponSlots[i].Category != weapon.category) continue;
+                weaponSlots[i].SetSelected(weapon);
+                OnSlotsChanged?.Invoke();
+                return EquipSlot(i);
+            }
+            return false;
+        }
+
+        /// <summary>Catalog definition of the equipped weapon (null when unarmed or not in the catalog).</summary>
+        public WeaponDefinition GetCurrentWeaponDefinition()
+        {
+            if (!UsesCategories) return null;
+            vEquipArea area = GetWeaponEquipArea();
+            vItem equippedItem = area != null ? area.currentEquippedItem : null;
+            return equippedItem != null ? arsenal.Catalog.FindByItemId(equippedItem.id) : null;
+        }
+
+        private void BuildCategorySlots()
+        {
+            weaponSlots = new List<WeaponSlot>();
+            // One wheel group per category the catalog sells (Unarmed / fists always); e.g. no Melee group without melee weapons.
+            foreach (WeaponCategory category in Enum.GetValues(typeof(WeaponCategory)))
+            {
+                if (category != WeaponCategory.Unarmed && !HasCatalogWeapon(category)) continue;
+                weaponSlots.Add(new WeaponSlot(category));
+            }
+            if (slotKeys.Length < weaponSlots.Count)
+            {
+                var keys = new GenericInput[weaponSlots.Count];
+                for (int i = 0; i < keys.Length; i++) keys[i] = i < slotKeys.Length ? slotKeys[i] : new GenericInput("Alpha" + (i + 1), "", "");
+                slotKeys = keys;
+            }
+        }
+
+        private bool HasCatalogWeapon(WeaponCategory category)
+        {
+            arsenal.Catalog.GetCategory(category, categoryBuffer);
+            return categoryBuffer.Count > 0;
+        }
+
+        // GTA start: fists out. Invector's start items land in the weapon equip slot (holstered but "equipped"), which made the
+        // attack input draw and fire the pistol instead of punching.
+        private void HandleArsenalReady()
+        {
+            RefreshCategorySlots();
+            if (startUnarmed) Unarm(true);
+        }
+
+        // Keeps each group's selection on an owned weapon (first owned one when the current choice is not owned).
+        private void RefreshCategorySlots()
+        {
+            if (!UsesCategories) return;
+            bool changed = false;
+            for (int i = 0; i < weaponSlots.Count; i++)
+            {
+                WeaponSlot slot = weaponSlots[i];
+                if (!slot.Category.HasValue || slot.Category.Value == WeaponCategory.Unarmed) continue;
+                if (slot.Selected != null && arsenal.OwnsWeapon(slot.Selected)) continue;
+                arsenal.Catalog.GetCategory(slot.Category.Value, categoryBuffer);
+                WeaponDefinition owned = null;
+                for (int w = 0; w < categoryBuffer.Count && owned == null; w++) if (arsenal.OwnsWeapon(categoryBuffer[w])) owned = categoryBuffer[w];
+                if (owned == slot.Selected) continue;
+                slot.SetSelected(owned);
+                changed = true;
+            }
+            if (changed) OnSlotsChanged?.Invoke();
         }
 
         /// <summary>Index of the wheel slot matching the weapon currently in the equip area (Unarmed slot if none).</summary>
@@ -161,7 +336,7 @@ namespace OpenworldCrime.Player
             int unarmedIndex = -1;
             for (int i = 0; i < weaponSlots.Count; i++)
             {
-                if (weaponSlots[i].IsUnarmed)
+                if (weaponSlots[i].IsUnarmed || weaponSlots[i].Category == WeaponCategory.Unarmed)
                 {
                     if (unarmedIndex < 0) unarmedIndex = i;
                 }
@@ -189,7 +364,7 @@ namespace OpenworldCrime.Player
             if (!enabled || !IsValidSlotIndex(slotIndex) || !CanChangeWeapon) return false;
 
             WeaponSlot slot = weaponSlots[slotIndex];
-            if (slot.IsUnarmed)
+            if (slot.IsUnarmed || slot.Category == WeaponCategory.Unarmed)
             {
                 Unarm();
                 return true;
@@ -209,6 +384,22 @@ namespace OpenworldCrime.Player
             int equipSlotIndex = FindEquipSlotFor(area, item);
             itemManager.EquipItemToEquipSlot(weaponEquipAreaIndex, equipSlotIndex, item, true, !playEquipAnimations);
             return true;
+        }
+
+        /// <summary>
+        /// Makes sure a firearm is in hand (e.g. at the shooting range): keeps the current one, otherwise equips the first
+        /// owned firearm group of the wheel. Returns false when the player owns no firearm.
+        /// </summary>
+        public bool DrawFirearm()
+        {
+            if (CurrentWeapon != null) return true;
+            for (int i = 0; i < weaponSlots.Count; i++)
+            {
+                WeaponCategory? category = weaponSlots[i].Category;
+                bool firearm = category.HasValue ? category.Value != WeaponCategory.Unarmed && category.Value != WeaponCategory.Melee : !weaponSlots[i].IsUnarmed;
+                if (firearm && IsSlotAvailable(i) && EquipSlot(i)) return true;
+            }
+            return false;
         }
 
         /// <summary>Equips the next available slot after the current one (wraps around; on-screen "next weapon" button).</summary>

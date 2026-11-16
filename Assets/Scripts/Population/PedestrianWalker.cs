@@ -461,7 +461,8 @@ public class PedestrianWalker : MonoBehaviour
             return false;
         }
         _stuckTime = 0f;
-        if (_held && (from - hit.position).sqrMagnitude > 0.04f)
+        // Anyone a little off the mesh (a lane hugging a wall, a seat) runs onto it from where he stands; a Warp alone snaps him there.
+        if ((from - hit.position).sqrMagnitude > 0.04f)
         {
             _exitFrom = from;
             _exitLeft = 1f;

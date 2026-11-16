@@ -14,7 +14,8 @@ namespace OpenworldCrime.Pedestrians
     /// - Vehicle hits arrive through <see cref="IVehicleImpactReceiver"/> (sent by <see cref="VehicleCharacterImpact"/> on every
     ///   car) and are scaled by impact speed like EnemyVehicleImpact: slow bumps hurt a little, faster hits knock the pedestrian
     ///   down as a ragdoll thrown ahead of the car (legs swept, upper body tumbling back), survivors get back up.
-    /// - Death switches to the ragdoll and pushes the hit limb with the killing damage, like EnemyDummy.
+    /// - Death switches to the ragdoll and pushes the hit limb with the killing damage, like EnemyDummy. A bullet that does not kill
+    ///   knocks the pedestrian down along the shot (Shot Reaction), so the first hit always shows; the survivor gets up and runs.
     /// - Smooth car hits: the vehicle that knocks the body down ignores the fresh limbs for a moment (no depenetration launch, the
     ///   car keeps its momentum), the throw and lift are clamped, the flight is damped like the enemies' (EnemyVehicleImpact), and a
     ///   car touching a body already on the ground only carries it up to a share of its own speed (never adds up per contact).
@@ -81,6 +82,19 @@ namespace OpenworldCrime.Pedestrians
         [Tooltip("Bullets hitting this high (m above the feet) count as head shots.")]
         [SerializeField, Min(0f)] private float headShotHeight = 1.45f;
         [SerializeField, Min(1f)] private float headShotMultiplier = 2f;
+
+        [Header("Shot Reaction")]
+        [Tooltip("A bullet that does not kill knocks the pedestrian down (the body falls along the shot), so every hit shows at " +
+                 "once; the survivor gets back up after Shot Ground Time and runs. Off: a shot survivor only runs away.")]
+        [SerializeField] private bool knockDownWhenShot = true;
+        [Tooltip("vDamage.damageType of bullets (Invector's vProjectileControl on the player's bullet prefab).")]
+        [SerializeField] private string shotDamageType = "Projectile";
+        [Tooltip("Speed (m/s) the body is pushed along the shot.")]
+        [SerializeField, Min(0f)] private float shotPushSpeed = 1.2f;
+        [Tooltip("Topple rate (rad/s) of the body around the hips, top falling along the shot.")]
+        [SerializeField, Min(0f)] private float shotTopple = 3f;
+        [Tooltip("Minimum seconds a shot survivor stays on the ground.")]
+        [SerializeField, Min(0f)] private float shotGroundTime = 2f;
 
         [Header("Death Impulse")]
         [Tooltip("Impulse on the hit limb on death, as a multiple of the killing vDamage.force (Invector's bullet also pushes it once).")]
@@ -362,7 +376,25 @@ namespace OpenworldCrime.Pedestrians
 
         private void HandleDamage(vDamage damage)
         {
-            if (!IsDead) OnHurt?.Invoke(lastThreat);
+            if (IsDead) return;
+            // Health is already reduced here (and onDead raised for a killing shot), so this is a survivor.
+            if (knockDownWhenShot && !IsDown && damage.damageType == shotDamageType)
+            {
+                KnockDownFromShot(damage);
+                return; // the walker leaves on OnKnockedDown and runs once back up (OnRecovered)
+            }
+            OnHurt?.Invoke(lastThreat);
+        }
+
+        // Without this a shot survivor only switched to the run animation, which looked exactly like the bystanders running
+        // from the gunshot: the first hit read as a miss.
+        private void KnockDownFromShot(vDamage damage)
+        {
+            Vector3 direction = damage.force;
+            if (direction.sqrMagnitude < 0.0001f && damage.sender != null) direction = transform.position - damage.sender.position;
+            direction.y = 0f;
+            direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : -transform.forward;
+            KnockDown(direction * shotPushSpeed, Vector3.Cross(Vector3.up, direction) * shotTopple, shotGroundTime);
         }
 
         private void HandleDead(GameObject deadObject)

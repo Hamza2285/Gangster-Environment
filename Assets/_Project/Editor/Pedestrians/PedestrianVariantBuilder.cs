@@ -26,7 +26,12 @@ namespace OpenworldCrime.EditorTools
         private const string BloodSourcePath = "Assets/Invector-3rdPersonController/Shooter/Prefabs/Other/SimpleEnemy_TargetPractice.prefab";
         private const string VariantPrefix = "Ped_";
         private const string PanicNavMeshPath = "Assets/_Project/Data/Pedestrians/PanicNavMesh.asset";
-        private static readonly string[] PanicNavMeshRoots = { "Traffic Road Colliders", "Walk Ground Colliders", "Environment Colliders" };
+        // Every surface the pedestrian lanes run over must be in the bake: most footpaths are the "env/Track Roads" mesh colliders.
+        // Without them a person starting to panic is 1-3 m off the mesh and NavMeshAgent.Warp snaps him sideways.
+        private static readonly string[] PanicNavMeshRoots =
+        {
+            "Traffic Road Colliders", "Walk Ground Colliders", "Environment Colliders", "env/Track Roads", "env/Roads Props"
+        };
 
         private const int MaxHealth = 60;
 
