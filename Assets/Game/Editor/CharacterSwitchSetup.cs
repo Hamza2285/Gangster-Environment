@@ -164,6 +164,8 @@ public static class CharacterSwitchSetup
             var ownCamera = contents.transform.Find("Invector Components/vThirdPersonCamera");
             if (ownCamera != null) Object.DestroyImmediate(ownCamera.gameObject);
             foreach (var tuning in contents.GetComponents<CharacterBodyTuning>()) Object.DestroyImmediate(tuning);
+            // Jason's arm proportions are tuned for his model, not hers.
+            foreach (var proportions in contents.GetComponentsInChildren<OpenworldCrime.Player.CharacterBoneProportions>(true)) Object.DestroyImmediate(proportions);
             foreach (var wardrobe in contents.GetComponents<PlayerWardrobe>()) Object.DestroyImmediate(wardrobe);
             contents.transform.localScale = Vector3.one * GirlRootScale;
 
