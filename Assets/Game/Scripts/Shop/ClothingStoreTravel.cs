@@ -15,6 +15,9 @@ public class ClothingStoreTravel : MonoBehaviour
     public ClothingCatalog[] catalogs = new ClothingCatalog[0];
     public float blinkCloseSeconds = 0.35f, blinkOpenSeconds = 0.45f;
 
+    // Who is being played, as a catalog character id. A character-switching system can set this; without one it is Jason.
+    public static System.Func<string> CurrentCharacterId;
+
     ClothingStoreEntrance usedEntrance;
     Scene loadedStore;
 
@@ -23,7 +26,7 @@ public class ClothingStoreTravel : MonoBehaviour
     {
         get
         {
-            string id = PlayableCharacter.CurrentId;
+            string id = CurrentCharacterId != null ? CurrentCharacterId() : "jason";
             foreach (var c in catalogs) if (c != null && c.characterId == id) return c;
             return catalog != null && catalog.characterId == id ? catalog : null;
         }

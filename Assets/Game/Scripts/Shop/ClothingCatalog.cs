@@ -37,7 +37,7 @@ public class ClothingCatalog : ScriptableObject
         public Item[] items = new Item[0];
     }
 
-    [Tooltip("Whose clothes these are (PlayableCharacter id).")]
+    [Tooltip("Whose clothes these are: the character id, jason for Jason.")]
     public string characterId = "jason";
     public string storeName = "Miami Clothing Store";
     [Tooltip("Skin shown when the top leaves the arms bare.")]
