@@ -8,15 +8,17 @@ namespace OpenworldCrime.Vehicles
 {
     /// <summary>
     /// Area damage of an exploding car: the player on foot, pedestrians (thrown as ragdolls) and nearby cars (which can chain).
-    /// Victims are found through their hitbox colliders and damaged once each, scaled by distance.
+    /// Victims are found through their hitbox colliders and damaged once each, scaled by distance. Cars and pedestrians are hurt in
+    /// the name of whoever blew the car up (its <see cref="VehicleHealth.LastAttacker"/>), so crimes and chains point back to him.
     /// </summary>
     public static class VehicleExplosion
     {
         private static readonly Collider[] hits = new Collider[128];
         private static readonly HashSet<Object> done = new HashSet<Object>();
 
-        public static void Detonate(Vector3 center, VehicleDamageSettings settings, VehicleHealth source)
+        public static void Detonate(Vector3 center, VehicleDamageSettings settings, VehicleHealth source, Transform instigator)
         {
+            Transform blame = instigator != null ? instigator : source != null ? source.transform : null;
             int count = Physics.OverlapSphereNonAlloc(center, settings.explosionRadius, hits, settings.explosionLayers, QueryTriggerInteraction.Collide);
             done.Clear();
             for (int i = 0; i < count; i++)
@@ -30,7 +32,7 @@ namespace OpenworldCrime.Vehicles
                 {
                     if (car != source && done.Add(car))
                     {
-                        car.ApplyDamage(settings.explosionCarDamage * share, source != null ? source.transform : null);
+                        car.ApplyDamage(settings.explosionCarDamage * share, blame);
                         car.Shove(center, settings.explosionCarSpeed * share);
                     }
                     continue;
@@ -39,7 +41,7 @@ namespace OpenworldCrime.Vehicles
                 PedestrianDamage ped = c.GetComponentInParent<PedestrianDamage>();
                 if (ped != null)
                 {
-                    if (done.Add(ped)) ped.ReceiveExplosion(center, settings.explosionDamage * share, settings.explosionThrowSpeed * share);
+                    if (done.Add(ped)) ped.ReceiveExplosion(center, settings.explosionDamage * share, settings.explosionThrowSpeed * share, blame);
                     continue;
                 }
 

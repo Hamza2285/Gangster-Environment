@@ -29,7 +29,9 @@ namespace OpenworldCrime.Interiors
         public bool CanInteract(PlayerManager player)
         {
             InteriorTravelManager travel = InteriorTravelManager.Instance;
-            return isActiveAndEnabled && player != null && !player.IsInVehicle && travel != null && travel.CanTravel;
+            // GTA style: shops are shut to a wanted player (lose the police first).
+            return isActiveAndEnabled && player != null && !player.IsInVehicle && travel != null && travel.CanTravel
+                   && !OpenworldCrime.Police.WantedManager.IsPlayerWanted;
         }
 
         public void Interact(PlayerManager player)

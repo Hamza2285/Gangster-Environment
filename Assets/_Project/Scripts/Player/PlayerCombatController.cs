@@ -96,6 +96,8 @@ namespace OpenworldCrime.Player
                 OnArmedChanged?.Invoke(armed);
             }
 
+            ClearStaleHipFire();
+
             // Invector drops strafe while equipping/reloading; restore it afterwards while still armed.
             if (strafeLockedByPolicy && !controller.isStrafing && !controller.isSprinting
                 && !shooterInput.isReloading && !shooterInput.isEquipping)
@@ -122,6 +124,15 @@ namespace OpenworldCrime.Player
             shooterInput.SetLockCameraInput(locked);
             shooterInput.SetLockShooterInput(locked);
             shooterInput.SetLockMeleeInput(locked);
+        }
+
+        // Invector keeps a pending hip-fire shot (shootCountA) when the weapon leaves the hand on the same frame as a shot
+        // (weapon wheel to Unarmed, shop entry, car entry, death, busted, character switch all unequip instantly). With no
+        // weapon in the equip slot Invector never runs the code that clears it, so isAimingByHipFire stays true, IsAiming
+        // stays true and vShooterMeleeInput skips every melee input: the player cannot punch until a gun is drawn again.
+        private void ClearStaleHipFire()
+        {
+            if (shooterManager.CurrentWeapon == null && shooterInput.shootCountA > 0) shooterInput.shootCountA = 0;
         }
 
         private void ApplyStrafePolicy()

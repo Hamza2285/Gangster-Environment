@@ -5,12 +5,14 @@ using UnityEngine;
 namespace OpenworldCrime.Vehicles
 {
     /// <summary>Damage stage of a car.</summary>
-    public enum VehicleDamageStage { Healthy, Smoking, Burning, Destroyed }
+    public enum VehicleDamageStage { Healthy, Smoking, HeavySmoke, Burning, Destroyed }
 
     /// <summary>
-    /// Health of a car (drivable and traffic alike; lives on the root next to the Rigidbody). Bullets reach it through
-    /// <see cref="VehicleHitZone"/>, crashes through the collision callback. Stages: smoke when low, then fire (which keeps burning
-    /// the car down), then the explosion (<see cref="VehicleExplosion"/>). A destroyed car swaps to its destroyed model if it has
+    /// Health of a car (drivable, traffic and police alike; lives on the root next to the Rigidbody). Bullets reach it through
+    /// <see cref="VehicleHitZone"/>, crashes through the collision callback. Stages: light smoke, heavy dark smoke, then engine fire
+    /// (which keeps burning the car down, without raising <see cref="OnDamaged"/>), then the explosion (<see cref="VehicleExplosion"/>);
+    /// the fire stays briefly on the wreck, then dies down to smoke. Effects come from <see cref="VehicleEffectPool"/> and only follow
+    /// the effect anchor (never parented to the car). A destroyed car swaps to its destroyed model if it has
     /// one, otherwise its materials are darkened (per renderer, no material copies); it can no longer be driven or entered and is
     /// cleaned up once off camera (<see cref="OnWreckCleanup"/>: the owner decides what that means, traffic returns to the iTS pool).
     /// Resets itself when re-enabled (iTS pooling, pre-warmed drivables). Nothing runs per frame: coroutines only while burning or wrecked.
@@ -46,13 +48,22 @@ namespace OpenworldCrime.Vehicles
         public bool IsDestroyed => Stage == VehicleDamageStage.Destroyed;
         public float MaxHealth => settings != null ? settings.maxHealth : 1f;
         public VehicleDamageSettings Settings => settings;
+        /// <summary>
+        /// The last one who hurt this car from outside: a shooter, or a car that rammed it (never the car itself, its fire or a static
+        /// wall). Its explosion blames him, so the damage it does can be reported as his (chains of cars included).
+        /// </summary>
+        public Transform LastAttacker { get; private set; }
+
+        // Cars in the Burning stage right now (Settings' Max Burning Cars).
+        private static int burningCars;
 
         private Rigidbody body;
         private AudioSource explosionAudio;
         private Renderer[] renderers = new Renderer[0];
         private bool[] rendererWasEnabled = new bool[0];
-        private GameObject smokeInstance;
-        private GameObject fireInstance;
+        private PooledVehicleEffect smokeEffect;
+        private PooledVehicleEffect fireEffect;
+        private bool countedBurning;
         private GameObject destroyedInstance;
         private Coroutine burnRoutine;
         private Coroutine wreckRoutine;
@@ -72,6 +83,10 @@ namespace OpenworldCrime.Vehicles
             }
             renderers = GetComponentsInChildren<Renderer>(true);
             rendererWasEnabled = new bool[renderers.Length];
+            VehicleEffectPool.Prewarm(settings.smokeEffect, settings.prewarmCount);
+            VehicleEffectPool.Prewarm(settings.heavySmokeEffect, settings.prewarmCount);
+            VehicleEffectPool.Prewarm(settings.fireEffect, settings.prewarmCount);
+            VehicleEffectPool.Prewarm(settings.explosionEffect, settings.prewarmCount);
         }
 
         // iTS re-enables pooled cars and the takeover manager re-enables pre-warmed ones: each use starts as a fresh car.
@@ -81,10 +96,14 @@ namespace OpenworldCrime.Vehicles
             ResetState();
         }
 
+        // Pooled away (iTS, police) or destroyed: the effects go back at once, a burning car stops counting.
         private void OnDisable()
         {
             burnRoutine = null;
             wreckRoutine = null;
+            SetBurningCounted(false);
+            ReleaseEffect(ref smokeEffect);
+            ReleaseEffect(ref fireEffect);
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -97,6 +116,8 @@ namespace OpenworldCrime.Vehicles
             if (speed < settings.crashMinimumSpeed) return;
             lastCrashTime = Time.time;
             LastDamageWasCrash = true;
+            // Only a moving body (another car) is someone to blame; walls and kerbs are not.
+            if (collision.rigidbody != null) RememberAttacker(collision.transform);
             ApplyHealthDamage((speed - settings.crashMinimumSpeed) * settings.crashDamagePerSpeed, collision.transform);
         }
 
@@ -107,7 +128,14 @@ namespace OpenworldCrime.Vehicles
         public void ApplyDamage(float amount, Transform sender)
         {
             LastDamageWasCrash = false;
+            RememberAttacker(sender);
             ApplyHealthDamage(amount, sender);
+        }
+
+        private void RememberAttacker(Transform sender)
+        {
+            if (!valid || IsDestroyed || sender == null || sender == transform || sender.IsChildOf(transform)) return;
+            LastAttacker = sender;
         }
 
         private void ApplyHealthDamage(float amount, Transform sender)
@@ -123,6 +151,7 @@ namespace OpenworldCrime.Vehicles
         {
             if (!valid || other == null || !other.valid || other.IsDestroyed) return;
             CurrentHealth = Mathf.Min(CurrentHealth, other.CurrentHealth);
+            if (other.LastAttacker != null) LastAttacker = other.LastAttacker;
             UpdateStage();
         }
 
@@ -146,6 +175,7 @@ namespace OpenworldCrime.Vehicles
                 return;
             }
             VehicleDamageStage wanted = share <= settings.fireAtHealth ? VehicleDamageStage.Burning
+                : share <= settings.heavySmokeAtHealth ? VehicleDamageStage.HeavySmoke
                 : share <= settings.smokeAtHealth ? VehicleDamageStage.Smoking : VehicleDamageStage.Healthy;
             if (wanted <= Stage) return;
             SetStage(wanted);
@@ -153,17 +183,30 @@ namespace OpenworldCrime.Vehicles
 
         private void SetStage(VehicleDamageStage stage)
         {
+            if (stage == VehicleDamageStage.Burning && !countedBurning && burningCars >= settings.maxBurningCars)
+            {
+                // Enough cars burning down already: this one goes up at once instead of adding another fire.
+                CurrentHealth = 0f;
+                Explode();
+                return;
+            }
             Stage = stage;
-            if (stage == VehicleDamageStage.Smoking) EnsureEffect(ref smokeInstance, settings.smokeEffect);
+            if (stage == VehicleDamageStage.Smoking) SwapSmoke(settings.smokeEffect);
+            if (stage == VehicleDamageStage.HeavySmoke) SwapSmoke(HeavySmokePrefab);
             if (stage == VehicleDamageStage.Burning)
             {
-                EnsureEffect(ref smokeInstance, settings.smokeEffect);
-                EnsureEffect(ref fireInstance, settings.fireEffect);
+                // The fire brings its own smoke column; without a free fire effect the heavy smoke stays.
+                if (SpawnEffect(ref fireEffect, settings.fireEffect, settings.maxFireEffects)) FadeEffect(ref smokeEffect);
+                else SwapSmoke(HeavySmokePrefab);
+                SetBurningCounted(true);
                 if (burnRoutine == null && isActiveAndEnabled) burnRoutine = StartCoroutine(BurnRoutine());
             }
             OnStageChanged?.Invoke(stage);
         }
 
+        private GameObject HeavySmokePrefab => settings.heavySmokeEffect != null ? settings.heavySmokeEffect : settings.smokeEffect;
+
+        // Self-inflicted: it lowers the health but is no attack (no OnDamaged, the last attacker stays who lit the fire).
         private IEnumerator BurnRoutine()
         {
             const float interval = 0.25f;
@@ -171,34 +214,46 @@ namespace OpenworldCrime.Vehicles
             while (!IsDestroyed)
             {
                 yield return wait;
-                ApplyDamage(settings.burnDamagePerSecond * interval, transform);
+                if (IsDestroyed) break;
+                CurrentHealth = Mathf.Max(0f, CurrentHealth - settings.burnDamagePerSecond * interval);
+                UpdateStage();
             }
             burnRoutine = null;
+        }
+
+        private void SetBurningCounted(bool counted)
+        {
+            if (counted == countedBurning) return;
+            countedBurning = counted;
+            burningCars = Mathf.Max(0, burningCars + (counted ? 1 : -1));
         }
 
         private void Explode()
         {
             Stage = VehicleDamageStage.Destroyed;
+            SetBurningCounted(false);
             Vector3 center = effectAnchor != null ? effectAnchor.position : body.worldCenterOfMass;
 
-            if (settings.explosionEffect != null)
+            PooledVehicleEffect blast = VehicleEffectPool.Spawn(settings.explosionEffect, center, settings.maxExplosionEffects);
+            if (blast != null)
             {
-                GameObject fx = Instantiate(settings.explosionEffect, center, Quaternion.identity);
-                Destroy(fx, settings.explosionEffectLifetime);
+                blast.PlayOneShot(settings.explosionSound);
+                blast.FadeOutAfter(settings.explosionEffectLifetime, settings.effectFadeTime);
             }
-            if (settings.explosionSound != null) AudioSource.PlayClipAtPoint(settings.explosionSound, center);
+            ExplosionCameraShake.Shake(center, settings.shakeAmplitude, settings.shakeRadius, settings.shakeDuration);
 
             ShowWreck();
-            EnsureEffect(ref smokeInstance, settings.smokeEffect);
-            if (fireInstance != null) Destroy(fireInstance);
-            fireInstance = null;
+            // The wreck burns on for a while (Wreck Fire Time), then smokes: see WreckRoutine.
+            if (fireEffect == null) SpawnEffect(ref fireEffect, settings.fireEffect, settings.maxFireEffects);
+            if (fireEffect != null) FadeEffect(ref smokeEffect);
+            else SwapSmoke(HeavySmokePrefab);
 
             // The player gets out first (OnAnyDestroyed), so the blast below finds him on foot and only the inside damage counts.
             OnStageChanged?.Invoke(Stage);
             OnDestroyedWreck?.Invoke();
             OnAnyDestroyed?.Invoke(this);
 
-            Shove(center + UnityEngine.Random.insideUnitSphere, settings.explosionCarSpeed);
+            Hop();
             if (isActiveAndEnabled)
             {
                 // A frame later, so a chain of cars never recurses inside one physics callback.
@@ -207,10 +262,20 @@ namespace OpenworldCrime.Vehicles
             }
         }
 
+        // The blast lifts its own car: up with a little sideways drift and a random tilt, so it hops and lands as a wreck.
+        private void Hop()
+        {
+            if (body == null || body.isKinematic) return;
+            Vector2 drift = UnityEngine.Random.insideUnitCircle * 0.25f;
+            body.AddForce(new Vector3(drift.x, 1f, drift.y) * settings.explosionHopSpeed, ForceMode.VelocityChange);
+            Vector3 spin = transform.right * UnityEngine.Random.Range(-1f, 1f) + transform.forward * UnityEngine.Random.Range(-1f, 1f);
+            body.AddTorque(spin * settings.explosionSpin, ForceMode.VelocityChange);
+        }
+
         private IEnumerator DetonateNextFrame(Vector3 center)
         {
             yield return null;
-            VehicleExplosion.Detonate(center, settings, this);
+            VehicleExplosion.Detonate(center, settings, this, LastAttacker);
         }
 
         private void ShowWreck()
@@ -285,11 +350,12 @@ namespace OpenworldCrime.Vehicles
             {
                 yield return wait;
                 age += 1f;
-                if (smokeInstance != null && age >= settings.wreckSmokeTime)
+                if (fireEffect != null && age >= settings.wreckFireTime)
                 {
-                    Destroy(smokeInstance);
-                    smokeInstance = null;
+                    FadeEffect(ref fireEffect);
+                    if (age < settings.wreckSmokeTime) SwapSmoke(HeavySmokePrefab);
                 }
+                if (smokeEffect != null && age >= settings.wreckSmokeTime) FadeEffect(ref smokeEffect);
                 if (age >= settings.wreckMinimumTime && IsOutOfSight(transform.position, settings.wreckKeepDistance)) break;
             }
             wreckRoutine = null;
@@ -308,11 +374,34 @@ namespace OpenworldCrime.Vehicles
             return viewport.z <= 0f || viewport.x < -margin || viewport.x > 1f + margin || viewport.y < -margin || viewport.y > 1f + margin;
         }
 
-        private void EnsureEffect(ref GameObject instance, GameObject prefab)
+        // Light smoke -> heavy smoke: the old one fades where it is while the new one starts.
+        private void SwapSmoke(GameObject prefab)
         {
-            if (instance != null || prefab == null) return;
+            if (smokeEffect != null && smokeEffect.InUse && smokeEffect.Prefab == prefab) return;
+            FadeEffect(ref smokeEffect);
+            SpawnEffect(ref smokeEffect, prefab, settings.maxSmokeEffects);
+        }
+
+        private bool SpawnEffect(ref PooledVehicleEffect effect, GameObject prefab, int maxLive)
+        {
+            if (effect != null && effect.InUse) return true;
             Transform anchor = effectAnchor != null ? effectAnchor : transform;
-            instance = Instantiate(prefab, anchor.position, anchor.rotation, anchor);
+            effect = VehicleEffectPool.Spawn(prefab, anchor.position, maxLive);
+            if (effect == null) return false;
+            effect.Follow(anchor, settings.effectOffset);
+            return true;
+        }
+
+        private void FadeEffect(ref PooledVehicleEffect effect)
+        {
+            if (effect != null && effect.InUse) effect.FadeOut(settings.effectFadeTime);
+            effect = null;
+        }
+
+        private static void ReleaseEffect(ref PooledVehicleEffect effect)
+        {
+            if (effect != null && effect.InUse) effect.Release();
+            effect = null;
         }
 
         private void ResetState()
@@ -321,10 +410,10 @@ namespace OpenworldCrime.Vehicles
             bool wasWrecked = Stage == VehicleDamageStage.Destroyed;
             Stage = VehicleDamageStage.Healthy;
             lastCrashTime = -100f;
-            if (smokeInstance != null) Destroy(smokeInstance);
-            if (fireInstance != null) Destroy(fireInstance);
-            smokeInstance = null;
-            fireInstance = null;
+            LastAttacker = null;
+            SetBurningCounted(false);
+            ReleaseEffect(ref smokeEffect);
+            ReleaseEffect(ref fireEffect);
             for (int i = 0; wasWrecked && i < disableWhenWrecked.Length; i++)
             {
                 if (disableWhenWrecked[i] != null) disableWhenWrecked[i].SetActive(true);
@@ -339,6 +428,13 @@ namespace OpenworldCrime.Vehicles
                 }
             }
             SetDarkened(false);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            burningCars = 0;
+            OnAnyDestroyed = null;
         }
     }
 }
