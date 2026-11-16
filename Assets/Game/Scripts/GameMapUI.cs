@@ -41,7 +41,10 @@ public class GameMapUI : MonoBehaviour
     const float DragThreshold = 6f;
 
     Canvas canvas;
-    RectTransform miniContent, miniRoot, miniPlayer, miniPlayerOutline, miniMarker, miniTaxi, northLabel;
+    RectTransform miniContent, miniRoot, miniRing, miniPlayer, miniPlayerOutline, miniMarker, miniTaxi, northLabel;
+    // Places with their own icon (shops and the like): the minimap's icon and the full map's.
+    readonly Dictionary<MapIcon, RectTransform[]> placeIcons = new Dictionary<MapIcon, RectTransform[]>();
+    readonly List<MapIcon> goneIcons = new List<MapIcon>();
     UIRouteLine miniRoute;
     float miniContentSize;
     float miniRadius;
@@ -307,6 +310,7 @@ public class GameMapUI : MonoBehaviour
         // Icons and arrows stay the same size on screen while the roads grow.
         Vector3 iconScale = Vector3.one / fullZoom;
         fullPlayer.localScale = fullMarker.localScale = fullTaxi.localScale = iconScale;
+        foreach (var rects in placeIcons.Values) if (rects[1] != null) rects[1].localScale = iconScale;
         fullRoute.SetSizeScale(1f / fullZoom);
         SetKnob(fullSliderKnob, fullSliderTrack, fullZoom, fullMinZoom, MaxFullZoom);
     }
@@ -336,6 +340,41 @@ public class GameMapUI : MonoBehaviour
         bool hasTaxi = TrackedTaxi != null;
         miniTaxi.gameObject.SetActive(hasTaxi);
         if (hasTaxi) miniTaxi.anchoredPosition = Clamp(rot * (MiniLocal(TrackedTaxi.position) - playerLocal));
+
+        UpdatePlaceIcons(player, rot, playerLocal);
+    }
+
+    void UpdatePlaceIcons(Transform player, Quaternion rot, Vector2 playerLocal)
+    {
+        goneIcons.Clear();
+        foreach (var pair in placeIcons) if (pair.Key == null || !MapIcon.All.Contains(pair.Key)) goneIcons.Add(pair.Key);
+        foreach (var gone in goneIcons)
+        {
+            foreach (var rect in placeIcons[gone]) if (rect != null) Destroy(rect.gameObject);
+            placeIcons.Remove(gone);
+        }
+
+        foreach (var place in MapIcon.All)
+        {
+            if (!placeIcons.TryGetValue(place, out var rects))
+            {
+                var mini = NewImage("Place " + place.label, miniRing, place.icon, place.tint, place.size);
+                Reparent(mini, miniRing);
+                mini.SetSiblingIndex(miniMarker.GetSiblingIndex());
+                var full = NewImage("Place " + place.label, fullMap, place.icon, place.tint, place.size * 1.15f);
+                full.SetSiblingIndex(fullPlayer.GetSiblingIndex());
+                full.localScale = Vector3.one / fullZoom;
+                rects = new[] { mini, full };
+                placeIcons[place] = rects;
+            }
+
+            Vector2 offset = rot * (MiniLocal(place.transform.position) - playerLocal);
+            bool inRange = place.minimapRange <= 0f || Vector3.Distance(place.transform.position, player.position) <= place.minimapRange;
+            bool onMinimap = inRange && offset.magnitude <= miniRadius - 12f;
+            rects[0].gameObject.SetActive(onMinimap);
+            if (onMinimap) rects[0].anchoredPosition = offset;
+            rects[1].anchoredPosition = FullLocal(place.transform.position);
+        }
     }
 
     Vector2 Clamp(Vector2 v)
@@ -447,6 +486,7 @@ public class GameMapUI : MonoBehaviour
         ring.anchorMin = ring.anchorMax = Vector2.zero;
         ring.anchoredPosition = miniRoot.anchoredPosition;
 
+        miniRing = ring;
         miniMarker = NewImage("Marker", miniRoot.parent, diamondSprite, markerColor, 22f);
         Reparent(miniMarker, ring);
         miniTaxi = NewImage("Taxi", miniRoot.parent, circleSprite, taxiColor, 15f);

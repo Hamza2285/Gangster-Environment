@@ -255,6 +255,21 @@ namespace OpenworldCrime.Player
         [Tooltip("Safety limit (s) for the whole bail-out; control is given back after it.")]
         [SerializeField, Min(2f)] private float bailTimeout = 15f;
 
+        [Header("Windshield Ejection (hard frontal crash, GTA IV style)")]
+        [Tooltip("Throw the driver out through the windscreen when the car stops hard against something head-on.")]
+        [SerializeField] private bool windshieldEjection = true;
+        [Tooltip("Speed (km/h) the car must have been doing just before the crash.")]
+        [SerializeField, Min(10f)] private float ejectMinSpeedKmh = 70f;
+        [Tooltip("Speed (km/h) the car must lose in the crash along its forward direction (a hard stop, not a scrape or a pedestrian).")]
+        [SerializeField, Min(10f)] private float ejectMinSpeedLossKmh = 50f;
+        [Tooltip("Share of the car's speed before the crash the body flies on with.")]
+        [SerializeField, Range(0.2f, 1.2f)] private float ejectCarriedVelocity = 0.8f;
+        [SerializeField, Min(0f)] private float ejectUpSpeed = 3.5f;
+        [Tooltip("Where the body leaves the car, from the driver's seat (car space, metres): up and forward through the windscreen.")]
+        [SerializeField] private Vector3 ejectExitOffset = new Vector3(0.1f, 0.75f, 1.35f);
+        [Tooltip("Damage scale compared to a bail-out at the same speed.")]
+        [SerializeField, Min(0f)] private float ejectDamageScale = 1.6f;
+
         [Header("Alignment")]
         [Tooltip("Speed (m/s) used to slide the character onto the enter point before the enter clip starts.")]
         [SerializeField, Min(0.1f)] private float alignSpeed = 2.5f;
@@ -970,14 +985,58 @@ namespace OpenworldCrime.Player
             StartCoroutine(BailRoutine(vehicle, vehicleBody, kmh));
         }
 
-        private IEnumerator BailRoutine(IVehicleController vehicle, Rigidbody vehicleBody, float kmh)
+        /// <summary>Raised when the driver is thrown out through the windscreen (with the windscreen point and the launch velocity).</summary>
+        public event Action<IVehicleController, Vector3, Vector3> OnWindshieldEjected;
+
+        /// <summary>
+        /// A hard crash: throws the driver forward out through the windscreen as a ragdoll, carrying the speed the car had just
+        /// before the impact. Called by the car's crash sensor; returns false when it does not apply right now.
+        /// </summary>
+        public bool TryWindshieldEject(Vector3 velocityBeforeCrash, float speedLossKmh)
+        {
+            if (!windshieldEjection || playerRagdoll == null || State != VehicleInteractionState.InVehicle || CurrentVehicle == null) return false;
+            float kmh = velocityBeforeCrash.magnitude * 3.6f;
+            if (kmh < ejectMinSpeedKmh || speedLossKmh < ejectMinSpeedLossKmh) return false;
+
+            var vehicle = CurrentVehicle;
+            SetState(VehicleInteractionState.Bailing);
+            OnVehicleBailStarted?.Invoke(vehicle);
+            vehicle.ReleaseControlRolling();
+            playerCameraRoot.SetActive(true);
+            Rigidbody vehicleBody = ((Component)vehicle).GetComponent<Rigidbody>();
+            StartCoroutine(BailRoutine(vehicle, vehicleBody, kmh, velocityBeforeCrash));
+            return true;
+        }
+
+        private IEnumerator BailRoutine(IVehicleController vehicle, Rigidbody vehicleBody, float kmh, Vector3? windshieldLaunch = null)
         {
             Transform car = vehicle.transform;
             Transform seat = vehicle.GetDriverSeat();
-            bool tumble = playerRagdoll != null && kmh > bailRollMaxSpeedKmh;
+            bool windshield = windshieldLaunch.HasValue;
+            bool tumble = playerRagdoll != null && (windshield || kmh > bailRollMaxSpeedKmh);
+            if (windshield)
+            {
+                // 1w. No door: the real character takes the driver's place and leaves through the windscreen at once.
+                ShowCharacterAtSeat(vehicle);
+                // Out of the seated pose (and its steering hands) straight into the fall, as a bail-out's dive does, so the
+                // ragdoll's get-up ends standing rather than back in the driving pose.
+                if (vehicleIK != null)
+                {
+                    vehicleIK.SetSeatedLean(0f, 0f, true);
+                    vehicleIK.End();
+                }
+                animator.Play(bailDiveHash, BaseLayer, 0f);
+                animator.Update(0f);
+                Vector3 exit = car.TransformPoint(car.InverseTransformPoint(seat.position) + ejectExitOffset);
+                transform.SetParent(originalParent, true);
+                transform.SetPositionAndRotation(exit, FlatRotation(car.forward));
+                OnWindshieldEjected?.Invoke(vehicle, exit, windshieldLaunch.Value);
+                if ((vehicle as UnityEngine.Object) != null) vehicle.SetOccupied(false);
+            }
 
             // 1. The character replaces the seated driver visual; the door flies open and he dives out through it, moving with
             //    the vehicle (collisions with it stay ignored).
+            if (!windshield) {
             ShowCharacterAtSeat(vehicle);
             animator.Play(seatedStateHash, BaseLayer, 0f);
             animator.Update(0f);
@@ -992,15 +1051,15 @@ namespace OpenworldCrime.Player
 
             Vector3 seatLocal = car.InverseTransformPoint(seat.position);
             Transform exitPoint = vehicle.GetExitPoint();
-            float side = exitPoint != null && car.InverseTransformPoint(exitPoint.position).x < seatLocal.x ? -1f : 1f;
+            float diveSide = exitPoint != null && car.InverseTransformPoint(exitPoint.position).x < seatLocal.x ? -1f : 1f;
             Quaternion seatLocalRotation = Quaternion.Inverse(car.rotation) * seat.rotation;
-            Vector3 diveLocal = seatLocal + Vector3.right * (side * bailDiveDistance);
+            Vector3 diveLocal = seatLocal + Vector3.right * (diveSide * bailDiveDistance);
             if (!tumble)
             {
                 // Rolling: the dive ends on the ground beside the car.
                 diveLocal.y = car.InverseTransformPoint(GetGroundedPosition(car.TransformPoint(diveLocal))).y;
             }
-            Quaternion diveLocalRotation = Quaternion.LookRotation(new Vector3(side * Mathf.Sin(bailRollAwayAngle * Mathf.Deg2Rad), 0f, 1f));
+            Quaternion diveLocalRotation = Quaternion.LookRotation(new Vector3(diveSide * Mathf.Sin(bailRollAwayAngle * Mathf.Deg2Rad), 0f, 1f));
             for (float t = 0f; t < bailDiveDuration; t += Time.deltaTime)
             {
                 if ((vehicle as UnityEngine.Object) == null) break;
@@ -1009,17 +1068,25 @@ namespace OpenworldCrime.Player
                     car.rotation * Quaternion.Slerp(seatLocalRotation, diveLocalRotation, k));
                 yield return null;
             }
+            }
 
             // 2. Off the vehicle: it now counts as abandoned (it rolls on by itself).
             bool vehicleAlive = (vehicle as UnityEngine.Object) != null;
+            float side = 1f;
+            if (vehicleAlive && !windshield)
+            {
+                Transform exitSide = vehicle.GetExitPoint();
+                side = exitSide != null && car.InverseTransformPoint(exitSide.position).x < car.InverseTransformPoint(seat.position).x ? -1f : 1f;
+            }
             Vector3 sideDirection = vehicleAlive ? Vector3.ProjectOnPlane(car.right * side, Vector3.up).normalized : transform.right;
             Vector3 carVelocity = vehicleBody != null ? vehicleBody.GetPointVelocity(transform.position) : Vector3.zero;
             Vector3 carried = Vector3.ClampMagnitude(carVelocity * bailCarriedVelocity, bailMaxCarriedSpeed);
-            if (vehicleAlive)
+            if (vehicleAlive && !windshield)
             {
                 SetDoorClearance(vehicle, false);
                 vehicle.SetOccupied(false);
             }
+            if (windshield) carried = Vector3.ClampMagnitude(windshieldLaunch.Value * ejectCarriedVelocity, 32f);
             if (vehicleIK != null) vehicleIK.End();
             transform.SetParent(originalParent, true);
 
@@ -1029,7 +1096,9 @@ namespace OpenworldCrime.Player
                 // 3a. Invector's ragdoll through Invector's damage (speed-scaled, never lethal below Bail Lethal Speed).
                 float high = Mathf.InverseLerp(bailMinSpeedKmh, bailFullSpeedKmh, kmh);
                 Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
-                var damage = new vDamage(GetBailDamage(kmh), true)
+                int hurt = GetBailDamage(kmh);
+                if (windshield) hurt = Mathf.Min(Mathf.RoundToInt(hurt * ejectDamageScale), Mathf.Max(0, Mathf.RoundToInt(controller.currentHealth) - (kmh < bailLethalSpeedKmh ? 1 : 0)));
+                var damage = new vDamage(hurt, true)
                 {
                     activeRagdoll = true,
                     senselessTime = Mathf.Lerp(bailMinGroundTime, bailMaxGroundTime, high),
@@ -1037,14 +1106,14 @@ namespace OpenworldCrime.Player
                     sender = car,
                     hitPosition = hips != null ? hips.position : transform.position,
                     force = carried,
-                    damageType = "VehicleBail"
+                    damageType = windshield ? "WindshieldEjection" : "VehicleBail"
                 };
                 controller.TakeDamage(damage);
                 if (!playerRagdoll.isActive) playerRagdoll.ActivateRagdoll(damage);
                 // The ragdoll's limb colliders are live now: keep them clear of the vehicle for a moment.
                 if (vehicleAlive) SetVehicleCollisionIgnored(vehicle, true);
 
-                Vector3 velocity = carried + sideDirection * bailSideSpeed + Vector3.up * bailUpSpeed;
+                Vector3 velocity = windshield ? carried + Vector3.up * ejectUpSpeed : carried + sideDirection * bailSideSpeed + Vector3.up * bailUpSpeed;
                 Vector3 flat = new Vector3(velocity.x, 0f, velocity.z);
                 float spin = Mathf.Min(carried.magnitude * bailTumblePerSpeed, bailMaxTumble);
                 Vector3 angular = flat.sqrMagnitude > 0.01f ? Vector3.Cross(Vector3.up, flat.normalized) * spin : Vector3.zero;
@@ -1541,6 +1610,7 @@ namespace OpenworldCrime.Player
 
             SetState(VehicleInteractionState.InVehicle);
             OnVehicleEntered?.Invoke(vehicle);
+            if (windshieldEjection) WindshieldCrashSensor.Watch(((Component)vehicle).gameObject, this);
 
             // It blew up while he was climbing in.
             VehicleHealth health = ((Component)vehicle).GetComponent<VehicleHealth>();

@@ -71,6 +71,17 @@ public static class GameInput
     public static bool SkipOptionDown => KeyDown(KeyCode.Alpha2);
     public static bool CancelDown => KeyDown(KeyCode.Escape);
 
+    // Menus: arrows or WASD move the selection, Q and E turn the preview.
+    public static bool MenuUpDown => KeyDown(KeyCode.UpArrow) || KeyDown(KeyCode.W);
+    public static bool MenuDownDown => KeyDown(KeyCode.DownArrow) || KeyDown(KeyCode.S);
+    public static bool MenuLeftDown => KeyDown(KeyCode.LeftArrow) || KeyDown(KeyCode.A);
+    public static bool MenuRightDown => KeyDown(KeyCode.RightArrow) || KeyDown(KeyCode.D) || KeyDown(KeyCode.Tab);
+    public static bool MenuBackDown => KeyDown(KeyCode.Escape) || KeyDown(KeyCode.Backspace);
+    public static float TurnKeys => (KeyHeld(KeyCode.E) ? 1f : 0f) - (KeyHeld(KeyCode.Q) ? 1f : 0f);
+    public static bool ResetViewDown => KeyDown(KeyCode.R);
+    public static bool SwitchHeld => KeyHeld(KeyCode.LeftAlt) || KeyHeld(KeyCode.RightAlt);
+    public static bool SwitchDown => KeyDown(KeyCode.LeftAlt) || KeyDown(KeyCode.RightAlt);
+
     public static bool PrimaryClickDown
     {
         get
@@ -179,6 +190,21 @@ public static class GameInput
             case KeyCode.Minus: return kb.minusKey;
             case KeyCode.KeypadPlus: return kb.numpadPlusKey;
             case KeyCode.KeypadMinus: return kb.numpadMinusKey;
+            case KeyCode.T: return kb.tKey;
+            case KeyCode.Q: return kb.qKey;
+            case KeyCode.W: return kb.wKey;
+            case KeyCode.A: return kb.aKey;
+            case KeyCode.S: return kb.sKey;
+            case KeyCode.D: return kb.dKey;
+            case KeyCode.R: return kb.rKey;
+            case KeyCode.Tab: return kb.tabKey;
+            case KeyCode.Backspace: return kb.backspaceKey;
+            case KeyCode.UpArrow: return kb.upArrowKey;
+            case KeyCode.DownArrow: return kb.downArrowKey;
+            case KeyCode.LeftArrow: return kb.leftArrowKey;
+            case KeyCode.RightArrow: return kb.rightArrowKey;
+            case KeyCode.LeftAlt: return kb.leftAltKey;
+            case KeyCode.RightAlt: return kb.rightAltKey;
             default: return kb.escapeKey;
         }
     }
