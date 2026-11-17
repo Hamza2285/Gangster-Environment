@@ -123,6 +123,7 @@ namespace OpenworldCrime.Vehicles
         private void OnEnable()
         {
             TrafficVehicleAdapter.OnTakenOver += HandleTakenOver;
+            TrafficBikeAdapter.OnTakenOver += HandleBikeTakenOver;
             TrafficVehicleDriver.OnDriverEjected += HandleDriverEjected;
             TrafficVehicleAdapter.DrivableProvider = TakePrewarmed;
             if (pedestrianSpawner != null) TrafficVehicleDriver.PersonFactory = pedestrianSpawner.CreateScriptedPerson;
@@ -132,6 +133,7 @@ namespace OpenworldCrime.Vehicles
         private void OnDisable()
         {
             TrafficVehicleAdapter.OnTakenOver -= HandleTakenOver;
+            TrafficBikeAdapter.OnTakenOver -= HandleBikeTakenOver;
             TrafficVehicleDriver.OnDriverEjected -= HandleDriverEjected;
             if (TrafficVehicleAdapter.DrivableProvider == TakePrewarmed) TrafficVehicleAdapter.DrivableProvider = null;
             TrafficVehicleDriver.PersonFactory = null;
@@ -221,7 +223,12 @@ namespace OpenworldCrime.Vehicles
             return instance;
         }
 
-        private void HandleTakenOver(TrafficVehicleAdapter trafficCar, RCCVehicleAdapter drivable)
+        private void HandleTakenOver(TrafficVehicleAdapter trafficCar, RCCVehicleAdapter drivable) => RegisterTaken(drivable);
+
+        // Traffic motorbikes hand over their drivable twin exactly like traffic cars.
+        private void HandleBikeTakenOver(TrafficBikeAdapter trafficBike, RCCVehicleAdapter drivable) => RegisterTaken(drivable);
+
+        private void RegisterTaken(RCCVehicleAdapter drivable)
         {
             drivable.SetVehicleCamera(vehicleCamera);
             if (takenVehiclesParent != null && drivable.transform.parent != takenVehiclesParent) drivable.transform.SetParent(takenVehiclesParent, true);

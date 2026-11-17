@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 25eec9e285139d042a731b89a571d22a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Mounted/Idle/AS_Idle_Riding.controller
+  uploadId: 902864

@@ -21,10 +21,16 @@ namespace OpenworldCrime.EditorTools
     /// </summary>
     public static class DrivableBikeBuilder
     {
-        private const string BaseDrivable = "Assets/_Project/Prefabs/Vehicles/Drivable/Drivable_Challenger.prefab";
+        private const string BaseDrivable = "Assets/_Project/Prefabs/Vehicles/Drivable/Drivable_Car1.prefab";
+        private const string CrashSettingsPath = "Assets/_Project/Data/Vehicles/BikeCrashSettings.asset";
+        private const string MotoClips = "Assets/MotoInteractionAnimsFREE/Animations/Mounted/";
         private const string OutDir = "Assets/_Project/Prefabs/Vehicles/Drivable";
-        private const string PlayerPrefab = "Assets/_Project/Prefabs/Characters/Player_Jason.prefab";
-        private const float PlayerModelScale = 1.15f; // matches Player_Jason/3D Model
+        // Every playable character gets a rider posed on the bike (BikeRiderVisual shows the one riding).
+        private static readonly string[] PlayerPrefabs =
+        {
+            "Assets/_Project/Prefabs/Characters/Player_Jason.prefab",
+            "Assets/_Project/Prefabs/Characters/Player_Girl.prefab"
+        };
         private const float BaseMass = 1650f;
 
         private class Spec
@@ -41,9 +47,11 @@ namespace OpenworldCrime.EditorTools
         private static readonly Spec Sport = new Spec
         {
             name = "Drivable_Bike_Sport",
-            fbx = "Assets/PopulationSystem/Models/Bike 1/Bike_1.fbx",
-            material = "Assets/Prefabs/Bikes/Materials/Bike_SportBike_B.mat", // red
-            scale = 0.76f,
+            fbx = "Assets/Bike 1/Bike_1.fbx",
+            material = "Assets/Prefabs/Bikes/Materials/Bike_SportBike_Red.mat",
+            // Hamza's traffic sport bikes use 0.76; scaled 0.9 further to real size (~2.0 m long, ~1.15 m tall, seat ~0.8 m) next
+            // to the 1.6-1.8 m characters (TrafficBikeVariantBuilder.SportScale applies the same to the traffic sport bikes).
+            scale = 0.76f * TrafficBikeVariantBuilder.SportScale,
             seat = new Vector3(0f, 1.04f, -0.47f),
             grip = new Vector3(0.32f, 1.13f, 0.66f),
             peg = new Vector3(0.27f, 0.58f, -0.45f),
@@ -58,8 +66,8 @@ namespace OpenworldCrime.EditorTools
         private static readonly Spec Chopper = new Spec
         {
             name = "Drivable_Bike_Chopper",
-            fbx = "Assets/PopulationSystem/Models/Bike 2/Bike_2.fbx",
-            material = "Assets/Prefabs/Bikes/Materials/Bike_Chopper_B.mat", // blue
+            fbx = "Assets/Bike 2/Bike_2.fbx",
+            material = "Assets/Prefabs/Bikes/Materials/Bike_Chopper_Blue.mat",
             scale = 0.65f,
             seat = new Vector3(0f, 0.92f, -0.78f),
             grip = new Vector3(0.62f, 1.38f, 0.15f),
@@ -91,14 +99,19 @@ namespace OpenworldCrime.EditorTools
                 var adapter = root.GetComponent<RCCVehicleAdapter>();
 
                 // --- strip the car -------------------------------------------------------------------------------------------
-                foreach (string n in new[] { "Model", "HoodCamera", "BulletHitbox", "CarjackStandPoint", "EjectPoint", "CabinFloor" })
+                foreach (string n in new[] { "Model", "HoodCamera", "WheelCamera", "BulletHitbox", "CarjackStandPoint", "EjectPoint", "CabinFloor", "HeadlightSpot" })
                     DestroyChild(root.transform, n);
                 Transform seatT = root.transform.Find("DriverSeat");
                 for (int i = seatT.childCount - 1; i >= 0; i--) Object.DestroyImmediate(seatT.GetChild(i).gameObject);
                 DestroyComponent<TrafficVehicleDriver>(root);
                 DestroyComponent<VehicleDamageDeformer>(root);
                 DestroyComponent<VehicleLights>(root);
+                DestroyComponent<VehiclePaintVariants>(root);
+                DestroyComponent<LODGroup>(root);
                 car.SteeringWheel = null;
+                // RCC mesh deformation worked on the car body that is gone; a bike has nothing to dent.
+                car.useDamage = false;
+                car.deformableMeshFilters = new MeshFilter[0];
 
                 // Wheel models become hidden helpers (RCC aligns them); a disabled renderer gives RCC a bounds centre.
                 foreach (Transform w in root.transform.Find("Wheel Models"))
@@ -212,21 +225,57 @@ namespace OpenworldCrime.EditorTools
                 Transform exhaust = root.transform.Find("Exhausts");
                 if (exhaust != null && exhaust.childCount > 0) exhaust.GetChild(0).localPosition = new Vector3(0.2f, 0.4f, rearCentre.z - 0.2f);
 
-                // --- rider (player model posed on the bike) -----------------------------------------------------------------
+                // --- riders (each playable character posed on the bike; BikeRiderVisual shows the one riding) ------------------
                 Vector3 W(Vector3 modelPoint) => visual.TransformPoint(modelPoint * s + lift);
-                GameObject rider = CreateRider();
-                rider.transform.SetParent(visual, false);
-                PoseRider(rider, spec, W);
-                // The seat anchor is the rider's root; the rider hangs under it (inactive until driven).
+                var riderRoot = new GameObject("BikeRider") { layer = root.layer };
+                var riders = new List<BikeRiderVisual.Rider>();
+                Vector3 seatPosition = Vector3.zero;
+                Vector3 seatHipsPosition = Vector3.zero;
+                foreach (string playerPath in PlayerPrefabs)
+                {
+                    GameObject rider = CreateRider(playerPath, out string characterName);
+                    if (rider == null) continue;
+                    rider.transform.SetParent(visual, false);
+                    Transform riderHips = rider.GetComponent<Animator>().GetBoneTransform(HumanBodyBones.Hips);
+                    PoseRider(rider, spec, W);
+                    // The first character's root is the seat anchor (the player's root sits there while riding).
+                    if (riders.Count == 0)
+                    {
+                        seatPosition = rider.transform.position;
+                        seatHipsPosition = riderHips.position;
+                    }
+                    rider.name = "Rider_" + characterName;
+                    riders.Add(new BikeRiderVisual.Rider { characterName = characterName, pose = rider });
+                }
                 seatT.SetParent(visual, true);
-                seatT.SetPositionAndRotation(rider.transform.position, visual.rotation);
-                rider.transform.SetParent(seatT, true);
-                rider.name = "BikeRider";
-                rider.SetActive(false);
+                seatT.SetPositionAndRotation(seatPosition, visual.rotation);
+                riderRoot.transform.SetParent(seatT, false);
+                var seatHips = new GameObject("SeatHips").transform;
+                seatHips.SetParent(seatT, false);
+                seatHips.position = seatHipsPosition;
+                foreach (BikeRiderVisual.Rider r in riders) r.pose.transform.SetParent(riderRoot.transform, true);
+                var riderVisual = riderRoot.AddComponent<BikeRiderVisual>();
+                var riderSo = new SerializedObject(riderVisual);
+                SerializedProperty riderList = riderSo.FindProperty("riders");
+                riderList.arraySize = riders.Count;
+                for (int i = 0; i < riders.Count; i++)
+                {
+                    riderList.GetArrayElementAtIndex(i).FindPropertyRelative("characterName").stringValue = riders[i].characterName;
+                    riderList.GetArrayElementAtIndex(i).FindPropertyRelative("pose").objectReferenceValue = riders[i].pose;
+                }
+                riderSo.ApplyModifiedPropertiesWithoutUndo();
+                riderRoot.SetActive(false);
 
                 // --- enter / exit points (left side, like getting on a real bike) -------------------------------------------------
                 float seatZ = spec.seat.z * s;
                 SetPoint(root.transform, "EnterPoint", new Vector3(-0.85f, 0.02f, seatZ), Vector3.right);
+                Transform alternateEnter = root.transform.Find("AlternateEnterPoint");
+                if (alternateEnter == null)
+                {
+                    alternateEnter = new GameObject("AlternateEnterPoint") { layer = root.layer }.transform;
+                    alternateEnter.SetParent(root.transform, false);
+                }
+                SetPoint(root.transform, "AlternateEnterPoint", new Vector3(0.85f, 0.02f, seatZ), Vector3.left);
                 SetPoint(root.transform, "ExitPoint", new Vector3(-1.15f, 0.02f, seatZ), Vector3.left);
                 SetPoint(root.transform, "AlternateExitPoint", new Vector3(1.15f, 0.02f, seatZ), Vector3.right);
                 SetPoint(root.transform, "InteractionPoint", new Vector3(-0.6f, 0.6f, seatZ), Vector3.right);
@@ -271,11 +320,43 @@ namespace OpenworldCrime.EditorTools
                 so.FindProperty("driverDoor").objectReferenceValue = null;
                 so.FindProperty("cabinFloor").objectReferenceValue = null;
                 so.FindProperty("npcDriver").objectReferenceValue = null;
-                so.FindProperty("driverDummy").objectReferenceValue = rider;
+                so.FindProperty("driverDummy").objectReferenceValue = riderRoot;
+                so.FindProperty("handlingProfile").objectReferenceValue = null;
                 so.FindProperty("driverSeat").objectReferenceValue = seatT;
                 so.FindProperty("maxEnterSpeed").floatValue = 1.5f;
+                so.FindProperty("alternateEnterPoint").objectReferenceValue = alternateEnter;
                 so.FindProperty("maxExitSpeed").floatValue = 1.5f;
                 so.ApplyModifiedPropertiesWithoutUndo();
+
+                // --- get on / off clips (both sides), seat hips for placing them -----------------------------------------
+                var clips = root.GetComponent<BikeMountAnimations>();
+                if (clips == null) clips = root.AddComponent<BikeMountAnimations>();
+                clips.mountLeft = LoadClip(MotoClips + "Mount/AS_Mount_Left.fbx");
+                clips.mountRight = LoadClip(MotoClips + "Mount/AS_Mount_Right.fbx");
+                clips.dismountLeft = LoadClip(MotoClips + "Dismount/AS_Dismount_Left.fbx");
+                clips.dismountRight = LoadClip(MotoClips + "Dismount/AS_Dismount_Right.fbx");
+                clips.mountedToRide = LoadClip(MotoClips + "Transitions/AS_Mounted_to_Ride.fbx");
+                clips.rideToMounted = LoadClip(MotoClips + "Transitions/AS_Ride_to_Mounted.fbx");
+                clips.seatHips = seatHips;
+
+                // --- health: the car's wreck model and wreck parts do not apply to a bike ------------------------------------
+                var health = root.GetComponent<VehicleHealth>();
+                if (health != null)
+                {
+                    var healthSo = new SerializedObject(health);
+                    healthSo.FindProperty("destroyedModelPrefab").objectReferenceValue = null;
+                    healthSo.FindProperty("disableWhenWrecked").arraySize = 0;
+                    healthSo.ApplyModifiedPropertiesWithoutUndo();
+                }
+
+                // --- crashes: wobble, stumble or thrown off by impact speed and angle ---------------------------------------
+                var sensor = root.GetComponent<BikeCrashSensor>();
+                if (sensor == null) sensor = root.AddComponent<BikeCrashSensor>();
+                var sensorSo = new SerializedObject(sensor);
+                sensorSo.FindProperty("settings").objectReferenceValue = AssetDatabase.LoadAssetAtPath<BikeCrashSettings>(CrashSettingsPath);
+                sensorSo.FindProperty("vehicle").objectReferenceValue = adapter;
+                sensorSo.FindProperty("body").objectReferenceValue = body;
+                sensorSo.ApplyModifiedPropertiesWithoutUndo();
 
                 PrefabUtility.SaveAsPrefabAsset(root, path);
             }
@@ -286,25 +367,43 @@ namespace OpenworldCrime.EditorTools
             return spec.name;
         }
 
-        // The player's model with the player's materials, scaled like Player_Jason/3D Model; the Animator is only kept for the IK
-        // bone lookup and removed after posing.
-        private static GameObject CreateRider()
+        // A playable character's model with its materials, at the size that character has in the gameplay scene (root scale there,
+        // else the prefab's); the Animator is only kept for the IK bone lookup and removed after posing.
+        private static GameObject CreateRider(string playerPath, out string characterName)
         {
-            var player = AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefab);
-            var playerAnimator = player.GetComponent<Animator>();
+            var player = AssetDatabase.LoadAssetAtPath<GameObject>(playerPath);
+            characterName = player != null ? player.name : null;
+            var playerAnimator = player != null ? player.GetComponent<Animator>() : null;
+            if (playerAnimator == null || playerAnimator.avatar == null)
+            {
+                Debug.LogWarning("[DrivableBikeBuilder] No Animator/avatar on " + playerPath + "; no rider for it.");
+                return null;
+            }
             string fbxPath = AssetDatabase.GetAssetPath(playerAnimator.avatar);
             var fbx = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
             var rider = (GameObject)Object.Instantiate(fbx);
             var animator = rider.GetComponent<Animator>();
             if (animator == null) animator = rider.AddComponent<Animator>();
             animator.avatar = playerAnimator.avatar;
-            rider.transform.localScale = Vector3.one * PlayerModelScale;
+
+            float scale = player.transform.localScale.x;
+            Transform model = player.transform.Find("3D Model");
+            if (model != null) scale *= model.localScale.x;
+            foreach (var placed in Object.FindObjectsByType<OpenworldCrime.Player.PlayerVehicleInteraction>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (placed.name != player.name) continue;
+                scale = placed.transform.lossyScale.x * (model != null ? model.localScale.x : 1f);
+                break;
+            }
+            rider.transform.localScale = Vector3.one * scale;
 
             var playerMats = new Dictionary<string, Material[]>();
-            foreach (SkinnedMeshRenderer r in player.GetComponentsInChildren<SkinnedMeshRenderer>(true)) playerMats[r.sharedMesh != null ? r.sharedMesh.name : r.name] = r.sharedMaterials;
+            foreach (SkinnedMeshRenderer r in player.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (r.sharedMesh != null && r.gameObject.activeSelf) playerMats[r.sharedMesh.name] = r.sharedMaterials;
             foreach (SkinnedMeshRenderer r in rider.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 if (r.sharedMesh != null && playerMats.TryGetValue(r.sharedMesh.name, out Material[] mats)) r.sharedMaterials = mats;
+                else if (r.sharedMesh != null) r.gameObject.SetActive(false); // parts the playable character does not wear
                 r.updateWhenOffscreen = false;
             }
             return rider;
@@ -348,14 +447,22 @@ namespace OpenworldCrime.EditorTools
             Object.DestroyImmediate(a);
         }
 
-        private static void Aim(Transform bone, Vector3 current, Vector3 wanted)
+        private static AnimationClip LoadClip(string path)
+        {
+            foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(path))
+                if (o is AnimationClip clip && !clip.name.StartsWith("__preview")) return clip;
+            Debug.LogWarning("[DrivableBikeBuilder] No clip in " + path);
+            return null;
+        }
+
+        internal static void Aim(Transform bone, Vector3 current, Vector3 wanted)
         {
             if (bone == null || current.sqrMagnitude < 1e-6f) return;
             bone.rotation = Quaternion.FromToRotation(current, wanted.normalized) * bone.rotation;
         }
 
         // Analytic two-bone IK (same as BikePrefabBuilder).
-        private static void TwoBoneIK(Transform a, Transform b, Transform c, Vector3 target, Vector3 pole)
+        internal static void TwoBoneIK(Transform a, Transform b, Transform c, Vector3 target, Vector3 pole)
         {
             if (a == null || b == null || c == null) return;
             float l1 = Vector3.Distance(a.position, b.position), l2 = Vector3.Distance(b.position, c.position);

@@ -111,8 +111,11 @@ namespace OpenworldCrime.Police
         [Min(0f)] public float bustedFadeSeconds = 0.6f;
 
         [Header("Dispatch")]
-        [Tooltip("Officers on foot at once, per wanted level (index = stars).")]
-        public int[] footUnitsPerStar = { 0, 2, 3, 4, 5, 6 };
+        [Tooltip("Most officers on foot at once, car crews included, per wanted level (index = stars). Crews beyond it stay in their car.")]
+        public int[] footUnitsPerStar = { 0, 2, 2, 3, 4, 5 };
+        [Tooltip("Of those, officers who come on foot (not out of a car), per wanted level (index = stars). GTA style: most police " +
+                 "arrive and chase by car.")]
+        public int[] walkingReinforcementsPerStar = { 0, 0, 0, 1, 1, 2 };
         [Tooltip("Police cars at once, per wanted level (index = stars).")]
         public int[] carUnitsPerStar = { 0, 1, 1, 2, 3, 3 };
         [Tooltip("Seconds between reinforcements.")]
@@ -123,8 +126,18 @@ namespace OpenworldCrime.Police
         public Vector2 carSpawnDistance = new Vector2(70f, 120f);
         [Tooltip("Units this far (m) from the player are recalled (once out of sight).")]
         [Min(30f)] public float recallDistance = 200f;
-        [Tooltip("Officers who climb out of a police car that reached the player on foot.")]
+        [Tooltip("Officers who sit in a police car (and climb out when it reached the player on foot).")]
         [Range(0, 2)] public int officersPerCar = 2;
+
+        [Header("Car Crews")]
+        [Tooltip("Seconds between the driver and the passenger climbing out.")]
+        [Min(0f)] public float crewExitStagger = 0.6f;
+        [Tooltip("The crew runs back and gets in once the suspect drives off faster than this (m/s) ...")]
+        [Min(0f)] public float crewReboardSpeed = 5f;
+        [Tooltip("... and is farther than this (m) from the car (or 2.5 times as far whatever he does).")]
+        [Min(5f)] public float crewReboardDistance = 30f;
+        [Tooltip("Seconds the car waits for its crew to get back in before it leaves without the missing ones.")]
+        [Min(2f)] public float crewBoardTimeout = 14f;
 
         [Header("Officer On Foot")]
         [Min(0.5f)] public float officerRunSpeed = 5.2f;
@@ -182,6 +195,7 @@ namespace OpenworldCrime.Police
         }
 
         public int FootUnitsFor(int stars) => footUnitsPerStar.Length == 0 ? 0 : footUnitsPerStar[Mathf.Clamp(stars, 0, footUnitsPerStar.Length - 1)];
+        public int WalkingReinforcementsFor(int stars) => walkingReinforcementsPerStar.Length == 0 ? 0 : walkingReinforcementsPerStar[Mathf.Clamp(stars, 0, walkingReinforcementsPerStar.Length - 1)];
         public int CarUnitsFor(int stars) => carUnitsPerStar.Length == 0 ? 0 : carUnitsPerStar[Mathf.Clamp(stars, 0, carUnitsPerStar.Length - 1)];
         public float SearchSecondsFor(int stars) => searchSecondsBase + searchSecondsPerStar * stars;
         public float SearchRadiusFor(int stars) => searchRadiusBase + searchRadiusPerStar * stars;

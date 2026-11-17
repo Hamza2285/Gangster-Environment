@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using OpenworldCrime.UI;
 using OpenworldCrime.Vehicles;
@@ -12,8 +13,10 @@ namespace OpenworldCrime.Police
     /// swerving round traffic, recovery when stuck), added for the pursuit and removed afterwards. This brain only feeds it paths:
     /// - Pursue: a road route to the player (<see cref="RoadNetwork"/>), straight at him when close; behind the player's car it keeps
     ///   Chase Gap. When lethal, the passenger fires from the car within Car Fire Range.
-    /// - Deployed: the suspect is on foot (or stopped in his car) close by: the car stops and its officers climb out
-    ///   (<see cref="PoliceDispatcher.SpawnCrewOfficer"/>), then it stays parked with the lights on.
+    /// - Deployed: the suspect is on foot (or stopped in his car) close by: the car stops and its officers climb out one after the
+    ///   other with the car-exit clip and the doors (<see cref="PoliceCarCrew"/>, <see cref="PoliceDispatcher.SpawnCrewOfficerFromCar"/>),
+    ///   only as many as the on-foot limit of the wanted level allows; the rest stay in the car. When the suspect drives off (or the
+    ///   wanted level is lost) the crew runs back, gets in and the car chases again (GTA style: police stay with their cars).
     /// - Search: drives to the last known position and waits there.
     /// - Return: siren off, drives away and is recalled once out of sight.
     /// - Wrecked: blown up; cleared through <see cref="VehicleHealth.OnWreckCleanup"/>.
@@ -36,8 +39,10 @@ namespace OpenworldCrime.Police
         [SerializeField] private PoliceLightBar lightBar;
         [SerializeField] private MapBlip mapBlip;
         [SerializeField] private AudioSource siren;
-        [Tooltip("Seated crew visuals, hidden once the officers have climbed out.")]
+        [Tooltip("Seated crew visuals, hidden once the officers have climbed out (only used without a Police Car Crew).")]
         [SerializeField] private GameObject[] seatedCrew = new GameObject[0];
+        [Tooltip("Seated officers, doors and exit points. Without it the officers appear beside the car (Crew Exit Offsets).")]
+        [SerializeField] private PoliceCarCrew crew;
 
         [Header("Crew")]
         [Tooltip("Where officers stand when they climb out (local to the car: driver side, passenger side).")]
@@ -70,7 +75,10 @@ namespace OpenworldCrime.Police
         public UnitState State { get; private set; } = UnitState.Inactive;
         /// <summary>Chasing (counts towards the cars the dispatcher keeps on the player).</summary>
         public bool IsChasing => State == UnitState.Pursue || State == UnitState.Search;
+        /// <summary>On the job (chasing, searching or parked at the suspect with its crew out): counts towards Car Units Per Star.</summary>
+        public bool IsOnDuty => IsChasing || State == UnitState.Deployed;
         public float Speed => body.linearVelocity.magnitude;
+        public PoliceCarCrew Crew => crew;
 
         private PoliceDispatcher owner;
         private PoliceSettings settings;
@@ -87,6 +95,10 @@ namespace OpenworldCrime.Police
         private Vector3 lastRouteTarget;
         private bool routeWasRoad;
         private bool crewOut;
+        private bool boarding;
+        private float boardingSince;
+        private Coroutine exitRoutine;
+        private PoliceOfficerUnit[] crewOnFoot = new PoliceOfficerUnit[0];
         private bool valid;
 
         private static AudioClip sirenClip;
@@ -101,6 +113,7 @@ namespace OpenworldCrime.Police
                 return;
             }
             PoliceLights.SetFlashing(lightBar, false);
+            if (crew != null) crewOnFoot = new PoliceOfficerUnit[crew.SeatCount];
             if (siren != null)
             {
                 siren.clip = SirenClip;
@@ -147,7 +160,10 @@ namespace OpenworldCrime.Police
             chase.Begin(simpleCar, settings.carEngineTorque);
 
             crewOut = false;
-            for (int i = 0; i < seatedCrew.Length; i++) if (seatedCrew[i] != null) seatedCrew[i].SetActive(true);
+            boarding = false;
+            ReleaseCrewOnFoot();
+            if (crew != null) crew.Board(settings.officersPerCar);
+            else for (int i = 0; i < seatedCrew.Length; i++) if (seatedCrew[i] != null) seatedCrew[i].SetActive(true);
             if (mapBlip != null) mapBlip.enabled = true;
             SetEmergency(true);
             lastAttacker = null;
@@ -164,6 +180,9 @@ namespace OpenworldCrime.Police
         {
             active.Remove(this);
             State = UnitState.Inactive;
+            if (exitRoutine != null) StopCoroutine(exitRoutine);
+            exitRoutine = null;
+            ReleaseCrewOnFoot();
             RemoveDriver();
             SetEmergency(false);
             if (mapBlip != null) mapBlip.enabled = false;
@@ -191,6 +210,12 @@ namespace OpenworldCrime.Police
                 return;
             }
 
+            // A parked car with its crew out waits for them to get back in before it leaves (Deployed handles that).
+            if (State == UnitState.Deployed && crewOut)
+            {
+                Deployed();
+                return;
+            }
             if (wanted.Stars == 0 && State != UnitState.Return) SetState(UnitState.Return);
             else if (wanted.Stars > 0 && State == UnitState.Return) SetState(UnitState.Pursue);
             else if (wanted.IsSearching && State == UnitState.Pursue) SetState(UnitState.Search);
@@ -245,11 +270,29 @@ namespace OpenworldCrime.Police
 
         private void Deployed()
         {
-            if (crewOut) return;
-            if (Speed > 1.5f && Time.time - stateSince < 4f) return;
+            if (crewOut)
+            {
+                if (crew != null) WatchCrew();
+                return;
+            }
+            // Nobody climbs out of a moving car: an officer placed in his seat would be left behind (and run over) by it.
+            if (Speed > 1.5f)
+            {
+                if (Time.time - stateSince > 6f)
+                {
+                    nextDeployTime = Time.time + 3f;
+                    SetState(UnitState.Pursue);
+                }
+                return;
+            }
             if (stoppedSince < 0f) stoppedSince = Time.time;
             if (Time.time - stoppedSince < crewExitDelay) return;
             crewOut = true;
+            if (crew != null)
+            {
+                exitRoutine = StartCoroutine(CrewExitRoutine());
+                return;
+            }
             Vector3 toPlayer = wanted.PlayerTarget.position - transform.position;
             toPlayer.y = 0f;
             Quaternion facing = toPlayer.sqrMagnitude > 0.01f ? Quaternion.LookRotation(toPlayer) : transform.rotation;
@@ -268,6 +311,89 @@ namespace OpenworldCrime.Police
             crewOut = false;
             nextDeployTime = Time.time + 5f;
             SetState(UnitState.Pursue);
+        }
+
+        // One officer after the other (driver first), each only while the on-foot limit of the wanted level allows; the others stay seated.
+        private IEnumerator CrewExitRoutine()
+        {
+            int spawned = 0;
+            for (int seat = 0; seat < crew.SeatCount && State == UnitState.Deployed; seat++)
+            {
+                if (!crew.IsOccupied(seat)) continue;
+                if (spawned > 0) yield return new WaitForSeconds(settings.crewExitStagger);
+                if (State != UnitState.Deployed) break;
+                PoliceOfficerUnit officer = owner.SpawnCrewOfficerFromCar(this, seat);
+                if (officer == null) continue;
+                crew.SetSeated(seat, false);
+                crewOnFoot[seat] = officer;
+                spawned++;
+            }
+            exitRoutine = null;
+            if (spawned > 0 || State != UnitState.Deployed) yield break;
+            // Nobody could get out (on-foot limit reached, no free officer, no NavMesh): keep chasing in the car, try again later.
+            crewOut = false;
+            nextDeployTime = Time.time + 5f;
+            SetState(UnitState.Pursue);
+        }
+
+        // Crew out: once the suspect drives away (or the wanted level is gone) they are called back; when all are in (or gave up,
+        // or died) the car chases or leaves again.
+        private void WatchCrew()
+        {
+            if (exitRoutine != null) return;
+            if (!boarding)
+            {
+                Transform target = wanted.PlayerTarget;
+                bool suspectGone = wanted.Stars == 0
+                                   || (wanted.PlayerInVehicle && wanted.PlayerSpeed > settings.crewReboardSpeed && FlatDistance(target.position) > settings.crewReboardDistance)
+                                   || FlatDistance(target.position) > settings.crewReboardDistance * 2.5f;
+                if (!suspectGone) return;
+                boarding = true;
+                boardingSince = Time.time;
+                for (int i = 0; i < crewOnFoot.Length; i++) if (crewOnFoot[i] != null) crewOnFoot[i].BeginBoarding(this);
+            }
+
+            bool waiting = false;
+            for (int i = 0; i < crewOnFoot.Length; i++)
+            {
+                PoliceOfficerUnit officer = crewOnFoot[i];
+                if (officer == null) continue;
+                if (officer.HomeCar != this || !officer.IsAlive) { crewOnFoot[i] = null; continue; }
+                waiting = true;
+            }
+            if (waiting && Time.time - boardingSince < settings.crewBoardTimeout) return;
+
+            ReleaseCrewOnFoot();
+            boarding = false;
+            crewOut = false;
+            nextDeployTime = Time.time + 6f;
+            SetState(wanted.Stars == 0 ? UnitState.Return : UnitState.Pursue);
+        }
+
+        /// <summary>An officer of this car got back into his seat (he goes back to the pool; the seated mesh shows him again).</summary>
+        public void OnCrewBoarded(PoliceOfficerUnit officer, int seat)
+        {
+            if (seat >= 0 && seat < crewOnFoot.Length && crewOnFoot[seat] == officer) crewOnFoot[seat] = null;
+            if (crew == null) return;
+            crew.SetSeated(seat, true);
+            crew.CloseDoor(seat);
+        }
+
+        /// <summary>An officer of this car will not get back in (shot, knocked down, too far): his seat stays empty.</summary>
+        public void OnCrewGaveUp(PoliceOfficerUnit officer)
+        {
+            for (int i = 0; i < crewOnFoot.Length; i++) if (crewOnFoot[i] == officer) crewOnFoot[i] = null;
+        }
+
+        // Officers still out on foot carry on without the car.
+        private void ReleaseCrewOnFoot()
+        {
+            for (int i = 0; i < crewOnFoot.Length; i++)
+            {
+                PoliceOfficerUnit officer = crewOnFoot[i];
+                crewOnFoot[i] = null;
+                if (officer != null && officer.HomeCar == this) officer.ClearHomeCar();
+            }
         }
 
         private void Search()
@@ -406,6 +532,9 @@ namespace OpenworldCrime.Police
             if (State == UnitState.Inactive) return;
             active.Remove(this);
             State = UnitState.Wrecked;
+            if (exitRoutine != null) StopCoroutine(exitRoutine);
+            exitRoutine = null;
+            ReleaseCrewOnFoot();
             RemoveDriver();
             SetEmergency(false);
             if (mapBlip != null) mapBlip.enabled = false;

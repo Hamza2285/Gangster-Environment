@@ -13,8 +13,9 @@ namespace OpenworldCrime.Police
     /// - Witnesses (<see cref="TryWitness"/>): our units, the patrol cars of the iTS traffic and the street officers of the pedestrian
     ///   system. A patrol car or street officer who sees a crime is swapped in place for a pursuit unit (same model, same pose), so
     ///   the cop who saw it is the one who comes after the player.
-    /// - Dispatch: keeps Foot / Car Units Per Star on the player, one reinforcement per Dispatch Interval, appearing out of sight
-    ///   (officers on the NavMesh around the player, cars back along the road on the way to him).
+    /// - Dispatch: keeps Car Units Per Star on the player, one reinforcement per Dispatch Interval, appearing out of sight (back
+    ///   along the road on the way to him). Officers on foot are capped by Foot Units Per Star (car crews included); only Walking
+    ///   Reinforcements Per Star of them come on foot (on the NavMesh around the player), the rest climb out of the cars.
     /// - Recall: units far away and out of sight go back to the pool; all of them when the wanted level is lost.
     /// - Keeps the pedestrians' panic NavMesh loaded while officers are on foot.
     /// - Patrol cars of the iTS traffic drive with their light bar dark (it only flashes on pursuit cars, see <see cref="PoliceCarUnit"/>);
@@ -278,7 +279,8 @@ namespace OpenworldCrime.Police
 
         private void Dispatch(WantedManager wanted, float now)
         {
-            int missing = MaxOfficers() - CountStandingOfficers();
+            int stars = Mathf.Max(1, wanted.Stars);
+            int missing = Mathf.Min(MaxOfficers() - CountStandingOfficers(), settings.WalkingReinforcementsFor(stars) - CountWalkingOfficers());
             if (now >= nextFootDispatch && missing > 0)
             {
                 nextFootDispatch = now + settings.dispatchInterval;
@@ -382,6 +384,22 @@ namespace OpenworldCrime.Police
             return VehicleHealth.IsOutOfSight(point, keepDistance);
         }
 
+        /// <summary>
+        /// The officer sitting in <paramref name="seat"/> of <paramref name="car"/> climbs out (same model as the seated mesh), as long as
+        /// the on-foot limit of the wanted level (Foot Units Per Star, crews included) is not reached. Null when he stays in the car.
+        /// </summary>
+        public PoliceOfficerUnit SpawnCrewOfficerFromCar(PoliceCarUnit car, int seat)
+        {
+            if (car == null || car.Crew == null || CountStandingOfficers() >= MaxOfficers() || !pedestrians.EnsurePanicNavMesh()) return null;
+            Vehicles.PedDriverRoster.Entry entry = car.Crew.EntryAt(seat);
+            int prefab = entry != null ? PrefabIndexFor(entry.pedName) : Random.Range(0, officerPrefabs.Length);
+            PoliceOfficerUnit unit = TakeOfficer(prefab);
+            if (unit == null) return null;
+            if (unit.ActivateFromCar(this, car, seat, pedestrians.CarSensorLayer)) return unit;
+            ReturnOfficer(unit);
+            return null;
+        }
+
         /// <summary>An officer climbing out of a police car (crews may go beyond the reinforcement count, not beyond the pool).</summary>
         public bool SpawnCrewOfficer(Vector3 position, Quaternion rotation)
         {
@@ -429,11 +447,21 @@ namespace OpenworldCrime.Police
             return count;
         }
 
+        // Officers on foot who did not come out of a car (reinforcements on foot, street officers who saw a crime).
+        private static int CountWalkingOfficers()
+        {
+            int count = 0;
+            IReadOnlyList<PoliceOfficerUnit> officers = PoliceOfficerUnit.Active;
+            for (int i = 0; i < officers.Count; i++) if (officers[i].IsAlive && officers[i].HomeCar == null) count++;
+            return count;
+        }
+
         private static int CountChasingCars()
         {
             int count = 0;
             IReadOnlyList<PoliceCarUnit> cars = PoliceCarUnit.Active;
-            for (int i = 0; i < cars.Count; i++) if (cars[i].IsChasing) count++;
+            // Parked cars whose crew is out count too, or every stop would bring another car (and two more officers on foot).
+            for (int i = 0; i < cars.Count; i++) if (cars[i].IsOnDuty) count++;
             return count;
         }
 

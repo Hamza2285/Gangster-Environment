@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 7fdca508687002e488ec48e316390999
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Combat/Pistol/AS_Pistol_Unequip.controller
+  uploadId: 902864

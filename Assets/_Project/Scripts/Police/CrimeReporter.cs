@@ -69,6 +69,8 @@ namespace OpenworldCrime.Police
             TrafficVehicleAdapter.OnCarThreatened += HandleTrafficCarShot;
             PoliceCarUnit.OnAnyDamaged += HandlePoliceCarDamaged;
             PoliceCarUnit.OnAnyWrecked += HandlePoliceCarWrecked;
+            TrafficBikeAdapter.OnRiderShot += HandleBikeRiderShot;
+            TrafficBikeAdapter.OnRiderKnockedOff += HandleBikeRiderKnockedOff;
         }
 
         private void OnDisable()
@@ -83,6 +85,8 @@ namespace OpenworldCrime.Police
             TrafficVehicleAdapter.OnCarThreatened -= HandleTrafficCarShot;
             PoliceCarUnit.OnAnyDamaged -= HandlePoliceCarDamaged;
             PoliceCarUnit.OnAnyWrecked -= HandlePoliceCarWrecked;
+            TrafficBikeAdapter.OnRiderShot -= HandleBikeRiderShot;
+            TrafficBikeAdapter.OnRiderKnockedOff -= HandleBikeRiderKnockedOff;
             isAiming = false;
         }
 
@@ -147,6 +151,21 @@ namespace OpenworldCrime.Police
             else if (killed) type = CrimeType.PedestrianKilled;
             else type = damage.damageType == "Vehicle" ? CrimeType.PedestrianRunOver : CrimeType.PedestrianHurt;
             Report(type, pedestrian.BodyPosition, pedestrian.transform, officer);
+        }
+
+        // A traffic biker is a pedestrian on a bike: shooting him is shooting a person.
+        private void HandleBikeRiderShot(TrafficBikeAdapter bike, Transform sender, bool killed)
+        {
+            if (bike == null || !IsFromPlayer(sender)) return;
+            Report(killed ? CrimeType.PedestrianKilled : CrimeType.PedestrianHurt, bike.transform.position, bike.transform, false);
+        }
+
+        // Rammed off his bike by the player's vehicle (a run-over), or shoved off it by the player stealing it (a theft).
+        private void HandleBikeRiderKnockedOff(TrafficBikeAdapter bike, Transform by)
+        {
+            if (bike == null) return;
+            if (by == null) Report(CrimeType.VehicleStolen, bike.transform.position, bike.transform, false);
+            else if (IsFromPlayer(by)) Report(CrimeType.PedestrianRunOver, bike.transform.position, bike.transform, false);
         }
 
         private void HandleTrafficCarShot(TrafficVehicleAdapter car, Transform sender)

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e2bc3839b59b3a54aa5c7eda1d8dce8b
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Mounted/Dismount/AS_Dismount_Left.controller
+  uploadId: 902864

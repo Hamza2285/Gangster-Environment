@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 5720bddd07a44584f9bd9d46d3f8570d
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Combat/Pistol/AS_Pistol_Shoot_Right.controller
+  uploadId: 902864

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2a021559384de8c40b4a1b297f6181ef
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Riding/Turn_V1/AS_Turn_V1_Left_Start.controller
+  uploadId: 902864
