@@ -170,55 +170,126 @@ public class AmbulanceMission : MonoBehaviour
         sequence = StartCoroutine(BoardRoutine());
     }
 
-    // The patient walks to the back of the ambulance, the rear doors swing open, they step up and walk in, the doors close.
+    // The patient walks to the back of the ambulance; then a quick cut (the screen blinks shut) and they are on board, the
+    // doors shut, rather than showing them climb in.
     IEnumerator BoardRoutine()
     {
         var doors = Doors();
         PlayPatient("walk");
         yield return WalkTo(() => Ground(doors != null ? doors.BehindPoint : RearOf(ambulance)), 1.5f, 15f, true);
-        if (doors != null)
+        PlayPatient("idle1", "idle2");
+        yield return Cut(() =>
         {
-            doors.Open();
-            while (doors != null && !doors.IsOpen) yield return null;
-            yield return WalkTo(() => doors.SillPoint, 1.1f, 4f, false);
-            yield return WalkTo(() => doors.InsidePoint, 1.1f, 4f, false);
-        }
-        if (patient != null) patient.SetActive(false);
-        if (doors != null)
-        {
-            doors.Close();
-            while (doors != null && !doors.IsClosed) yield return null;
-        }
+            if (patient != null) patient.SetActive(false);
+        });
         sequence = null;
         Boarded();
     }
 
-    // Out of the back the same way, then into the hospital.
+    // At the hospital: a cut, and the patient is standing behind the ambulance, then walks into the hospital.
     IEnumerator UnloadRoutine()
     {
         var doors = Doors();
-        if (doors != null)
+        yield return Cut(() =>
         {
-            doors.Open();
-            while (doors != null && !doors.IsOpen) yield return null;
-        }
-        if (patient != null)
-        {
-            patient.transform.position = doors != null ? doors.InsidePoint : Ground(RearOf(ambulance));
-            patient.transform.rotation = Quaternion.LookRotation(-ambulance.forward);
+            if (patient == null) return;
+            Vector3 behind = Ground(doors != null ? doors.BehindPoint : RearOf(ambulance));
+            Vector3 entranceAt = hospitalEntrance != null ? hospitalEntrance.position : dropOff;
+            Vector3 face = entranceAt - behind;
+            face.y = 0f;
+            patient.transform.SetPositionAndRotation(behind, face.sqrMagnitude > 0.01f ? Quaternion.LookRotation(face) : Quaternion.LookRotation(-ambulance.forward));
             patient.SetActive(true);
-            PlayPatient("walk");
-        }
-        if (doors != null)
-        {
-            yield return WalkTo(() => doors.SillPoint, 1.1f, 4f, false);
-            yield return WalkTo(() => Ground(doors.BehindPoint), 1.3f, 4f, false);
-            doors.Close();
-        }
+            PlayPatient("idle1", "idle2");
+        });
+        // Handed over: the mission is done now. The patient walks into the hospital on their own and is gone at the doors.
         Vector3 entrance = hospitalEntrance != null ? hospitalEntrance.position : dropOff + (dropOff - RearOf(ambulance)).normalized * 6f;
-        yield return WalkTo(() => Ground(entrance), 1.5f, 20f, true);
+        var walker = patient;
+        var walkerAnimator = patientAnimator;
+        patient = null;
         sequence = null;
         Delivered();
+        if (walker != null) StartCoroutine(WalkIntoHospital(walker, walkerAnimator, entrance));
+    }
+
+    IEnumerator WalkIntoHospital(GameObject walker, Animator animator, Vector3 entrance)
+    {
+        yield return new WaitForSeconds(0.4f);
+        if (animator != null && animator.runtimeAnimatorController != null && animator.HasState(0, Animator.StringToHash("walk")))
+            animator.CrossFadeInFixedTime("walk", 0.2f, 0);
+        float started = Time.time;
+        while (walker != null && Time.time - started < 25f)
+        {
+            Vector3 goal = Ground(entrance);
+            Vector3 to = goal - walker.transform.position;
+            to.y = 0f;
+            if (to.magnitude < 0.4f) break;
+            walker.transform.rotation = Quaternion.Slerp(walker.transform.rotation, Quaternion.LookRotation(to), 1f - Mathf.Exp(-8f * Time.deltaTime));
+            walker.transform.position = Ground(Vector3.MoveTowards(walker.transform.position, goal, 1.5f * Time.deltaTime));
+            yield return null;
+        }
+        if (walker != null) Destroy(walker);
+    }
+
+    // The screen blinks shut, the change happens out of sight, and it opens again.
+    IEnumerator Cut(System.Action duringBlack)
+    {
+        var blink = ScreenBlink.Instance;
+        if (blink != null) yield return blink.Close(0.35f);
+        var doors = Doors();
+        if (doors != null) doors.Close();
+        duringBlack();
+        yield return new WaitForSeconds(0.35f);
+        if (blink != null) yield return blink.Open(0.45f);
+    }
+
+    // ---------- stooping through the rear doors ----------
+
+    Transform patientHead, patientPelvis;
+    Transform[] patientSpine = new Transform[0];
+    float stoop;
+
+    // A standing patient's head is higher than the door opening: in the doorway and inside they bend forward (and dip a
+    // little at the knees if bending is not enough), easing in and out, so the head stays under the roof.
+    void LateUpdate()
+    {
+        if (patient == null || !patient.activeInHierarchy || ambulance == null) { stoop = 0f; return; }
+        var doors = Doors();
+        if (doors == null) return;
+        if (patientHead == null) FindPatientBones();
+        if (patientHead == null || patientPelvis == null || patientSpine.Length == 0) return;
+
+        bool inside = doors.IsInDoorway(patient.transform.position);
+        stoop = Mathf.MoveTowards(stoop, inside ? 1f : 0f, Time.deltaTime * 2.5f);
+        if (stoop <= 0f) return;
+
+        // The head bone sits about 0.18 m below the top of the head (hair included): keep the top 7 cm under the roof.
+        float limit = doors.DoorTopWorldY - 0.25f;
+        float over = patientHead.position.y - limit;
+        if (over <= 0f) return;
+
+        // Bend at the spine: the head drops by L(1 - cos a) for a bend a over a torso of length L.
+        float torso = Mathf.Max(0.3f, patientHead.position.y - patientPelvis.position.y);
+        float angle = Mathf.Acos(Mathf.Clamp(1f - over / torso, Mathf.Cos(65f * Mathf.Deg2Rad), 1f)) * Mathf.Rad2Deg * stoop;
+        Vector3 axis = patient.transform.right;
+        float share = angle / patientSpine.Length;
+        foreach (var bone in patientSpine) bone.rotation = Quaternion.AngleAxis(share, axis) * bone.rotation;
+
+        // Whatever the bend could not take, the knees do.
+        float left = patientHead.position.y - limit;
+        if (left > 0f) patientPelvis.position -= Vector3.up * left * stoop;
+    }
+
+    void FindPatientBones()
+    {
+        var spine = new List<Transform>();
+        foreach (var t in patient.GetComponentsInChildren<Transform>(true))
+        {
+            string n = t.name.ToLowerInvariant();
+            if (n.EndsWith("head") && patientHead == null) patientHead = t;
+            else if (n.EndsWith("pelvis") || n.EndsWith("hips")) patientPelvis = t;
+            else if (n.Contains("spine") && !n.Contains("end")) spine.Add(t);
+        }
+        patientSpine = spine.ToArray();
     }
 
     AmbulanceRearDoors Doors() => ambulance != null ? ambulance.GetComponentInParent<AmbulanceRearDoors>() : null;
@@ -309,6 +380,8 @@ public class AmbulanceMission : MonoBehaviour
         var prefab = patientPrefabs[Random.Range(0, patientPrefabs.Length)];
         if (prefab == null) return;
         patient = Instantiate(prefab, at, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+        patientHead = patientPelvis = null;
+        stoop = 0f;
         patient.name = "Patient";
         // Only a figure: the pedestrian's own walking and reactions are switched off.
         foreach (var behaviour in patient.GetComponentsInChildren<MonoBehaviour>(true)) behaviour.enabled = false;

@@ -132,6 +132,11 @@ public class RCC_Camera : MonoBehaviour{
 	//	Resetting orbits.
 	public bool orbitReset = false;
 	private float orbitResetTimer = 0f;
+	// Going back behind the car is a glide the short way round (about this long), not a snap that swings the camera through
+	// the car and anything beside it.
+	public float orbitReturnSeconds = 0.9f;
+	private bool orbitReturning = false;
+	private float orbitReturnVelocityX = 0f, orbitReturnVelocityY = 0f;
 	private float oldOrbitX = 0f;
 	public float oldOrbitY = 0f;
 
@@ -443,8 +448,7 @@ public class RCC_Camera : MonoBehaviour{
 		if (lastDirection != playerCar.direction) {
 
 			direction = playerCar.direction;
-			orbitX = 0f;
-			orbitY = 0f;
+			orbitReturning = true;
 
 		}
 
@@ -584,6 +588,34 @@ public class RCC_Camera : MonoBehaviour{
 		if (orbitX > 360f)
 			orbitX -= 360f;
 
+		// The player moved the camera: any glide back stops and the camera stays where they put it.
+		if (orbitReturning && (oldOrbitX != orbitX || oldOrbitY != orbitY))
+			orbitReturning = false;
+
+		if (orbitReturning) {
+
+			orbitX = Mathf.SmoothDampAngle(orbitX, 0f, ref orbitReturnVelocityX, orbitReturnSeconds * .35f);
+			orbitY = Mathf.SmoothDamp(orbitY, 0f, ref orbitReturnVelocityY, orbitReturnSeconds * .35f);
+
+			if (Mathf.Abs(Mathf.DeltaAngle(orbitX, 0f)) < .05f && Mathf.Abs(orbitY) < .05f) {
+
+				orbitX = 0f;
+				orbitY = 0f;
+				orbitReturning = false;
+
+			}
+
+			// The glide is not the player's input, so it does not restart the reset timer.
+			oldOrbitX = orbitX;
+			oldOrbitY = orbitY;
+
+		} else {
+
+			orbitReturnVelocityX = 0f;
+			orbitReturnVelocityY = 0f;
+
+		}
+
 		orbitRotation = Quaternion.Lerp(orbitRotation, Quaternion.Euler (orbitY, orbitX, 0f), orbitSmooth * Time.deltaTime);
 
 		if (oldOrbitX != orbitX) {
@@ -605,12 +637,8 @@ public class RCC_Camera : MonoBehaviour{
 
 		Mathf.Clamp (orbitResetTimer, 0f, 2f);
 
-		if (orbitReset && playerSpeed >= 25f && orbitResetTimer <= 0f) {
-
-			orbitX = 0f;
-			orbitY = 0f;
-
-		}
+		if (orbitReset && playerSpeed >= 25f && orbitResetTimer <= 0f && (orbitX != 0f || orbitY != 0f))
+			orbitReturning = true;
 
 	}
 

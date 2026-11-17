@@ -355,6 +355,9 @@ namespace OpenworldCrime.Pedestrians
             recoverRoutine = null;
             if (IsDead || !ragdoll.IsActive) yield break;
             ragdoll.GetUp();
+            // Up on their feet first (the get-up clip), then off they run.
+            while (ragdoll.IsGettingUp && !IsDead) yield return null;
+            if (IsDead || ragdoll.IsActive) yield break;   // knocked down again meanwhile
             aliveCollider.enabled = true;
             OnRecovered?.Invoke(lastThreat);
         }

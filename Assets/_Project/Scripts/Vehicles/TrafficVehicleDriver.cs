@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Collections;
 using Invector;
@@ -616,6 +617,7 @@ namespace OpenworldCrime.Vehicles
                 if (walker != null)
                 {
                     Animator animator = walker.GetComponent<Animator>();
+                    RememberRestPose(animator, entry.pedPrefab);
                     originalAvatar = animator.avatar;
                     originalController = animator.runtimeAnimatorController;
                     animator.avatar = entry.humanoidAvatar;
@@ -638,8 +640,72 @@ namespace OpenworldCrime.Vehicles
             animator.applyRootMotion = false;
             animator.speed = 1f;
             animator.cullingMode = AnimatorCullingMode.CullCompletely;
+            // The humanoid carjack clips move bones the pedestrian's own (generic) clips never touch - the skeleton root above the
+            // pelvis among them - so going back to the own avatar left the body sunk ~0.8 m into the ground. Every bone goes back to
+            // the pedestrian prefab's rest pose first, then the own avatar is bound afresh.
             animator.avatar = avatar;
             animator.runtimeAnimatorController = controller;
+            animator.Rebind();
+            // After the swap: unbinding the humanoid avatar writes its bind-time pose back into the bones.
+            RestoreRestPose(animator);
+            animator.Update(0f);
+        }
+
+        private struct BonePose
+        {
+            public Transform bone;
+            public Vector3 position;
+            public Quaternion rotation;
+            public Vector3 scale;
+        }
+
+        private static readonly Dictionary<Animator, BonePose[]> restPoses = new Dictionary<Animator, BonePose[]>();
+
+        // The rest pose comes from the prefab, not the live person: pooled people are reused, and one taken from the pool may
+        // still carry a pose from an earlier scene.
+        private static void RememberRestPose(Animator animator, GameObject prefab)
+        {
+            if (animator == null || prefab == null) return;
+            var source = new Dictionary<string, Transform>();
+            CollectPaths(prefab.transform, "", source);
+            var poses = new List<BonePose>();
+            foreach (Transform bone in animator.GetComponentsInChildren<Transform>(true))
+            {
+                if (bone == animator.transform) continue;
+                if (!source.TryGetValue(PathOf(bone, animator.transform), out Transform rest)) continue;
+                poses.Add(new BonePose { bone = bone, position = rest.localPosition, rotation = rest.localRotation, scale = rest.localScale });
+            }
+            restPoses[animator] = poses.ToArray();
+        }
+
+        private static void RestoreRestPose(Animator animator)
+        {
+            if (animator == null || !restPoses.TryGetValue(animator, out BonePose[] poses)) return;
+            restPoses.Remove(animator);
+            foreach (BonePose pose in poses)
+            {
+                if (pose.bone == null) continue;
+                pose.bone.localPosition = pose.position;
+                pose.bone.localRotation = pose.rotation;
+                pose.bone.localScale = pose.scale;
+            }
+        }
+
+        private static void CollectPaths(Transform t, string path, Dictionary<string, Transform> into)
+        {
+            foreach (Transform child in t)
+            {
+                string childPath = path.Length == 0 ? child.name : path + "/" + child.name;
+                if (!into.ContainsKey(childPath)) into.Add(childPath, child);
+                CollectPaths(child, childPath, into);
+            }
+        }
+
+        private static string PathOf(Transform bone, Transform root)
+        {
+            string path = bone.name;
+            for (Transform p = bone.parent; p != null && p != root; p = p.parent) path = p.name + "/" + path;
+            return path;
         }
 
         private IEnumerator PullOutRoutine()

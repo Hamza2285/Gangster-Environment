@@ -83,6 +83,89 @@ public class PedestrianWalker : MonoBehaviour
         return false;
     }
 
+    // The footpath's baked heights are only a guide: kerbs, planters and uneven pavement differ, and walking at the baked
+    // height sinks legs into them. Every few frames each walker looks at the real surface under the path and steps up
+    // (a little) or down to it, smoothly.
+    const float MaxStepUp = 0.45f, MaxStepDown = 0.5f;
+    static int _groundMask = -1;
+    float _groundOffset, _groundTarget;
+    int _groundSlot = -1;
+
+    float GroundOffset(Vector3 onPath, float dt, bool snap)
+    {
+        if (_groundMask == -1)
+            _groundMask = ~LayerMask.GetMask("Player", "Vehicle", "Traffic AI", "Ignore Raycast", "UI", "Water");
+        if (_groundSlot < 0) _groundSlot = Random.Range(0, 4);
+        if (snap || (Time.frameCount + _groundSlot) % 4 == 0)
+        {
+            _groundTarget = 0f;
+            RaycastHit hit;
+            if (Physics.Raycast(onPath + Vector3.up * MaxStepUp, Vector3.down, out hit, MaxStepUp + MaxStepDown,
+                    _groundMask & ~(1 << gameObject.layer), QueryTriggerInteraction.Ignore)
+                && !hit.collider.transform.IsChildOf(transform))
+                _groundTarget = hit.point.y - onPath.y;
+        }
+        _groundOffset = snap ? _groundTarget : Mathf.MoveTowards(_groundOffset, _groundTarget, dt * 1.6f);
+        return _groundOffset;
+    }
+
+    // ---------- cars in the way ----------
+    // A walker is a kinematic body moved by script, which shoves any car it walks into. So walkers stop for a car in their
+    // path, step round it after a moment, and (whatever they are doing) are pushed back out of a car rather than pushing it.
+    static int _vehicleMask = -1;
+    static readonly Collider[] _carHits = new Collider[6];
+    CapsuleCollider _body;
+    float _blockedFor;
+    Collider _blockingCar;
+    int _blockSide;
+
+    static int VehicleMask
+    {
+        get
+        {
+            if (_vehicleMask == -1) _vehicleMask = LayerMask.GetMask("Vehicle", "Traffic AI");
+            return _vehicleMask;
+        }
+    }
+
+    // A car (parked, stopped or driven) right ahead on the way to 'next'?
+    Collider CarAhead(Vector3 from, Vector3 direction, float reach)
+    {
+        if (direction.sqrMagnitude < 1e-4f) return null;
+        RaycastHit hit;
+        Vector3 chest = from + Vector3.up * 0.9f;
+        if (Physics.SphereCast(chest, 0.32f, direction.normalized, out hit, reach, VehicleMask, QueryTriggerInteraction.Ignore)
+            && !hit.collider.transform.IsChildOf(transform))
+            return hit.collider;
+        return null;
+    }
+
+    // Moves the walker out of any car its body ended up inside, unless the car is the one moving into them (then the car's
+    // own impact handling decides what happens to the walker).
+    void LateUpdate()
+    {
+        if (State == Mode.Down) return;
+        if (_body == null) _body = GetComponent<CapsuleCollider>();
+        if (_body == null || !_body.enabled) return;
+        Vector3 centre = transform.TransformPoint(_body.center);
+        float half = Mathf.Max(0f, _body.height * 0.5f - _body.radius);
+        int count = Physics.OverlapCapsuleNonAlloc(centre + Vector3.up * half, centre - Vector3.up * half, _body.radius, _carHits, VehicleMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            var car = _carHits[i];
+            if (car == null || car.transform.IsChildOf(transform)) continue;
+            var carBody = car.attachedRigidbody;
+            if (carBody != null && !carBody.isKinematic && carBody.linearVelocity.sqrMagnitude > 1.5f * 1.5f) continue;
+            Vector3 direction;
+            float distance;
+            if (Physics.ComputePenetration(_body, transform.position, transform.rotation, car, car.transform.position, car.transform.rotation, out direction, out distance))
+            {
+                direction.y = 0f;
+                if (direction.sqrMagnitude > 1e-4f) transform.position += direction.normalized * (distance + 0.01f);
+            }
+        }
+    }
+
     public void Place(int lane, float distance, float speed)
     {
         LeaveNavMesh();
@@ -99,6 +182,7 @@ public class PedestrianWalker : MonoBehaviour
 
         Vector3 forward;
         Vector3 position = _network.Evaluate(lane, distance, out forward);
+        position.y += GroundOffset(position, 0f, true);
         forward.y = 0f;
         if (forward.sqrMagnitude > 1e-4f) Forward = forward.normalized;
         transform.SetPositionAndRotation(position, forward.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(forward) : transform.rotation);
@@ -112,6 +196,40 @@ public class PedestrianWalker : MonoBehaviour
         int previousLane = Lane;
         // At a true dead end they wait there until they can be removed unseen.
         float speed = WantsRecycle ? 0f : _speed * Mathf.Clamp01((GapAhead - 0.9f) / 1.2f) * SpeedScale;
+
+        // A car in the way: wait for it; after a moment step round it; if it still blocks, walk on (it is let through
+        // rather than shoved).
+        if (speed > 0.05f && (Time.frameCount + Mathf.Max(0, _groundSlot)) % 3 == 0)
+        {
+            var car = CarAhead(transform.position, Forward, 0.55f + speed * 0.5f);
+            if (car != null)
+            {
+                if (car != _blockingCar) { _blockingCar = car; _blockSide = Vector3.Dot(car.bounds.center - transform.position, new Vector3(-Forward.z, 0f, Forward.x)) > 0f ? -1 : 1; }
+            }
+            else if (_blockingCar != null && _blockedFor < 6f)
+            {
+                _blockingCar = null;
+                _blockedFor = 0f;
+                LateralTarget = 0f;
+            }
+        }
+        if (_blockingCar != null && _blockedFor < 6f)
+        {
+            _blockedFor += dt;
+            if (_blockedFor > 1.2f) LateralTarget = _blockSide * 1.1f;
+            if (_blockedFor < 1.2f || CarAhead(transform.position, Forward, 0.5f) != null) speed = 0f;
+            if (_blockedFor >= 6f && _body != null)
+            {
+                foreach (var c in _blockingCar.attachedRigidbody != null ? _blockingCar.attachedRigidbody.GetComponentsInChildren<Collider>() : new[] { _blockingCar })
+                    Physics.IgnoreCollision(_body, c, true);
+            }
+        }
+        else if (_blockedFor >= 6f && (_blockingCar == null || CarAhead(transform.position, Forward, 2f) == null))
+        {
+            _blockingCar = null;
+            _blockedFor = 0f;
+            LateralTarget = 0f;
+        }
         bool idle = speed < 0.15f;
         PlayState(idle ? "idle1" : "walk", Random.value);
         if (_animator != null) _animator.speed = idle ? 1f : Mathf.Clamp(speed / WalkClipSpeed, 0.5f, 1.4f);
@@ -146,6 +264,7 @@ public class PedestrianWalker : MonoBehaviour
 
         Lateral = Mathf.MoveTowards(Lateral, LateralTarget, LateralSpeed * dt);
         target += new Vector3(-Forward.z, 0f, Forward.x) * Lateral;
+        target.y += GroundOffset(target, dt, false);
 
         Vector3 current = transform.position;
         // Short hops onto a connecting lane and steps back from a conversation are walked, not snapped.

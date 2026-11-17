@@ -101,6 +101,8 @@ public class HospitalRespawn : MonoBehaviour
                 for (float t = 0f; t < 3f && interaction.IsInVehicle; t += Time.unscaledDeltaTime) yield return null;
             }
             Revive(controller);
+            yield return null;
+            RestoreCombat(controller);
         }
 
         int charged = ChargeFee();
@@ -116,6 +118,49 @@ public class HospitalRespawn : MonoBehaviour
         yield return new WaitForSecondsRealtime(2.2f);
         canvas.gameObject.SetActive(false);
         respawning = false;
+    }
+
+    // Dying can cut a shot, a reload or a weapon switch short, and the animator reset above drops the weapon's poses. So the
+    // shooter forgets any half-done reload or aim, the camera leaves aim mode, and the weapon in hand is equipped afresh,
+    // exactly as when the player draws it.
+    void RestoreCombat(vThirdPersonController controller)
+    {
+        const System.Reflection.BindingFlags Any = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var shooter = controller.GetComponent<Invector.vShooter.vShooterManager>();
+        if (shooter != null)
+        {
+            shooter.StopAllCoroutines();
+            shooter.isReloadingWeapon = false;
+            var reloading = typeof(Invector.vShooter.vShooterManager).GetProperty("isReloading", Any);
+            if (reloading != null) reloading.SetValue(shooter, false, null);
+        }
+
+        var input = controller.GetComponent<vShooterMeleeInput>();
+        if (input != null)
+        {
+            input.SetLockAllInput(false);
+            for (var type = input.GetType(); type != null && type != typeof(MonoBehaviour); type = type.BaseType)
+            {
+                var aiming = type.GetProperty("isAimingByInput", Any | System.Reflection.BindingFlags.DeclaredOnly);
+                if (aiming != null && aiming.CanWrite) aiming.SetValue(input, false, null);
+                var reload = type.GetProperty("isReloading", Any | System.Reflection.BindingFlags.DeclaredOnly);
+                if (reload != null && reload.CanWrite) reload.SetValue(input, false, null);
+                var shots = type.GetField("shootCountA", Any | System.Reflection.BindingFlags.DeclaredOnly);
+                if (shots != null) shots.SetValue(input, 0);
+            }
+            if (input.tpCamera != null) input.tpCamera.ChangeState("Default", true);
+        }
+
+        var weapons = controller.GetComponent<PlayerWeaponController>();
+        if (weapons != null)
+        {
+            var held = weapons.GetCurrentWeaponDefinition();
+            if (held != null)
+            {
+                weapons.Unarm(true);
+                weapons.EquipWeapon(held);
+            }
+        }
     }
 
     void Revive(vThirdPersonController controller)
@@ -163,6 +208,12 @@ public class HospitalRespawn : MonoBehaviour
             animator.Rebind();
             animator.Update(0f);
             animator.SetBool("isDead", false);
+            // Rebind makes new copies of the animator's state behaviours, and Invector's tag behaviours (which say "the arms
+            // are in the shooting pose", "movement is locked"...) only report to the controller once registered. Without
+            // this the controller never sees "Upperbody Pose" again and the gun refuses to fire.
+            if (infos != null) infos.RegisterListener();
+            for (int layer = 0; layer < animator.layerCount; layer++)
+                animator.Play(animator.GetCurrentAnimatorStateInfo(layer).fullPathHash, layer, 0f);
         }
 
         // Anything that switched the controls off while dead (input, locks, cursor) comes back on.

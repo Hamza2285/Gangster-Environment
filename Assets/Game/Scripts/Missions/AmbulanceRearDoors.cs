@@ -10,6 +10,17 @@ public class AmbulanceRearDoors : MonoBehaviour
     public float seconds = 0.7f;
     [Tooltip("Vehicle space: the rear face (z) and the cargo floor height (y).")]
     public float rearZ = -2.8f, floorY = 0.62f;
+    [Tooltip("Vehicle space: the top of the door opening (y). Anyone getting in keeps their head below it.")]
+    public float doorTopY = 2.02f;
+
+    public float DoorTopWorldY => transform.TransformPoint(new Vector3(0f, doorTopY, rearZ)).y;
+
+    // True when a point is at the doorway or inside the cargo box.
+    public bool IsInDoorway(Vector3 world)
+    {
+        Vector3 local = transform.InverseTransformPoint(world);
+        return local.z > rearZ - 0.45f && local.z < rearZ + 3.5f && Mathf.Abs(local.x) < 1.1f;
+    }
 
     float open, target;
 
