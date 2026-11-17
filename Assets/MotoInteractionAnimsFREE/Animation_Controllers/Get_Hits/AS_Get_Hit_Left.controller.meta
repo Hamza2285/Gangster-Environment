@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d90102fb7e12c8e49b1f374c8fff6a12
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Get_Hits/AS_Get_Hit_Left.controller
+  uploadId: 902864

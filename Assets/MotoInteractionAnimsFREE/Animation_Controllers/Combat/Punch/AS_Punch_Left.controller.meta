@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d15ca665847d7634b8d9cc8262e22989
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Combat/Punch/AS_Punch_Left.controller
+  uploadId: 902864

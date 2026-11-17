@@ -5,6 +5,8 @@ using Invector;
 using Invector.vCharacterController;
 using OpenworldCrime.Vehicles;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 
 namespace OpenworldCrime.Player
 {
@@ -193,6 +195,17 @@ namespace OpenworldCrime.Player
         [SerializeField, Min(0.05f)] private float quickMountDuration = 0.45f;
         [Tooltip("Height (m) of the leg-over arc while mounting / dismounting.")]
         [SerializeField, Min(0f)] private float quickMountHop = 0.25f;
+        [Tooltip("Bikes with get-on clips: seconds of the cross-fade from the last clip frame into the bike's posed rider (and back " +
+                 "out of it when getting off), and from the clip's last frame into the on-foot animation.")]
+        [SerializeField, Min(0.05f)] private float settleSeconds = 0.3f;
+        [Tooltip("Cross-fade (s) where two bike clips are chained (get on -> riding pose, riding pose -> foot down -> get off).")]
+        [SerializeField, Min(0.05f)] private float chainBlendSeconds = 0.25f;
+        [Tooltip("Bike get-on: height (m) of the small hop as the leg swings over the seat, and when it happens (share of the get-on clip).")]
+        [SerializeField, Min(0f)] private float mountHopHeight = 0.06f;
+        [SerializeField, Range(0f, 1f)] private float mountHopStart = 0.3f;
+        [SerializeField, Range(0f, 1f)] private float mountHopEnd = 0.72f;
+        [Tooltip("Downward speed (m/s) given to the bike as the rider lands on the seat (its springs compress a little and settle).")]
+        [SerializeField, Min(0f)] private float landingSettleSpeed = 0.35f;
 
         [Header("Exit Animation")]
         [SerializeField] private string exitStateName = "Vehicle_Exit";
@@ -267,6 +280,9 @@ namespace OpenworldCrime.Player
         [SerializeField, Min(0f)] private float ejectUpSpeed = 3.5f;
         [Tooltip("Where the body leaves the car, from the driver's seat (car space, metres): up and forward through the windscreen.")]
         [SerializeField] private Vector3 ejectExitOffset = new Vector3(0.1f, 0.75f, 1.35f);
+        [Tooltip("Same for a rider thrown off a bike (quick-mount vehicles): just above the seat and bars, so the body never starts " +
+                 "inside what the bike ran into (that would shoot it out of the wall).")]
+        [SerializeField] private Vector3 crashThrowExitOffset = new Vector3(0f, 0.55f, 0.3f);
         [Tooltip("Damage scale compared to a bail-out at the same speed.")]
         [SerializeField, Min(0f)] private float ejectDamageScale = 1.6f;
 
@@ -489,10 +505,16 @@ namespace OpenworldCrime.Player
             return goal.position + (back.sqrMagnitude > 0.0001f ? back.normalized * approachGoalStandOff : Vector3.zero);
         }
 
-        private static Transform GetApproachGoal(IVehicleInteractionTarget target)
+        private Transform GetApproachGoal(IVehicleInteractionTarget target)
         {
             Transform stealPoint = target.GetStealPoint();
-            return stealPoint != null ? stealPoint : target.GetEnterPoint();
+            return stealPoint != null ? stealPoint : GetEnterPointFor(target);
+        }
+
+        // Bikes can be got on from either side: the side the character stands on.
+        private Transform GetEnterPointFor(IVehicleInteractionTarget target)
+        {
+            return target is IVehicleEntrySide sides ? sides.GetEnterPoint(transform.position) : target.GetEnterPoint();
         }
 
         // Walking around the vehicle keeps normal locomotion (gravity, collisions, animations); only player input is replaced.
@@ -1008,6 +1030,24 @@ namespace OpenworldCrime.Player
             return true;
         }
 
+        /// <summary>
+        /// A crash the vehicle itself judged hard enough (e.g. <see cref="BikeCrashSensor"/> on a bike): the driver is thrown off as a
+        /// ragdoll flying on with <paramref name="launchVelocity"/>, exactly like a windscreen ejection but without its speed
+        /// thresholds. Returns false when it does not apply right now (not driving, no ragdoll).
+        /// </summary>
+        public bool TryCrashThrow(Vector3 launchVelocity)
+        {
+            if (playerRagdoll == null || State != VehicleInteractionState.InVehicle || CurrentVehicle == null) return false;
+            var vehicle = CurrentVehicle;
+            SetState(VehicleInteractionState.Bailing);
+            OnVehicleBailStarted?.Invoke(vehicle);
+            vehicle.ReleaseControlRolling();
+            playerCameraRoot.SetActive(true);
+            Rigidbody vehicleBody = ((Component)vehicle).GetComponent<Rigidbody>();
+            StartCoroutine(BailRoutine(vehicle, vehicleBody, launchVelocity.magnitude * 3.6f, launchVelocity));
+            return true;
+        }
+
         private IEnumerator BailRoutine(IVehicleController vehicle, Rigidbody vehicleBody, float kmh, Vector3? windshieldLaunch = null)
         {
             Transform car = vehicle.transform;
@@ -1027,10 +1067,11 @@ namespace OpenworldCrime.Player
                 }
                 animator.Play(bailDiveHash, BaseLayer, 0f);
                 animator.Update(0f);
-                Vector3 exit = car.TransformPoint(car.InverseTransformPoint(seat.position) + ejectExitOffset);
+                Vector3 exit = car.TransformPoint(car.InverseTransformPoint(seat.position) + (vehicle.UsesQuickMount ? crashThrowExitOffset : ejectExitOffset));
                 transform.SetParent(originalParent, true);
                 transform.SetPositionAndRotation(exit, FlatRotation(car.forward));
-                OnWindshieldEjected?.Invoke(vehicle, exit, windshieldLaunch.Value);
+                // Bikes have no windscreen to burst.
+                if (!vehicle.UsesQuickMount) OnWindshieldEjected?.Invoke(vehicle, exit, windshieldLaunch.Value);
                 if ((vehicle as UnityEngine.Object) != null) vehicle.SetOccupied(false);
             }
 
@@ -1192,6 +1233,15 @@ namespace OpenworldCrime.Player
                 limb.linearVelocity = velocity + Vector3.Cross(angularVelocity, limb.worldCenterOfMass - core);
                 limb.angularVelocity = angularVelocity;
             }
+        }
+
+        private IEnumerator RestoreVehicleCollisionWhenClear(IVehicleController vehicle)
+        {
+            const float maxWait = 30f;
+            yield return new WaitForFixedUpdate();
+            for (float t = 0f; t < maxWait && (vehicle as UnityEngine.Object) != null && OverlapsVehicle(vehicle); t += 0.2f)
+                yield return new WaitForSeconds(0.2f);
+            if ((vehicle as UnityEngine.Object) != null && CurrentVehicle != vehicle) SetVehicleCollisionIgnored(vehicle, false);
         }
 
         private bool OverlapsVehicle(IVehicleController vehicle)
@@ -1405,8 +1455,13 @@ namespace OpenworldCrime.Player
         // no enter clip; the bike's rider visual takes over once seated (FinishSeating).
         private IEnumerator QuickMountRoutine(IVehicleController vehicle)
         {
+            if (((Component)vehicle).TryGetComponent(out BikeMountAnimations bikeClips) && bikeClips.MountClip(false) != null && bikeClips.seatHips != null)
+            {
+                yield return BikeClipMountRoutine(vehicle, bikeClips);
+                yield break;
+            }
             Transform seat = vehicle.GetDriverSeat();
-            Transform enterPoint = vehicle.GetEnterPoint();
+            Transform enterPoint = GetEnterPointFor(vehicle);
             Vector3 startPosition = transform.position;
             Quaternion startRotation = transform.rotation;
             Vector3 standPosition = GetGroundedPosition(enterPoint.position);
@@ -1439,6 +1494,11 @@ namespace OpenworldCrime.Player
         // Bikes: step off sideways to the exit point in a short arc while blending back into on-foot locomotion.
         private IEnumerator QuickDismountRoutine(IVehicleController vehicle, Vector3 exitPosition, Quaternion exitRotation)
         {
+            if (((Component)vehicle).TryGetComponent(out BikeMountAnimations bikeClips) && bikeClips.DismountClip(false) != null && bikeClips.seatHips != null)
+            {
+                yield return BikeClipDismountRoutine(vehicle, bikeClips, exitPosition);
+                yield break;
+            }
             ShowCharacterAtSeat(vehicle);
             animator.Play(seatedStateHash, BaseLayer, 0f);
             animator.Update(0f);
@@ -1454,6 +1514,370 @@ namespace OpenworldCrime.Player
             }
             SnapTo(exitPosition, exitRotation);
             CompleteExit(vehicle);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Bike get-on / get-off clips (MotoInteractionAnimsFREE, humanoid): played through a short-lived PlayableGraph on the
+        // character's Animator, so the Invector controller asset is untouched and takes over again as soon as the graph goes.
+        // The clips keep the root still and move the body (root motion baked into the pose): the root is placed so the clip's
+        // seated hips land on the bike's Seat Hips, and its height eases from the ground (standing) to the seat height.
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private IEnumerator BikeClipMountRoutine(IVehicleController vehicle, BikeMountAnimations clips)
+        {
+            Transform bike = vehicle.transform;
+            Transform seat = vehicle.GetDriverSeat();
+            Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+
+            // A bike lying on its side is stood up first (GTA: the rider lifts it), the character waiting beside it.
+            if (clips.IsLyingDown) OnVehicleClimbStarted?.Invoke(vehicle);
+            yield return clips.RightUp(); // also switches its colliders back on if it was placed lying (a picked-up wreck)
+            bool right = clips.IsRightSide(transform.position);
+
+            // The chain: get on (ends with a foot down), then lift the foot onto the peg (riding pose).
+            AnimationClip mount = clips.MountClip(right);
+            AnimationClip toRide = clips.mountedToRide;
+            Quaternion yaw = FlatRotation(bike.forward);
+            PlayableGraph graph = CreateClipGraph(mount, out AnimationPlayableOutput output, out AnimationClipPlayable playable);
+            ClipEnds(graph, playable, yaw, hips, out Vector3 mountStart, out Vector3 mountEnd);
+            Vector3 rideStart = mountEnd, rideEnd = mountEnd;
+            AnimationClipPlayable ridePlayable = default;
+            if (toRide != null)
+            {
+                ridePlayable = AnimationClipPlayable.Create(graph, toRide);
+                ridePlayable.SetApplyFootIK(true);
+                output.SetSourcePlayable(ridePlayable);
+                ClipEnds(graph, ridePlayable, yaw, hips, out rideStart, out rideEnd);
+                output.SetSourcePlayable(playable);
+            }
+            // Every clip starts with its body over its root, so at each hand-over the root steps by (previous end - next start):
+            // the first root is placed so the body's final hips land exactly on the seat's.
+            Vector3 chain = Flat(mountEnd - mountStart) + Flat(rideEnd - rideStart);
+            Vector3 seatHips = clips.seatHips.position;
+            Vector3 mountRoot = seatHips - yaw * (Flat(mountStart) + chain);
+            mountRoot.y = GetGroundedPosition(mountRoot + yaw * Flat(mountStart)).y;
+            float seatedRootY = seatHips.y - (yaw * rideEnd).y;
+
+            // Walk-in: slide and turn onto the clip's first frame while the walking pose blends into it.
+            Vector3 fromPosition = transform.position;
+            Quaternion fromRotation = transform.rotation;
+            float alignDuration = Mathf.Clamp(Vector3.Distance(fromPosition, mountRoot) / alignSpeed, 0.2f, maxAlignDuration);
+            BeginPoseBlend(PoseBlendSource.Snapshot, false, alignDuration + 0.15f);
+            playable.SetTime(0d);
+            for (float t = 0f; t < alignDuration; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / alignDuration);
+                transform.SetPositionAndRotation(Vector3.Lerp(fromPosition, mountRoot, k), Quaternion.Slerp(fromRotation, yaw, k));
+                graph.Evaluate(0f);
+                yield return null;
+            }
+
+            OnVehicleClimbStarted?.Invoke(vehicle);
+            // Follow the bike (it settles on its springs) while the clips play.
+            transform.SetParent(seat, true);
+            transform.SetPositionAndRotation(mountRoot, yaw);
+            float total = mount.length + (toRide != null ? toRide.length : 0f);
+            float startY = mountRoot.y;
+            Vector3 localRoot = seat.InverseTransformPoint(mountRoot);
+            Rigidbody bikeBody = bike.GetComponent<Rigidbody>();
+            bool landed = false;
+            yield return PlayClip(graph, playable, clips.clipSpeed, k =>
+            {
+                // A small hop as the leg swings over the seat, then the bike's springs give a little as the rider lands on it.
+                float hop = mountHopHeight * Mathf.Sin(Mathf.PI * Mathf.Clamp01((k - mountHopStart) / Mathf.Max(0.01f, mountHopEnd - mountHopStart)));
+                SetRootHeight(seat, ref localRoot, Mathf.Lerp(startY, seatedRootY, Mathf.SmoothStep(0f, 1f, k * mount.length / total)) + hop);
+                if (!landed && k >= mountHopEnd)
+                {
+                    landed = true;
+                    if (bikeBody != null && !bikeBody.isKinematic) bikeBody.AddForce(Vector3.down * landingSettleSpeed, ForceMode.VelocityChange);
+                }
+            });
+            if (toRide != null)
+            {
+                graph.Evaluate(0f);
+                Vector3 hipsWorld = hips.position;
+                BeginPoseBlend(PoseBlendSource.Snapshot, false, chainBlendSeconds);
+                localRoot += seat.InverseTransformVector(yaw * Flat(mountEnd - rideStart));
+                transform.localPosition = localRoot;
+                poseSnapshotHips = transform.InverseTransformPoint(hipsWorld);
+                output.SetSourcePlayable(ridePlayable);
+                yield return PlayClip(graph, ridePlayable, clips.clipSpeed, k =>
+                    SetRootHeight(seat, ref localRoot, Mathf.Lerp(startY, seatedRootY, Mathf.SmoothStep(0f, 1f, (mount.length + k * toRide.length) / total))));
+            }
+
+            // Settle into the bike's posed rider (same skeleton) so the hand-over to it has no pop.
+            riderDummyBones = FindRiderDummy(vehicle);
+            if (riderDummyBones != null)
+            {
+                BeginPoseBlend(PoseBlendSource.RiderDummy, true, settleSeconds);
+                for (float t = 0f; t < settleSeconds; t += Time.deltaTime)
+                {
+                    graph.Evaluate(0f);
+                    yield return null;
+                }
+            }
+            graph.Destroy();
+            EndPoseBlend();
+            FinishSeating(vehicle);
+        }
+
+        private IEnumerator BikeClipDismountRoutine(IVehicleController vehicle, BikeMountAnimations clips, Vector3 exitPosition)
+        {
+            Transform bike = vehicle.transform;
+            Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+            // The side is chosen first (the clear exit) and that side's clip ends exactly where the character is left standing.
+            bool right = clips.IsRightSide(exitPosition);
+            Quaternion yaw = FlatRotation(bike.forward);
+            riderDummyBones = FindRiderDummy(vehicle);
+            ShowCharacterAtSeat(vehicle);
+
+            AnimationClip dismount = clips.DismountClip(right);
+            AnimationClip toMounted = clips.rideToMounted;
+            PlayableGraph graph = CreateClipGraph(dismount, out AnimationPlayableOutput output, out AnimationClipPlayable dismountPlayable);
+            ClipEnds(graph, dismountPlayable, yaw, hips, out Vector3 offStart, out Vector3 offEnd);
+            Vector3 downStart = offStart, downEnd = offStart;
+            AnimationClipPlayable downPlayable = default;
+            if (toMounted != null)
+            {
+                downPlayable = AnimationClipPlayable.Create(graph, toMounted);
+                downPlayable.SetApplyFootIK(true);
+                output.SetSourcePlayable(downPlayable);
+                ClipEnds(graph, downPlayable, yaw, hips, out downStart, out downEnd);
+            }
+
+            // First clip's body starts on the seat; its root steps by (end - next start) at the hand-over.
+            Vector3 seatHips = clips.seatHips.position;
+            Vector3 firstStart = toMounted != null ? downStart : offStart;
+            Vector3 root = seatHips - yaw * firstStart;
+            float seatedY = root.y;
+            Vector3 finalBody = root + yaw * (Flat(downEnd - offStart) + Flat(offEnd));
+            float groundY = GetGroundedPosition(finalBody).y;
+            float total = dismount.length + (toMounted != null ? toMounted.length : 0f);
+            transform.SetPositionAndRotation(root, yaw);
+
+            // Out of the posed rider into the clip.
+            if (riderDummyBones != null) BeginPoseBlend(PoseBlendSource.RiderDummy, false, settleSeconds);
+            if (toMounted != null)
+            {
+                yield return PlayClip(graph, downPlayable, clips.clipSpeed, null);
+                graph.Evaluate(0f);
+                // The package's clips do not end exactly in the next one's first pose: cross-fade from where this one left off.
+                Vector3 hipsWorld = hips.position;
+                BeginPoseBlend(PoseBlendSource.Snapshot, false, chainBlendSeconds);
+                root += yaw * Flat(downEnd - offStart);
+                transform.SetPositionAndRotation(root, yaw);
+                poseSnapshotHips = transform.InverseTransformPoint(hipsWorld);
+                output.SetSourcePlayable(dismountPlayable);
+            }
+            float offset = toMounted != null ? toMounted.length : 0f;
+            yield return PlayClip(graph, dismountPlayable, clips.clipSpeed, k =>
+            {
+                Vector3 p = transform.position;
+                p.y = Mathf.Lerp(seatedY, groundY, Mathf.SmoothStep(0f, 1f, (offset + k * dismount.length) / total));
+                transform.position = p;
+            });
+
+            // Standing beside the bike: the root goes under the body (xz) and the controller takes over, blending from the clip's
+            // last pose so nothing pops.
+            // The character's own Animator has run since the clip's last frame (a finished nested coroutine resumes its caller a
+            // frame later): pose the last frame again before reading it, or the hips read would be the controller's (over the root).
+            graph.Evaluate(0f);
+            Vector3 standing = hips.position;
+            standing.y = groundY;
+            CapturePoseSnapshot();
+            lastClipHips = hips.position;
+            graph.Destroy();
+            SnapTo(standing, yaw);
+            poseSnapshotHips = transform.InverseTransformPoint(lastClipHips); // the snapshot's hips stay where the clip left them
+            animator.Play(onFootStateHash, BaseLayer, 0f);
+            animator.Update(0f);
+            BeginPoseBlend(PoseBlendSource.Snapshot, false, settleSeconds, captureNow: false);
+            measureHandover = true;
+            CompleteExit(vehicle);
+        }
+
+        private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+        private void SetRootHeight(Transform seat, ref Vector3 localRoot, float worldY)
+        {
+            Vector3 world = seat.TransformPoint(localRoot);
+            world.y = worldY;
+            localRoot = seat.InverseTransformPoint(world);
+            transform.localPosition = localRoot;
+        }
+
+        // Hips at a clip's first and last frame, in the clip's own space (root turned to the bike's heading, at the root).
+        private void ClipEnds(PlayableGraph graph, AnimationClipPlayable playable, Quaternion yaw, Transform hips, out Vector3 start, out Vector3 end)
+        {
+            start = SampleHipsLocal(graph, playable, 0f, yaw, hips);
+            end = SampleHipsLocal(graph, playable, ClipEndTime(playable), yaw, hips);
+            playable.SetTime(0d);
+        }
+
+        private PlayableGraph CreateClipGraph(AnimationClip clip, out AnimationPlayableOutput output, out AnimationClipPlayable playable)
+        {
+            PlayableGraph graph = PlayableGraph.Create("BikeMountClip");
+            activeClipGraph = graph;
+            graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+            output = AnimationPlayableOutput.Create(graph, "Animation", animator);
+            playable = AnimationClipPlayable.Create(graph, clip);
+            playable.SetApplyFootIK(true);
+            output.SetSourcePlayable(playable);
+            return graph;
+        }
+
+        // Hips at a clip time, in the character's space with the root turned to the bike's heading.
+        private Vector3 SampleHipsLocal(PlayableGraph graph, AnimationClipPlayable playable, float time, Quaternion yaw, Transform hips)
+        {
+            transform.rotation = yaw;
+            playable.SetTime(time);
+            graph.Evaluate(0f);
+            return Quaternion.Inverse(yaw) * (hips.position - transform.position);
+        }
+
+        // Plays the clip once (manual update, so the timing follows Time.deltaTime and the pose is never a frame late).
+        private IEnumerator PlayClip(PlayableGraph graph, AnimationClipPlayable playable, float speed, Action<float> onProgress)
+        {
+            double length = playable.GetAnimationClip().length;
+            playable.SetTime(0d);
+            for (double t = 0d; t < length; t += Time.deltaTime * speed)
+            {
+                playable.SetTime(t);
+                onProgress?.Invoke((float)(t / length));
+                graph.Evaluate(0f);
+                yield return null;
+            }
+            playable.SetTime(ClipEndTime(playable));
+            onProgress?.Invoke(1f);
+            graph.Evaluate(0f);
+        }
+
+        // The package's clips are imported looping: at exactly their length they wrap round to the first frame, so the last
+        // frame is sampled just before it.
+        private static float ClipEndTime(AnimationClipPlayable playable)
+        {
+            AnimationClip clip = playable.GetAnimationClip();
+            return Mathf.Max(0f, clip.length - 1f / Mathf.Max(30f, clip.frameRate) * 0.5f);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Pose blending (LateUpdate, after the clip or the controller has posed the body): a cross-fade between the animated
+        // pose and either a snapshot of an earlier pose or the bike's posed rider (same skeleton, matched by bone name).
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private enum PoseBlendSource { Snapshot, RiderDummy }
+
+        private Transform[] poseBones = new Transform[0];
+        private Quaternion[] poseSnapshot = new Quaternion[0];
+        private Vector3 poseSnapshotHips;
+        private Transform[] riderDummyBones;
+        private bool poseBlending;
+        private PoseBlendSource poseBlendSource;
+        private bool poseBlendRising;
+        private float poseBlendStart;
+        private float poseBlendDuration;
+        private Vector3 lastClipHips;
+        private bool measureHandover;
+        // The bike clip graph while it plays: re-evaluated in LateUpdate, so the character's own Animator (which also runs every
+        // frame) never shows its pose for a frame in between (e.g. the frame between two chained clips).
+        private PlayableGraph activeClipGraph;
+
+        /// <summary>Distance (m) the hips moved between the last frame of the bike dismount clip and the first frame under control.</summary>
+        public float LastDismountHandoverDelta { get; private set; }
+
+        private void BuildPoseBones()
+        {
+            if (poseBones.Length > 0 || !animator.isHuman) return;
+            var bones = new List<Transform>();
+            for (int i = 0; i < (int)HumanBodyBones.LastBone; i++)
+            {
+                Transform t = animator.GetBoneTransform((HumanBodyBones)i);
+                if (t != null) bones.Add(t);
+            }
+            // Parents before children, so world rotations can be set in order.
+            bones.Sort((a, b) => Depth(a).CompareTo(Depth(b)));
+            poseBones = bones.ToArray();
+            poseSnapshot = new Quaternion[poseBones.Length];
+        }
+
+        private static int Depth(Transform t)
+        {
+            int d = 0;
+            for (; t != null; t = t.parent) d++;
+            return d;
+        }
+
+        private void CapturePoseSnapshot()
+        {
+            BuildPoseBones();
+            // Relative to the character's root: the root keeps turning while the snapshot fades (e.g. lining up at the bike).
+            Quaternion toRoot = Quaternion.Inverse(transform.rotation);
+            for (int i = 0; i < poseBones.Length; i++) poseSnapshot[i] = toRoot * poseBones[i].rotation;
+            if (poseBones.Length > 0) poseSnapshotHips = transform.InverseTransformPoint(poseBones[0].position);
+        }
+
+        private void BeginPoseBlend(PoseBlendSource source, bool rising, float duration, bool captureNow = true)
+        {
+            BuildPoseBones();
+            if (poseBones.Length == 0) return;
+            if (source == PoseBlendSource.Snapshot && captureNow) CapturePoseSnapshot();
+            poseBlendSource = source;
+            poseBlendRising = rising;
+            poseBlendStart = Time.time;
+            poseBlendDuration = Mathf.Max(0.01f, duration);
+            poseBlending = true;
+        }
+
+        private void EndPoseBlend() => poseBlending = false;
+
+        // The posed rider of this bike for the playing character (BikeRiderVisual picks it by name), bone for bone with the
+        // character's humanoid bones; null when there is none or the skeletons differ.
+        private Transform[] FindRiderDummy(IVehicleController vehicle)
+        {
+            BuildPoseBones();
+            Transform seat = vehicle.GetDriverSeat();
+            Transform riders = seat != null ? seat.Find("BikeRider") : null;
+            if (riders == null || poseBones.Length == 0) return null;
+            Transform pose = riders.Find("Rider_" + name);
+            if (pose == null) return null;
+            var byName = new Dictionary<string, Transform>();
+            foreach (Transform t in pose.GetComponentsInChildren<Transform>(true)) byName[t.name] = t;
+            var mapped = new Transform[poseBones.Length];
+            for (int i = 0; i < poseBones.Length; i++)
+            {
+                if (!byName.TryGetValue(poseBones[i].name, out mapped[i])) return null;
+            }
+            return mapped;
+        }
+
+        private void LateUpdate()
+        {
+            if (activeClipGraph.IsValid()) activeClipGraph.Evaluate(0f);
+            if (measureHandover)
+            {
+                // First frame under the controller after a bike dismount: how far did the hips move from the clip's last frame?
+                measureHandover = false;
+                if (poseBones.Length > 0) LastDismountHandoverDelta = Vector3.Distance(poseBones[0].position, lastClipHips);
+            }
+            if (!poseBlending || poseBones.Length == 0) return;
+            float t = Mathf.Clamp01((Time.time - poseBlendStart) / poseBlendDuration);
+            float w = Mathf.SmoothStep(0f, 1f, poseBlendRising ? t : 1f - t);
+            if (!poseBlendRising && t >= 1f)
+            {
+                poseBlending = false;
+                return;
+            }
+            Transform hips = poseBones[0];
+            if (poseBlendSource == PoseBlendSource.RiderDummy)
+            {
+                if (riderDummyBones == null) return;
+                hips.position = Vector3.Lerp(hips.position, riderDummyBones[0].position, w);
+                for (int i = 0; i < poseBones.Length; i++) poseBones[i].rotation = Quaternion.Slerp(poseBones[i].rotation, riderDummyBones[i].rotation, w);
+                return;
+            }
+            hips.position = Vector3.Lerp(hips.position, transform.TransformPoint(poseSnapshotHips), w);
+            Quaternion root = transform.rotation;
+            for (int i = 0; i < poseBones.Length; i++) poseBones[i].rotation = Quaternion.Slerp(poseBones[i].rotation, root * poseSnapshot[i], w);
         }
 
         // Documented fallback: used when only the alternate exit is clear (the exit clip is driver-side only).
@@ -1610,7 +2034,8 @@ namespace OpenworldCrime.Player
 
             SetState(VehicleInteractionState.InVehicle);
             OnVehicleEntered?.Invoke(vehicle);
-            if (windshieldEjection) WindshieldCrashSensor.Watch(((Component)vehicle).gameObject, this);
+            // Bikes judge their own crashes (BikeCrashSensor on the bike prefab).
+            if (windshieldEjection && !vehicle.UsesQuickMount) WindshieldCrashSensor.Watch(((Component)vehicle).gameObject, this);
 
             // It blew up while he was climbing in.
             VehicleHealth health = ((Component)vehicle).GetComponent<VehicleHealth>();
@@ -1669,7 +2094,11 @@ namespace OpenworldCrime.Player
             if (vehicleIK != null) vehicleIK.SetSeatedLean(0f, 0f, true);
             SetDoorClearance(vehicle, false);
             if (vehicleIK != null) vehicleIK.FadeOut();
-            SetVehicleCollisionIgnored(vehicle, false);
+            // Stepping off a bike leaves the character right beside it, touching it: collisions come back once he has moved clear,
+            // or physics would shove him out (possibly through to the other side).
+            // (Checked from the next physics frames on: the capsule is only switched back on below.)
+            if (vehicle.UsesQuickMount) StartCoroutine(RestoreVehicleCollisionWhenClear(vehicle));
+            else SetVehicleCollisionIgnored(vehicle, false);
             controller.EnableGravityAndCollision();
             vehicle.SetOccupied(false);
             CurrentVehicle = null;
@@ -1792,9 +2221,19 @@ namespace OpenworldCrime.Player
             return flat.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(flat.normalized, Vector3.up) : Quaternion.identity;
         }
 
+        // The Rigidbody is moved too: with interpolation it would otherwise write its old pose back on the next physics step
+        // (after a bike dismount that was the middle of the bike, and the capsule was then pushed out on the far side).
         private void SnapTo(Vector3 position, Quaternion rotation)
         {
             transform.SetPositionAndRotation(position, rotation);
+            if (body == null) return;
+            body.position = position;
+            body.rotation = rotation;
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
         }
 
         private bool IsCurrentState(int stateHash) => animator.GetCurrentAnimatorStateInfo(BaseLayer).shortNameHash == stateHash;

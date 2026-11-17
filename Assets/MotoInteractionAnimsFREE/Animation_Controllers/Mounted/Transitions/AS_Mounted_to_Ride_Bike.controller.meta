@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 7ffb131b844b87444b1f3197c92ddbed
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Mounted/Transitions/AS_Mounted_to_Ride_Bike.controller
+  uploadId: 902864

@@ -20,8 +20,13 @@ namespace OpenworldCrime.Pedestrians
         [Tooltip("A body closer than this (m) to the camera is kept, so it never vanishes right next to the player.")]
         [SerializeField, Min(0f)] private float corpseKeepDistance = 12f;
 
+        [Tooltip("Seconds over which a punched person is shoved back (stagger).")]
+        [SerializeField, Min(0.01f)] private float staggerSeconds = 0.15f;
+
         private PedestrianWalker walker;
+        private UnityEngine.AI.NavMeshAgent agent;
         private Coroutine corpseRoutine;
+        private Coroutine staggerRoutine;
 
         private void Awake()
         {
@@ -36,7 +41,9 @@ namespace OpenworldCrime.Pedestrians
             damage.OnDied += HandleDied;
             damage.OnRecovered += HandleRecovered;
             damage.OnHurt += HandleHurt;
+            damage.OnStaggered += HandleStaggered;
             walker.Despawned += HandleDespawned;
+            agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
         }
 
         private void OnDestroy()
@@ -46,6 +53,7 @@ namespace OpenworldCrime.Pedestrians
             damage.OnDied -= HandleDied;
             damage.OnRecovered -= HandleRecovered;
             damage.OnHurt -= HandleHurt;
+            damage.OnStaggered -= HandleStaggered;
             walker.Despawned -= HandleDespawned;
         }
 
@@ -68,8 +76,39 @@ namespace OpenworldCrime.Pedestrians
             if (walker.Owner != null && walker.State != PedestrianWalker.Mode.Down) walker.Owner.TriggerPanicFor(walker, threat);
         }
 
+        // A punch that does not knock down: a quick shove back, then the hurt reaction (panic) takes over as before.
+        private void HandleStaggered(Vector3 push)
+        {
+            if (walker.State == PedestrianWalker.Mode.Down || push.sqrMagnitude < 0.0001f) return;
+            if (staggerRoutine != null) StopCoroutine(staggerRoutine);
+            staggerRoutine = StartCoroutine(StaggerRoutine(push));
+        }
+
+        private IEnumerator StaggerRoutine(Vector3 push)
+        {
+            if (agent == null) agent = GetComponent<UnityEngine.AI.NavMeshAgent>(); // added by the walker when it first panics
+            float moved = 0f;
+            while (moved < 1f)
+            {
+                float step = Mathf.Min(1f - moved, Time.deltaTime / Mathf.Max(0.01f, staggerSeconds));
+                moved += step;
+                Vector3 delta = push * step;
+                // A fleeing person is driven by the NavMeshAgent (moving the transform would be undone); a walker in its lane
+                // takes the shove through its own Nudge.
+                if (agent != null && agent.enabled && agent.isOnNavMesh) agent.Move(delta);
+                else walker.Nudge(delta);
+                yield return null;
+            }
+            staggerRoutine = null;
+        }
+
         private void HandleDespawned()
         {
+            if (staggerRoutine != null)
+            {
+                StopCoroutine(staggerRoutine);
+                staggerRoutine = null;
+            }
             if (corpseRoutine != null)
             {
                 StopCoroutine(corpseRoutine);

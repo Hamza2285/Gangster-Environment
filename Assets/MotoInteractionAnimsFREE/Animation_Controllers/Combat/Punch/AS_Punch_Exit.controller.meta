@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: fea04504d72bb1646adabb28f72a6172
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Combat/Punch/AS_Punch_Exit.controller
+  uploadId: 902864

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f9250ec87f54c3847a24a0aadd9bf7fd
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Interactions/Check/AS_Check_Tyre_Back_Start.controller
+  uploadId: 902864

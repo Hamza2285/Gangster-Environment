@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 65b1cbce173d85247abfee0b30df9748
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Shaders/WorldAlignedShader.shader
+  uploadId: 902864

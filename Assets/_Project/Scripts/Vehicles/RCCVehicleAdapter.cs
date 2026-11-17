@@ -11,7 +11,7 @@ namespace OpenworldCrime.Vehicles
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-50)] // Awake before RCC's own, so the handling profile is in place when RCC initialises
-    public class RCCVehicleAdapter : MonoBehaviour, IVehicleController
+    public class RCCVehicleAdapter : MonoBehaviour, IVehicleController, IVehicleEntrySide
     {
         private const float KmhToMs = 1f / 3.6f;
 
@@ -34,6 +34,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private Transform enterPoint;
         [Tooltip("Character root when the exit animation ends (driver side, facing away from the car).")]
         [SerializeField] private Transform exitPoint;
+        [Tooltip("Optional second enter point on the other side (bikes: get on from whichever side the player stands). Empty = one side only.")]
+        [SerializeField] private Transform alternateEnterPoint;
         [Tooltip("Optional fallback exit (other side). Used without animation when the main exit is blocked.")]
         [SerializeField] private Transform alternateExitPoint;
         [Tooltip("Used to rank nearby vehicles. The interaction trigger itself can be any trigger collider under the vehicle.")]
@@ -115,6 +117,7 @@ namespace OpenworldCrime.Vehicles
 
             vehicleColliders = GetComponentsInChildren<Collider>(true);
             body = GetComponent<Rigidbody>();
+            AddContactHelpers();
             if (handlingProfile != null) handlingProfile.ApplyTo(carController, body);
             if (driverDummy != null) driverDummy.SetActive(false);
             if (rccCamera != null) rccCamera.gameObject.SetActive(false);
@@ -163,6 +166,12 @@ namespace OpenworldCrime.Vehicles
 
         public Transform GetDriverSeat() => driverSeat;
         public Transform GetEnterPoint() => enterPoint;
+
+        public Transform GetEnterPoint(Vector3 from)
+        {
+            if (alternateEnterPoint == null || enterPoint == null) return enterPoint;
+            return (alternateEnterPoint.position - from).sqrMagnitude < (enterPoint.position - from).sqrMagnitude ? alternateEnterPoint : enterPoint;
+        }
         public Transform GetExitPoint() => exitPoint;
         public Transform GetAlternateExitPoint() => alternateExitPoint;
         public Transform GetInteractionPoint() => interactionPoint != null ? interactionPoint : transform;
@@ -357,6 +366,15 @@ namespace OpenworldCrime.Vehicles
             if (health == null) return;
             health.OnDestroyedWreck -= HandleWrecked;
             health.OnWreckCleanup -= HandleWreckCleanup;
+        }
+
+        // Every drivable vehicle gets these on its prefab (Setup Contact FX tool); prefabs that are not ours (e.g. the ambulance)
+        // get the same behaviour here: no sparks on people, and parked it is carved out of the officers' NavMesh.
+        private void AddContactHelpers()
+        {
+            if (GetComponent<VehicleHumanContactFx>() == null) gameObject.AddComponent<VehicleHumanContactFx>();
+            if (GetComponent<UnityEngine.AI.NavMeshObstacle>() == null)
+                VehicleNavMeshObstacle.Configure(gameObject.AddComponent<UnityEngine.AI.NavMeshObstacle>(), gameObject);
         }
 
         public void SetDriverVisualActive(bool active)

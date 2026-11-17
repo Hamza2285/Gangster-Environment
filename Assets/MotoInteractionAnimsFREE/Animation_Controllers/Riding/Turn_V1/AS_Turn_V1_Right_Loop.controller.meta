@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f3a1412e3cf8fda48946e0c786a60f29
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animation_Controllers/Riding/Turn_V1/AS_Turn_V1_Right_Loop.controller
+  uploadId: 902864

@@ -96,6 +96,27 @@ namespace OpenworldCrime.Pedestrians
         [Tooltip("Minimum seconds a shot survivor stays on the ground.")]
         [SerializeField, Min(0f)] private float shotGroundTime = 2f;
 
+        [Header("Melee Reaction")]
+        [Tooltip("Layers of the attackers' melee hitboxes (Invector puts them on Ignore Raycast). The solid root capsule ignores " +
+                 "them, so a fist lands on the tagged hitboxes instead of bouncing off the body (Invector's recoil).")]
+        [SerializeField] private LayerMask meleeHitboxLayers = 1 << 2;
+        [Tooltip("Punches in a row (within Melee Combo Reset Time) that knock the person down. Earlier ones make him stagger.")]
+        [SerializeField, Min(1)] private int meleeHitsToKnockDown = 2;
+        [Tooltip("A punch also knocks down once health is at or below this share of the maximum.")]
+        [SerializeField, Range(0f, 1f)] private float meleeKnockDownHealth = 0.35f;
+        [Tooltip("Seconds without a punch after which the count starts again.")]
+        [SerializeField, Min(0.1f)] private float meleeComboResetTime = 6f;
+        [Tooltip("One swing touching several hitboxes of the same person within this time counts (and hurts) once.")]
+        [SerializeField, Min(0f)] private float meleeMergeWindow = 0.2f;
+        [Tooltip("Distance (m) a staggering person is pushed back by a punch.")]
+        [SerializeField, Min(0f)] private float meleeStaggerDistance = 0.35f;
+        [Tooltip("Speed (m/s) the body is pushed along the punch on a knock-down.")]
+        [SerializeField, Min(0f)] private float meleePushSpeed = 1.8f;
+        [Tooltip("Topple rate (rad/s) of a punched-down body.")]
+        [SerializeField, Min(0f)] private float meleeTopple = 3.5f;
+        [Tooltip("Minimum seconds a punched-down person stays on the ground.")]
+        [SerializeField, Min(0f)] private float meleeGroundTime = 2.5f;
+
         [Header("Death Impulse")]
         [Tooltip("Impulse on the hit limb on death, as a multiple of the killing vDamage.force (Invector's bullet also pushes it once).")]
         [SerializeField, Min(0f)] private float deathForceMultiplier = 1f;
@@ -122,6 +143,8 @@ namespace OpenworldCrime.Pedestrians
         public event Action<Vector3> OnDied;
         /// <summary>Raised when the pedestrian takes damage and survives (e.g. shot or bumped). Arg: damage source position.</summary>
         public event Action<Vector3> OnHurt;
+        /// <summary>A punch that does not knock down: the person staggers. Arg: push (world, horizontal, metres).</summary>
+        public event Action<Vector3> OnStaggered;
         /// <summary>
         /// Raised for every damage a living pedestrian takes (any pedestrian, e.g. for crime reporting). Args: the pedestrian, the
         /// Invector damage (sender, type), whether it killed him. Hits on a body that was already dead are not reported.
@@ -143,6 +166,10 @@ namespace OpenworldCrime.Pedestrians
         private Coroutine dampingRoutine;
         private float[] baseLinearDamping = new float[0];
         private float[] baseAngularDamping = new float[0];
+        private int meleeHits;
+        private float lastMeleeTime = -100f;
+        private Transform lastMeleeSender;
+        private bool mergedMeleeHit;
 
         private void Awake()
         {
@@ -157,6 +184,7 @@ namespace OpenworldCrime.Pedestrians
             }
             // vCharacter does not initialise itself (vThirdPersonMotor / AI normally do); caches its animator parameters.
             character.Init();
+            aliveCollider.excludeLayers |= meleeHitboxLayers;
             // Subscribed for the whole lifetime (the character is a sibling component and raises nothing while pooled):
             // re-subscribing on every pool spawn / despawn allocated in UnityEvent each time.
             character.onStartReceiveDamage.AddListener(HandleStartDamage);
@@ -198,6 +226,9 @@ namespace OpenworldCrime.Pedestrians
             recoverRoutine = null;
             lastDamage = null;
             lastVehicleHitTime = -100f;
+            meleeHits = 0;
+            lastMeleeTime = -100f;
+            lastMeleeSender = null;
             if (dampingRoutine != null) StopCoroutine(dampingRoutine);
             dampingRoutine = null;
             SetFlightDamping(false);
@@ -380,6 +411,20 @@ namespace OpenworldCrime.Pedestrians
             deadBeforeHit = IsDead;
             lastDamage = damage;
             if (damage.sender != null) lastThreat = damage.sender.position;
+            mergedMeleeHit = false;
+            if (IsMeleeHit(damage))
+            {
+                // One swing can touch the far capsule and a bone hitbox (or two bones): it hurts once.
+                if (damage.sender == lastMeleeSender && Time.time - lastMeleeTime < meleeMergeWindow)
+                {
+                    damage.damageValue = 0;
+                    mergedMeleeHit = true;
+                    return;
+                }
+                if (Time.time - lastMeleeTime > meleeComboResetTime) meleeHits = 0;
+                lastMeleeSender = damage.sender;
+                lastMeleeTime = Time.time;
+            }
             // Walking people have one capsule hitbox (no bone colliders until hit): the head counts by the height of the hit.
             if (damage.damageType != "Vehicle" && damage.damageType != "Explosion" && !IsDown && damage.hitPosition.y - transform.position.y >= headShotHeight)
                 damage.damageValue *= headShotMultiplier;
@@ -387,14 +432,47 @@ namespace OpenworldCrime.Pedestrians
 
         private void HandleDamage(vDamage damage)
         {
+            if (mergedMeleeHit) return;
             if (!deadBeforeHit) OnAnyDamaged?.Invoke(this, damage, IsDead);
             if (IsDead) return;
+            if (IsMeleeHit(damage))
+            {
+                HandleMeleeHit(damage);
+                return;
+            }
             // Health is already reduced here (and onDead raised for a killing shot), so this is a survivor.
             if (knockDownWhenShot && !IsDown && damage.damageType == shotDamageType)
             {
                 KnockDownFromShot(damage);
                 return; // the walker leaves on OnKnockedDown and runs once back up (OnRecovered)
             }
+            OnHurt?.Invoke(lastThreat);
+        }
+
+        // Invector melee (fists, bats, knives): its vMeleeManager sends the hit with itself as the sender. Bullets carry the shot
+        // damage type and vehicles / explosions their own, even when the sender (the player) also has a vMeleeManager.
+        private bool IsMeleeHit(vDamage damage)
+        {
+            if (damage.sender == null || damage.damageType == shotDamageType || damage.damageType == "Vehicle" || damage.damageType == "Explosion") return false;
+            return damage.sender.GetComponent<Invector.vMelee.vMeleeManager>() != null;
+        }
+
+        // GTA style: the first punches make the person stagger back and run, a combo (or a weak person) goes down as a ragdoll
+        // and gets back up later (the same knock-down path as a car bump or a shot). A body already on the ground only takes damage.
+        private void HandleMeleeHit(vDamage damage)
+        {
+            if (IsDown) return;
+            Vector3 direction = damage.sender != null ? transform.position - damage.sender.position : -transform.forward;
+            direction.y = 0f;
+            direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : -transform.forward;
+            meleeHits++;
+            if (meleeHits >= meleeHitsToKnockDown || character.currentHealth <= character.MaxHealth * meleeKnockDownHealth)
+            {
+                meleeHits = 0;
+                KnockDown(direction * meleePushSpeed, Vector3.Cross(Vector3.up, direction) * meleeTopple, meleeGroundTime);
+                return;
+            }
+            OnStaggered?.Invoke(direction * meleeStaggerDistance);
             OnHurt?.Invoke(lastThreat);
         }
 

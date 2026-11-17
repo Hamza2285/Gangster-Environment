@@ -1,0 +1,240 @@
+fileFormatVersion: 2
+guid: 641ad76cf65546040b58ac91afc4d225
+ModelImporter:
+  serializedVersion: 22200
+  internalIDToNameTable: []
+  externalObjects: {}
+  materials:
+    materialImportMode: 2
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    removeConstantScaleCurves: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 3
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations:
+    - serializedVersion: 16
+      name: AS_Turn_V1_Right_End_Bike
+      takeName: AS_Turn_V1_Right_End_Bike
+      internalID: -1178221070469403974
+      firstFrame: 78
+      lastFrame: 92
+      wrapMode: 0
+      orientationOffsetY: 0
+      level: 0
+      cycleOffset: 0
+      loop: 0
+      hasAdditiveReferencePose: 0
+      loopTime: 1
+      loopBlend: 0
+      loopBlendOrientation: 0
+      loopBlendPositionY: 0
+      loopBlendPositionXZ: 0
+      keepOriginalOrientation: 0
+      keepOriginalPositionY: 1
+      keepOriginalPositionXZ: 0
+      heightFromFeet: 0
+      mirror: 0
+      bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
+      curves: []
+      events: []
+      transformMask: []
+      maskType: 3
+      maskSource: {instanceID: 0}
+      additiveReferencePoseFrame: 78
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    sortHierarchyByName: 1
+    importPhysicalCameras: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    nodeNameCollisionStrategy: 1
+    fileIdsGeneration: 2
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    keepQuads: 0
+    weldVertices: 1
+    bakeAxisConversion: 0
+    preserveHierarchy: 0
+    skinWeightsMode: 0
+    maxBonesPerVertex: 4
+    minBoneWeight: 0.001
+    optimizeBones: 1
+    meshOptimizationFlags: -1
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVMarginMethod: 1
+    secondaryUVMinLightmapResolution: 40
+    secondaryUVMinObjectScale: 1
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    strictVertexDataChecks: 0
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  referencedClips: []
+  importAnimation: 1
+  humanDescription:
+    serializedVersion: 3
+    human: []
+    skeleton:
+    - name: AS_Turn_V1_Right_End_Bike(Clone)
+      parentName: 
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:DeformationSystem
+      parentName: AS_Turn_V1_Right_End_Bike(Clone)
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Root_M
+      parentName: Bike:DeformationSystem
+      position: {x: -0, y: 0.06723026, z: 4.7121995e-32}
+      rotation: {x: 0, y: -0, z: -0.1275172, w: 0.99183637}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Body1_M
+      parentName: Bike:Root_M
+      position: {x: -3.1086245e-17, y: 0.1910695, z: -8.881784e-18}
+      rotation: {x: 0.55967677, y: -0.4321596, z: -0.4321596, w: 0.55967677}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:BodyEnd_M
+      parentName: Bike:Body1_M
+      position: {x: -0.50576687, y: -1.0928977e-16, z: -4.4701803e-17}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Tracker_Point
+      parentName: Bike:BodyEnd_M
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:StandMain_L
+      parentName: Bike:Body1_M
+      position: {x: 0.006964056, y: 0.13735293, z: 0.12818854}
+      rotation: {x: -0.5, y: 0.5, z: 0.5, w: 0.5}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:StandEnd_L
+      parentName: Bike:StandMain_L
+      position: {x: -0.017433163, y: 0, z: 1.7763568e-17}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:HandleMain_M
+      parentName: Bike:Body1_M
+      position: {x: -0.75322694, y: 0.6458219, z: -1.7985613e-16}
+      rotation: {x: 0.592351, y: 0.12450356, z: 0.779045, w: -0.16342618}
+      scale: {x: 1.0000002, y: 1.0000002, z: 1.0000001}
+    - name: Bike:HandleEnd_M
+      parentName: Bike:HandleMain_M
+      position: {x: -0.685162, y: -4.2632563e-16, z: -3.8350528e-16}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:frontWheel_M
+      parentName: Bike:HandleMain_M
+      position: {x: -0.7681562, y: -0.0003000028, z: -4.2632563e-16}
+      rotation: {x: 0.84575444, y: 0.07583642, z: 0.124604076, w: -0.5132468}
+      scale: {x: 1.0000001, y: 1.0000002, z: 1.0000004}
+    - name: Bike:frontWheelEnd_R
+      parentName: Bike:frontWheel_M
+      position: {x: -0.03924353, y: 6.3948843e-16, z: 2.131628e-15}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:backWheel_M
+      parentName: Bike:Root_M
+      position: {x: -2.8865798e-16, y: 0.25651896, z: -0.5172043}
+      rotation: {x: -0.12751722, y: 0.99183637, z: -0.00012036031, w: 0.000015477272}
+      scale: {x: 0.9999999, y: 1, z: 0.9999999}
+    - name: Bike:backWheelEnd_R
+      parentName: Bike:backWheel_M
+      position: {x: -0.03924353, y: 7.105427e-16, z: -3.5527135e-16}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Geometry
+      parentName: AS_Turn_V1_Right_End_Bike(Clone)
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Body
+      parentName: Bike:Geometry
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Steering
+      parentName: Bike:Geometry
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Wheel_F
+      parentName: Bike:Geometry
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    - name: Bike:Wheel_B
+      parentName: Bike:Geometry
+      position: {x: -0, y: 0, z: 0}
+      rotation: {x: 0, y: -0, z: -0, w: 1}
+      scale: {x: 1, y: 1, z: 1}
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    globalScale: 1
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  autoGenerateAvatarMappingIfUnspecified: 1
+  animationType: 2
+  humanoidOversampling: 1
+  avatarSetup: 1
+  addHumanoidExtraRootOnlyWhenUsingAvatar: 1
+  importBlendShapeDeformPercent: 1
+  remapMaterialsIfMaterialImportModeIsNone: 0
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 374820
+  packageName: Motorcycle Interaction Animset FREE
+  packageVersion: 1.0
+  assetPath: Assets/MotoInteractionAnimsFREE/Animations/Riding/Turn_V1/AS_Turn_V1_Right_End_Bike.fbx
+  uploadId: 902864

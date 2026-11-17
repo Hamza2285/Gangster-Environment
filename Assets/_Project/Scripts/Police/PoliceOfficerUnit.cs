@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using OpenworldCrime.Pedestrians;
 using OpenworldCrime.UI;
@@ -20,14 +21,22 @@ namespace OpenworldCrime.Police
     /// Health, hits, knock-downs and death are the pedestrian damage setup (<see cref="PedestrianDamage"/> with its ragdoll):
     /// a knocked-down officer gets up and carries on; a dead one is cleared out of sight after Corpse Seconds.
     /// Movement is Unity's NavMeshAgent on the pedestrians' panic NavMesh (kept loaded by the dispatcher while officers are out).
+    /// Car crews (<see cref="ActivateFromCar"/>): the officer starts in his seat of a <see cref="PoliceCarUnit"/> and climbs out with the
+    /// car-exit clip (door opened and closed by <see cref="PoliceCarCrew"/>, root steered onto the ground beside the door), then joins
+    /// the chase on foot. Called back by his car (<see cref="BeginBoarding"/>) he runs to the door and gets back in with the enter clip.
     /// </summary>
     [DisallowMultipleComponent]
     public class PoliceOfficerUnit : MonoBehaviour
     {
-        public enum UnitState { Inactive, Pursue, Engage, Search, Return, Down, Dead }
+        public enum UnitState { Inactive, Pursue, Engage, Search, Return, Down, Dead, ExitingCar, Boarding }
 
         private static readonly int SpeedId = Animator.StringToHash("Speed");
         private static readonly int ShootStateId = Animator.StringToHash("Shoot");
+        private static readonly int LocomotionStateId = Animator.StringToHash("Locomotion");
+        private static readonly int ExitCarStateId = Animator.StringToHash("ExitCar");
+        private static readonly int ExitCarMirrorStateId = Animator.StringToHash("ExitCarMirror");
+        private static readonly int EnterCarStateId = Animator.StringToHash("EnterCar");
+        private static readonly int EnterCarMirrorStateId = Animator.StringToHash("EnterCarMirror");
 
         [Header("References")]
         [SerializeField] private NavMeshAgent agent;
@@ -49,6 +58,23 @@ namespace OpenworldCrime.Police
         [SerializeField] private Vector3 supportHandOffset = new Vector3(-0.05f, -0.06f, -0.04f);
         [SerializeField, Range(0f, 1f)] private float supportHandWeight = 0.85f;
 
+        [Header("Getting Out Of / Into The Car")]
+        [Tooltip("Playback speed of the car exit / enter clips (they are slow, relaxed motions; police get out in a hurry).")]
+        [SerializeField, Min(0.1f)] private float carClipSpeed = 1.7f;
+        [Tooltip("Exit clip (normalised time): door opens, root steered onto the ground beside the door between Match Start and End, " +
+                 "the officer is out at End Time and the door shuts.")]
+        [SerializeField, Range(0f, 1f)] private float exitDoorOpenTime = 0.06f;
+        [SerializeField, Range(0f, 1f)] private float exitMatchStart = 0.12f;
+        [SerializeField, Range(0f, 1f)] private float exitMatchEnd = 0.62f;
+        [SerializeField, Range(0f, 1f)] private float exitEndTime = 0.7f;
+        [Tooltip("Enter clip (normalised time): door opens, root steered into the seat between Match Start and End, seated at End Time.")]
+        [SerializeField, Range(0f, 1f)] private float enterDoorOpenTime = 0.12f;
+        [SerializeField, Range(0f, 1f)] private float enterMatchStart = 0.2f;
+        [SerializeField, Range(0f, 1f)] private float enterMatchEnd = 0.75f;
+        [SerializeField, Range(0f, 1f)] private float enterEndTime = 0.85f;
+        [Tooltip("Seconds a called-back officer may take to reach his car before he carries on on foot.")]
+        [SerializeField, Min(1f)] private float boardTimeout = 15f;
+
         [Header("Search")]
         [Tooltip("Search points are picked within this share of the search radius around the last known position.")]
         [SerializeField, Range(0.1f, 1f)] private float searchSpread = 0.5f;
@@ -67,6 +93,9 @@ namespace OpenworldCrime.Police
         /// <summary>On his feet (can see, arrest and shoot).</summary>
         public bool IsStanding => IsAlive && State != UnitState.Down;
         public Vector3 EyePosition => transform.position + Vector3.up * (settings != null ? settings.eyeHeight : 1.6f);
+        /// <summary>The car this officer climbed out of (null for officers who came on foot or whose car is gone).</summary>
+        public PoliceCarUnit HomeCar { get; private set; }
+        public int HomeSeat { get; private set; } = -1;
 
         private PoliceDispatcher owner;
         private PoliceSettings settings;
@@ -90,6 +119,10 @@ namespace OpenworldCrime.Police
         private Quaternion goalToBone = Quaternion.identity;
         private Quaternion lastGoal;
         private bool ikCalibrated;
+        private Coroutine carRoutine;
+        private Collider[] ownColliders = new Collider[0];
+        private PedestrianRagdoll ragdoll;
+        private float boardingSince;
         private int defaultLayer;
         private string defaultTag;
         private bool valid;
@@ -106,6 +139,8 @@ namespace OpenworldCrime.Police
             defaultLayer = gameObject.layer;
             defaultTag = gameObject.tag;
             agent.enabled = false;
+            ownColliders = GetComponentsInChildren<Collider>(true);
+            ragdoll = GetComponent<PedestrianRagdoll>();
             rightShoulder = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
             rightHand = animator.GetBoneTransform(HumanBodyBones.RightHand);
             if (weaponModel != null) weaponLocalRotation = weaponModel.transform.localRotation;
@@ -145,6 +180,7 @@ namespace OpenworldCrime.Police
             gameObject.SetActive(true);
             damage.ResetForReuse();
             damage.SetHitboxesEnabled(true);
+            damage.SetAliveColliderEnabled(true); // an officer who got back into his car went to the pool with it off
             // Traffic brakes for anything on its player layer with the Player tag (the street pedestrians do the same when they run).
             gameObject.layer = sensorLayer;
             gameObject.tag = "Player";
@@ -167,16 +203,219 @@ namespace OpenworldCrime.Police
             nextLineCheck = 0f;
             hasLineOfFire = false;
             searchPointUntil = 0f;
+            HomeCar = null;
+            HomeSeat = -1;
             SetState(UnitState.Pursue);
             if (!active.Contains(this)) active.Add(this);
             return true;
         }
+
+        /// <summary>
+        /// Puts the officer in his seat of <paramref name="car"/> and climbs him out (exit clip, door, onto the ground beside the door),
+        /// after which he pursues on foot like any officer. False when there is no NavMesh beside the door (he stays pooled).
+        /// </summary>
+        public bool ActivateFromCar(PoliceDispatcher dispatcher, PoliceCarUnit car, int seat, int sensorLayer)
+        {
+            if (!valid || car == null || car.Crew == null) return false;
+            Vector3 ground = car.Crew.GetDoorGroundPoint(seat);
+            if (!NavMesh.SamplePosition(ground, out NavMeshHit hit, 4f, NavMesh.AllAreas)) return false;
+            owner = dispatcher;
+            settings = dispatcher.Settings;
+            wanted = WantedManager.Instance;
+
+            car.Crew.GetSeatPose(seat, out Vector3 seatPosition, out Quaternion seatRotation);
+            transform.SetPositionAndRotation(seatPosition, seatRotation);
+            gameObject.SetActive(true);
+            damage.ResetForReuse();
+            damage.SetHitboxesEnabled(true);
+            // His solid body would shove the car while he is still inside it.
+            damage.SetAliveColliderEnabled(false);
+            gameObject.layer = sensorLayer;
+            gameObject.tag = "Player";
+            agent.enabled = false;
+
+            armsWeight = 0f;
+            armsTarget = 0f;
+            animator.SetLayerWeight(armsLayer, 0f);
+            if (weaponModel != null) weaponModel.SetActive(false);
+            if (mapBlip != null) mapBlip.enabled = true;
+            nextRepath = 0f;
+            nextShot = 0f;
+            nextLineCheck = 0f;
+            hasLineOfFire = false;
+            searchPointUntil = 0f;
+            HomeCar = car;
+            HomeSeat = seat;
+            car.Crew.SetCollisionIgnored(ownColliders, true);
+            SetState(UnitState.ExitingCar);
+            if (!active.Contains(this)) active.Add(this);
+            carRoutine = StartCoroutine(ExitCarRoutine(car, seat, ground));
+            return true;
+        }
+
+        /// <summary>His car is leaving: run back to its door and get in (the car shows him seated again and he goes back to the pool).</summary>
+        public void BeginBoarding(PoliceCarUnit car)
+        {
+            if (!IsStanding || car == null || car != HomeCar || State == UnitState.ExitingCar) return;
+            SetArms(false);
+            boardingSince = Time.time;
+            SetState(UnitState.Boarding);
+        }
+
+        /// <summary>The car is gone (recalled, wrecked) or gave up waiting: he carries on as an officer on foot.</summary>
+        public void ClearHomeCar()
+        {
+            HomeCar = null;
+            HomeSeat = -1;
+            if (State == UnitState.Boarding && carRoutine == null) SetState(UnitState.Pursue);
+        }
+
+        private IEnumerator ExitCarRoutine(PoliceCarUnit car, int seat, Vector3 groundTarget)
+        {
+            int stateId = car.Crew.IsMirrored(seat) ? ExitCarMirrorStateId : ExitCarStateId;
+            animator.applyRootMotion = true;
+            animator.speed = carClipSpeed;
+            animator.Play(stateId, 0, 0f);
+            animator.Update(0f);
+            bool doorOpened = false;
+            float timer = 0f;
+            while (State == UnitState.ExitingCar && timer < 8f)
+            {
+                AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+                if (info.shortNameHash == stateId)
+                {
+                    float n = info.normalizedTime;
+                    if (!doorOpened && n >= exitDoorOpenTime)
+                    {
+                        doorOpened = true;
+                        car.Crew.OpenDoor(seat);
+                    }
+                    if (n >= exitEndTime) break;
+                    if (n >= exitMatchStart && n < exitMatchEnd && !animator.IsInTransition(0))
+                        animator.MatchTarget(groundTarget, Quaternion.identity, AvatarTarget.Root, new MatchTargetWeightMask(Vector3.one, 0f), Mathf.Max(n, exitMatchStart), exitMatchEnd);
+                }
+                timer += Time.deltaTime;
+                yield return null;
+            }
+            carRoutine = null;
+            animator.speed = 1f;
+            animator.applyRootMotion = false;
+            if (car != null && car.Crew != null) car.Crew.CloseDoor(seat);
+            if (State != UnitState.ExitingCar) yield break; // shot or knocked down on the way out
+            damage.SetAliveColliderEnabled(true);
+            // Clear of the car a moment later (he is still at its side when he sets off).
+            if (car != null && car.Crew != null) StartCoroutine(RestoreCarCollision(car.Crew, 1.5f));
+            animator.CrossFadeInFixedTime(LocomotionStateId, 0.25f, 0, 0f);
+            if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+            {
+                owner.Release(this);
+                yield break;
+            }
+            agent.enabled = true;
+            agent.Warp(hit.position);
+            SetState(UnitState.Pursue);
+        }
+
+        private IEnumerator RestoreCarCollision(PoliceCarCrew crew, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (crew != null) crew.SetCollisionIgnored(ownColliders, false);
+        }
+
+        // Called back: run to the door, line up beside it, then the enter clip carries him into the seat.
+        private void Board()
+        {
+            if (HomeCar == null || !HomeCar.isActiveAndEnabled || HomeCar.Crew == null || Time.time - boardingSince > boardTimeout)
+            {
+                if (HomeCar != null) HomeCar.OnCrewGaveUp(this);
+                ClearHomeCar();
+                SetState(UnitState.Pursue);
+                return;
+            }
+            if (carRoutine != null) return;
+            Vector3 door = HomeCar.Crew.GetDoorGroundPoint(HomeSeat);
+            agent.speed = settings.officerRunSpeed;
+            if (FlatDistance(door) > 0.7f)
+            {
+                MoveTo(door, true);
+                return;
+            }
+            carRoutine = StartCoroutine(EnterCarRoutine(HomeCar, HomeSeat, door));
+        }
+
+        private IEnumerator EnterCarRoutine(PoliceCarUnit car, int seat, Vector3 door)
+        {
+            if (agent.enabled) agent.enabled = false;
+            damage.SetAliveColliderEnabled(false);
+            car.Crew.SetCollisionIgnored(ownColliders, true);
+            animator.SetFloat(SpeedId, 0f);
+            // Beside the door, facing across the car (the clip turns him into the seat).
+            Vector3 across = car.Crew.IsMirrored(seat) ? -car.transform.right : car.transform.right;
+            Quaternion facing = Quaternion.LookRotation(Vector3.ProjectOnPlane(across, Vector3.up).normalized);
+            Vector3 fromPosition = transform.position;
+            Quaternion fromRotation = transform.rotation;
+            for (float t = 0f; t < 0.25f; t += Time.deltaTime)
+            {
+                float k = t / 0.25f;
+                transform.SetPositionAndRotation(Vector3.Lerp(fromPosition, door, k), Quaternion.Slerp(fromRotation, facing, k));
+                yield return null;
+            }
+            transform.SetPositionAndRotation(door, facing);
+
+            int stateId = car.Crew.IsMirrored(seat) ? EnterCarMirrorStateId : EnterCarStateId;
+            animator.applyRootMotion = true;
+            animator.speed = carClipSpeed;
+            animator.CrossFadeInFixedTime(stateId, 0.15f, 0, 0f);
+            bool doorOpened = false;
+            float timer = 0f;
+            while (State == UnitState.Boarding && timer < 8f && car != null && car.isActiveAndEnabled)
+            {
+                AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+                if (info.shortNameHash == stateId)
+                {
+                    float n = info.normalizedTime;
+                    if (!doorOpened && n >= enterDoorOpenTime)
+                    {
+                        doorOpened = true;
+                        car.Crew.OpenDoor(seat);
+                    }
+                    if (n >= enterEndTime) break;
+                    if (n >= enterMatchStart && n < enterMatchEnd && !animator.IsInTransition(0))
+                    {
+                        car.Crew.GetSeatPose(seat, out Vector3 seatPosition, out Quaternion seatRotation);
+                        animator.MatchTarget(seatPosition, seatRotation, AvatarTarget.Root, new MatchTargetWeightMask(Vector3.one, 1f), Mathf.Max(n, enterMatchStart), enterMatchEnd);
+                    }
+                }
+                timer += Time.deltaTime;
+                yield return null;
+            }
+            carRoutine = null;
+            animator.speed = 1f;
+            animator.applyRootMotion = false;
+            if (car != null && car.Crew != null) car.Crew.SetCollisionIgnored(ownColliders, false);
+            if (State != UnitState.Boarding || car == null || !car.isActiveAndEnabled)
+            {
+                damage.SetAliveColliderEnabled(true);
+                yield break;
+            }
+            car.OnCrewBoarded(this, seat);
+            HomeCar = null;
+            HomeSeat = -1;
+            owner.Release(this);
+        }
+
 
         /// <summary>Back to the pool (called by the dispatcher).</summary>
         public void Deactivate()
         {
             active.Remove(this);
             State = UnitState.Inactive;
+            if (carRoutine != null) StopCoroutine(carRoutine);
+            carRoutine = null;
+            HomeCar = null;
+            HomeSeat = -1;
+            animator.speed = 1f;
+            animator.applyRootMotion = false;
             if (agent.enabled) agent.enabled = false;
             gameObject.layer = defaultLayer;
             gameObject.tag = defaultTag;
@@ -206,6 +445,8 @@ namespace OpenworldCrime.Police
                 case UnitState.Dead:
                     UpdateCorpse();
                     return;
+                case UnitState.ExitingCar:
+                    return;
             }
             if (wanted == null)
             {
@@ -218,6 +459,11 @@ namespace OpenworldCrime.Police
 
         private void Think()
         {
+            if (State == UnitState.Boarding)
+            {
+                Board();
+                return;
+            }
             UnitState next;
             if (wanted.Stars == 0) next = UnitState.Return;
             else if (wanted.IsSearching) next = UnitState.Search;
@@ -411,6 +657,7 @@ namespace OpenworldCrime.Police
         private void HandleKnockedDown(Vector3 threat)
         {
             if (!IsAlive) return;
+            AbortCarSequence();
             State = UnitState.Down;
             if (agent.enabled) agent.enabled = false;
             armsTarget = 0f;
@@ -418,9 +665,28 @@ namespace OpenworldCrime.Police
             if (weaponModel != null) weaponModel.SetActive(false);
         }
 
+        // Back up: the ragdoll plays its get-up clip (sits up, stands) and only then does the officer move and draw again.
         private void HandleRecovered(Vector3 threat)
         {
             if (State != UnitState.Down) return;
+            float getUp = ragdoll != null ? ragdoll.GetUpDuration : 0f;
+            if (carRoutine != null) StopCoroutine(carRoutine);
+            carRoutine = getUp > 0f ? StartCoroutine(StandUpRoutine(getUp)) : null;
+            if (getUp <= 0f) ResumeAfterStandUp();
+        }
+
+        private IEnumerator StandUpRoutine(float seconds)
+        {
+            animator.SetFloat(SpeedId, 0f);
+            yield return new WaitForSeconds(seconds);
+            carRoutine = null;
+            if (State != UnitState.Down) yield break;
+            animator.CrossFadeInFixedTime(LocomotionStateId, 0.3f, 0, 0f);
+            ResumeAfterStandUp();
+        }
+
+        private void ResumeAfterStandUp()
+        {
             if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 4f, NavMesh.AllAreas))
             {
                 owner.Release(this);
@@ -434,6 +700,7 @@ namespace OpenworldCrime.Police
         private void HandleDied(Vector3 threat)
         {
             if (State == UnitState.Inactive) return;
+            AbortCarSequence();
             active.Remove(this);
             State = UnitState.Dead;
             deadSince = Time.time;
@@ -442,6 +709,24 @@ namespace OpenworldCrime.Police
             if (mapBlip != null) mapBlip.enabled = false;
             gameObject.layer = defaultLayer;
             gameObject.tag = defaultTag;
+        }
+
+        // Hit while getting in or out: his car stops waiting for him, the clip state is dropped (the ragdoll takes over).
+        private void AbortCarSequence()
+        {
+            if (carRoutine != null) StopCoroutine(carRoutine);
+            carRoutine = null;
+            animator.speed = 1f;
+            animator.applyRootMotion = false;
+            if (HomeCar != null)
+            {
+                if (HomeCar.Crew != null && HomeSeat >= 0) HomeCar.Crew.CloseDoor(HomeSeat);
+                // The falling body may start inside the cabin: it keeps ignoring the car until it has dropped clear.
+                if (HomeCar.Crew != null && isActiveAndEnabled) StartCoroutine(RestoreCarCollision(HomeCar.Crew, 2f));
+                HomeCar.OnCrewGaveUp(this);
+            }
+            HomeCar = null;
+            HomeSeat = -1;
         }
 
         private void UpdateCorpse()
