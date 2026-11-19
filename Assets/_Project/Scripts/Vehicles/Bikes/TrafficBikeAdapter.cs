@@ -19,6 +19,8 @@ namespace OpenworldCrime.Vehicles
     /// - Collisions are judged here by <see cref="BikeCrashSettings"/> (BikeCrash's own trigger, which unseats the rider at any
     ///   touch, is switched off on this instance): a nudge is a wobble, a medium hit a stumble and a stop, a hard or badly placed
     ///   hit throws the rider off with the speed he had.
+    /// - Punched rider (<see cref="BikeRiderMeleeZone"/>, made here on the rider): he comes off as the real pedestrian, falls,
+    ///   gets up and runs, and the bike goes over and slides on riderless (it can be picked up like any fallen bike).
     /// Crimes are raised through <see cref="OnRiderShot"/> / <see cref="OnRiderKnockedOff"/> (CrimeReporter listens).
     /// </summary>
     [DisallowMultipleComponent]
@@ -45,6 +47,11 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Layer for BikeCrash's solid crash box: one that vehicles collide with but bullets do not hit, so shots at the rider " +
                  "reach his hit zones instead of stopping on the box around his hips and chest.")]
         [SerializeField] private string crashBodyLayer = "Vehicle";
+        [Tooltip("Punch zone around the rider's chest (melee only): radius and height (m).")]
+        [SerializeField, Min(0.1f)] private float meleeZoneRadius = 0.45f;
+        [SerializeField, Min(0.2f)] private float meleeZoneHeight = 1.3f;
+        [Tooltip("Punched off: how long he stays down.")]
+        [SerializeField, Min(0f)] private float punchedGroundTime = 3f;
         [Tooltip("Logs every judged hit (impact speed, angle, verdict) for tuning.")]
         [SerializeField] private bool logHits;
 
@@ -117,6 +124,81 @@ namespace OpenworldCrime.Vehicles
             baseBrakeTorque = simpleCar.brakeTorque;
             foreach (Collider c in GetComponentsInChildren<Collider>(true))
                 if (!c.isTrigger) solidColliders.Add(c);
+            CreateMeleeZone();
+        }
+
+        // A trigger round the rider's chest that only melee hits reach (see BikeRiderMeleeZone). Child of the rider, so it rides
+        // with him and goes when he does.
+        private void CreateMeleeZone()
+        {
+            if (riderVisual == null || riderHealth == null) return;
+            Vector3 chest = riderHealth.transform.position + Vector3.up * 0.6f;
+            foreach (SeatedDriverHitZone zone in riderVisual.GetComponentsInChildren<SeatedDriverHitZone>(true))
+                if (zone.name.Contains("Torso")) chest = zone.transform.position;
+            var go = new GameObject("RiderMeleeZone");
+            go.transform.SetParent(riderVisual.transform, false);
+            go.transform.position = chest;
+            go.layer = 2; // Ignore Raycast: melee hitboxes collide with it, bullets never hit it
+            go.tag = "Pedestrian"; // the tag Invector's melee damages
+            var capsule = go.AddComponent<CapsuleCollider>();
+            capsule.isTrigger = true;
+            capsule.direction = 1;
+            capsule.radius = meleeZoneRadius / Mathf.Max(0.01f, go.transform.lossyScale.x);
+            capsule.height = meleeZoneHeight / Mathf.Max(0.01f, go.transform.lossyScale.y);
+            go.AddComponent<BikeRiderMeleeZone>().Setup(this);
+        }
+
+        private bool knockOffPending;
+
+        /// <summary>
+        /// A punch landed on the rider (from a melee hit, i.e. inside a physics trigger callback): he is knocked off on the next
+        /// frame, because the pedestrian who replaces him sets up his ragdoll as he spawns, which physics callbacks do not allow.
+        /// </summary>
+        public void KnockRiderOffNextFrame(Transform attacker)
+        {
+            if (knockOffPending || !valid || !isActiveAndEnabled || state == BikeState.Gone || !HasRider) return;
+            knockOffPending = true;
+            StartCoroutine(KnockOffRoutine(attacker));
+        }
+
+        private IEnumerator KnockOffRoutine(Transform attacker)
+        {
+            yield return null;
+            knockOffPending = false;
+            KnockRiderOff(attacker);
+        }
+
+        /// <summary>
+        /// Punched off the bike: the rider becomes the street pedestrian again, knocked down away from the attacker (he gets up
+        /// and runs), and the bike goes over and slides on without him. False when there is no rider to knock off.
+        /// </summary>
+        public bool KnockRiderOff(Transform attacker)
+        {
+            if (!valid || !isActiveAndEnabled || state == BikeState.Gone || bikeCrash.Crashed || !HasRider) return false;
+            Vector3 from = attacker != null ? attacker.position : transform.position - transform.right;
+            Vector3 away = Vector3.ProjectOnPlane(transform.position - from, Vector3.up);
+            away = away.sqrMagnitude > 0.01f ? away.normalized : transform.right;
+            Vector3 velocity = body.linearVelocity;
+            Transform rider = riderVisual.transform;
+            Vector3 riderPosition = rider.position;
+            riderVisual.SetActive(false); // the crash below makes no ragdoll copy of a hidden rider
+
+            if (state == BikeState.Reserved) state = BikeState.Traffic;
+            trafficAI.reservedForEventTrigger = false;
+            trafficAI.enabled = true;
+            bikeCrash.Crash(null, velocity + away * 1.5f, Mathf.Max(velocity.magnitude, 2f), riderPosition);
+            state = BikeState.Gone;
+            FallenBikeTarget.AttachToNewestWreck(transform.position, drivablePrefab, paintRenderer != null ? paintRenderer.sharedMaterial : null);
+            OnRiderKnockedOff?.Invoke(this, attacker);
+
+            if (riderPedPrefab == null || TrafficVehicleDriver.PersonFactory == null) return true;
+            Vector3 point = riderPosition + away * 0.4f;
+            if (Physics.Raycast(point + Vector3.up * 1.5f, Vector3.down, out RaycastHit ground, 4f, 1, QueryTriggerInteraction.Ignore)) point = ground.point;
+            PedestrianWalker person = TrafficVehicleDriver.PersonFactory(riderPedPrefab, point, Quaternion.LookRotation(transform.forward));
+            if (person != null)
+                person.StartCoroutine(KnockDownNextFrame(person, velocity * 0.6f + away * shoveSpeed + Vector3.up * 1f,
+                    Vector3.Cross(Vector3.up, away) * 2.5f, from, punchedGroundTime));
+            return true;
         }
 
         // BikeCrash builds its solid "CrashBody" box in its Awake (Default layer), reaching up over the rider's hips and chest, so
@@ -134,6 +216,7 @@ namespace OpenworldCrime.Vehicles
             state = BikeState.Traffic;
             nextHitTime = 0f;
             stumbleRoutine = null;
+            knockOffPending = false;
             lastShooter = null;
             usedEnterPoint = null;
             if (riderVisual != null) riderVisual.SetActive(true);
@@ -233,14 +316,14 @@ namespace OpenworldCrime.Vehicles
             Vector3 point = rider.position + away * 0.35f;
             if (Physics.Raycast(point + Vector3.up * 1.5f, Vector3.down, out RaycastHit ground, 4f, 1, QueryTriggerInteraction.Ignore)) point = ground.point;
             PedestrianWalker person = TrafficVehicleDriver.PersonFactory(riderPedPrefab, point, Quaternion.LookRotation(transform.forward));
-            if (person != null) person.StartCoroutine(KnockDownNextFrame(person, away * shoveSpeed + Vector3.up * 0.8f, Vector3.Cross(Vector3.up, away) * 2f, drivable.position));
+            if (person != null) person.StartCoroutine(KnockDownNextFrame(person, away * shoveSpeed + Vector3.up * 0.8f, Vector3.Cross(Vector3.up, away) * 2f, drivable.position, shoveGroundTime));
         }
 
-        private IEnumerator KnockDownNextFrame(PedestrianWalker person, Vector3 velocity, Vector3 tumble, Vector3 threat)
+        private IEnumerator KnockDownNextFrame(PedestrianWalker person, Vector3 velocity, Vector3 tumble, Vector3 threat, float groundTime)
         {
             // One frame for the new character to initialise; a knock-down before that does not count.
             yield return null;
-            if (person != null && person.TryGetComponent(out PedestrianDamage damage)) damage.KnockDownBy(velocity, tumble, shoveGroundTime, threat);
+            if (person != null && person.TryGetComponent(out PedestrianDamage damage)) damage.KnockDownBy(velocity, tumble, groundTime, threat);
         }
 
         // iTS' pause alone does not hold the bike: with the AI off, the physics keep braking with the last input.

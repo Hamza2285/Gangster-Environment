@@ -44,21 +44,71 @@ namespace OpenworldCrime.EditorTools
         private static readonly Color BritishGreen = new Color(0.07f, 0.28f, 0.15f);
         private static readonly Color Orange = new Color(0.95f, 0.38f, 0.05f);
 
-        // Colours besides the model's own (variant 0). The Bugatti's dark second tone is not in its mask, so it stays: its colours
-        // are ones that go with black.
-        private static readonly Dictionary<string, (string name, Color color)[]> Variants = new Dictionary<string, (string, Color)[]>
+        private static readonly Color Charcoal = new Color(0.18f, 0.18f, 0.2f);
+        private static readonly Color PearlWhite = new Color(0.93f, 0.92f, 0.88f);
+        private static readonly Color Champagne = new Color(0.72f, 0.63f, 0.46f);
+        private static readonly Color Burgundy = new Color(0.33f, 0.04f, 0.09f);
+        private static readonly Color Teal = new Color(0.03f, 0.42f, 0.44f);
+        private static readonly Color MetallicPurple = new Color(0.32f, 0.12f, 0.46f);
+        private static readonly Color Bronze = new Color(0.5f, 0.3f, 0.14f);
+        private static readonly Color SkyBlue = new Color(0.36f, 0.6f, 0.82f);
+        private static readonly Color OliveGreen = new Color(0.3f, 0.33f, 0.16f);
+        private static readonly Color Sand = new Color(0.78f, 0.7f, 0.55f);
+
+        // The traffic palette: every model gets every colour except its own (variant 0) group, so streets show a wide spread.
+        // How often each one appears is VehiclePaintSettings' weights (written by ApplyAll from PaletteWeights).
+        private static readonly (string name, Color color)[] Palette =
         {
-            { "Audi e-tron GT", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("DeepRed", DeepRed), ("RaceRed", RaceRed) } },
-            { "Challenger", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("RaceRed", RaceRed), ("Yellow", Yellow), ("ElectricBlue", ElectricBlue), ("Gunmetal", Gunmetal) } },
-            { "BugattiChiron", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("RaceRed", RaceRed), ("Yellow", Yellow), ("BritishGreen", BritishGreen), ("Orange", Orange) } },
-            { "BMW 7 series G12 2020", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("DeepRed", DeepRed), ("BritishGreen", BritishGreen) } },
-            { "Audi SQ7", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("DeepRed", DeepRed), ("BritishGreen", BritishGreen) } },
-            { "U Wagor", new[] { ("Black", Black), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("DeepRed", DeepRed), ("BritishGreen", BritishGreen), ("Yellow", Yellow) } },
-            { "Khodge 2", new[] { ("Black", Black), ("Silver", Silver), ("Gunmetal", Gunmetal), ("RaceRed", RaceRed), ("Yellow", Yellow), ("ElectricBlue", ElectricBlue), ("Orange", Orange) } },
-            { "Land Sover", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("DeepRed", DeepRed), ("BritishGreen", BritishGreen), ("Yellow", Yellow) } },
-            { "Talenter", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("DeepRed", DeepRed), ("ElectricBlue", ElectricBlue) } },
-            { "WMB", new[] { ("Black", Black), ("White", White), ("Silver", Silver), ("Gunmetal", Gunmetal), ("MidnightBlue", MidnightBlue), ("Yellow", Yellow), ("ElectricBlue", ElectricBlue) } },
+            ("Black", Black), ("White", White), ("PearlWhite", PearlWhite), ("Silver", Silver), ("Gunmetal", Gunmetal),
+            ("Charcoal", Charcoal), ("MidnightBlue", MidnightBlue), ("ElectricBlue", ElectricBlue), ("SkyBlue", SkyBlue),
+            ("Teal", Teal), ("DeepRed", DeepRed), ("RaceRed", RaceRed), ("Burgundy", Burgundy), ("BritishGreen", BritishGreen),
+            ("OliveGreen", OliveGreen), ("Yellow", Yellow), ("Orange", Orange), ("Bronze", Bronze), ("Champagne", Champagne),
+            ("Sand", Sand), ("MetallicPurple", MetallicPurple),
         };
+
+        // Realistic but visibly varied: neutrals about 55%, everything else spread out.
+        private static readonly (string colour, float weight)[] PaletteWeights =
+        {
+            ("Black", 11f), ("White", 10f), ("PearlWhite", 6f), ("Silver", 10f), ("Gunmetal", 7f), ("Charcoal", 5f),
+            ("MidnightBlue", 6f), ("ElectricBlue", 4f), ("SkyBlue", 3f), ("Teal", 4f), ("DeepRed", 5f), ("RaceRed", 4f),
+            ("Burgundy", 4f), ("BritishGreen", 3f), ("OliveGreen", 2f), ("Yellow", 3f), ("Orange", 3f), ("Bronze", 3f),
+            ("Champagne", 4f), ("Sand", 2f), ("MetallicPurple", 3f),
+        };
+
+        private static Dictionary<string, (string name, Color color)[]> variants;
+
+        // Colours besides the model's own (variant 0): the palette without the model's own colour group.
+        private static Dictionary<string, (string name, Color color)[]> Variants
+        {
+            get
+            {
+                if (variants != null) return variants;
+                variants = new Dictionary<string, (string, Color)[]>();
+                foreach (KeyValuePair<string, string> model in OriginalColour)
+                {
+                    var list = new List<(string, Color)>();
+                    foreach ((string name, Color color) c in Palette) if (c.name != model.Value) list.Add(c);
+                    variants[model.Key] = list.ToArray();
+                }
+                return variants;
+            }
+        }
+
+        private static void WriteWeights(StringBuilder sb)
+        {
+            var so = new SerializedObject(GetPaintSettings());
+            SerializedProperty list = so.FindProperty("weights");
+            list.arraySize = PaletteWeights.Length;
+            for (int i = 0; i < PaletteWeights.Length; i++)
+            {
+                SerializedProperty e = list.GetArrayElementAtIndex(i);
+                e.FindPropertyRelative("colour").stringValue = PaletteWeights[i].colour;
+                e.FindPropertyRelative("weight").floatValue = PaletteWeights[i].weight;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+            sb.AppendLine($"  paint weights: {PaletteWeights.Length} colours");
+        }
+
         // Colour group of each model's own paint (variant 0), measured from the atlases, so the weights in VehiclePaintSettings
         // apply to it as well (an orange Challenger is as rare as any other orange car).
         private static readonly Dictionary<string, string> OriginalColour = new Dictionary<string, string>
@@ -147,6 +197,7 @@ namespace OpenworldCrime.EditorTools
         public static string ApplyAll()
         {
             var sb = new StringBuilder("[FinalCarPaint]\n");
+            WriteWeights(sb);
             foreach (string name in Bodies.Keys)
             {
                 var material = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialFolder}/{name}.mat");

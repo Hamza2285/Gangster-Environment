@@ -18,11 +18,14 @@ namespace OpenworldCrime.Interiors
         [Tooltip("Scene (in Build Settings) loaded additively when entering.")]
         [SerializeField] private string interiorSceneName = "GunShop_Interior";
         [SerializeField] private string prompt = "Enter Gun Shop";
+        [Tooltip("Caption shown on the black screen while the interior loads.")]
+        [SerializeField] private string loadingCaption = "GUN SHOP";
         [Tooltip("Where the player stands, facing away from the door, after leaving the interior.")]
         [SerializeField] private Transform exitPoint;
 
         public string EntranceId => entranceId;
         public string InteriorSceneName => interiorSceneName;
+        public string LoadingCaption => loadingCaption;
         public Transform ExitPoint => exitPoint != null ? exitPoint : transform;
         public string InteractionPrompt => prompt;
 

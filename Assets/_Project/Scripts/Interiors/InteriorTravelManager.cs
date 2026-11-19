@@ -131,7 +131,7 @@ namespace OpenworldCrime.Interiors
             IsTransitioning = true;
             playerManager.SetInputLocked(true);
             PlayDoor();
-            yield return fader.FadeTo(1f, fadeDuration, "GUN SHOP");
+            yield return fader.FadeTo(1f, fadeDuration, entrance.LoadingCaption);
 
             CurrentEntrance = entrance;
             AsyncOperation load = SceneManager.LoadSceneAsync(entrance.InteriorSceneName, LoadSceneMode.Additive);

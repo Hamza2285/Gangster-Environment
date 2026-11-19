@@ -30,8 +30,13 @@ namespace OpenworldCrime.Player
         private readonly List<Renderer> hiddenRenderers = new List<Renderer>();
         private bool controlEnabled = true;
         private bool riding;
+        private bool posed;
 
         public Transform CameraPivot => rideCameraPivot;
+        /// <summary>The player's view camera (moved directly by the caller while <see cref="IsPosed"/>).</summary>
+        public Camera PlayerCamera => playerCamera;
+        /// <summary>True while another system holds the body in a pose (e.g. sitting) and owns the camera.</summary>
+        public bool IsPosed => posed;
         public bool ControlEnabled => controlEnabled;
         public float FacingYaw => transform.eulerAngles.y;
 
@@ -97,6 +102,36 @@ namespace OpenworldCrime.Player
             transform.SetPositionAndRotation(feetPosition, Quaternion.Euler(0f, yaw, 0f));
             body.position = feetPosition;
             body.linearVelocity = Vector3.zero;
+            Physics.SyncTransforms();
+        }
+
+        /// <summary>
+        /// Holds the visible player in a pose placed by another system (seats): physics body frozen, capsule off, the
+        /// Invector camera paused so the caller can place <see cref="PlayerCamera"/>. Ending the pose puts the camera back
+        /// behind the player, looking along <paramref name="yaw"/>.
+        /// </summary>
+        public void SetPosed(bool enable, float yaw = 0f)
+        {
+            if (posed == enable || riding) return;
+            posed = enable;
+            if (enable)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.isKinematic = true;
+                capsule.enabled = false;
+                thirdPersonCamera.enabled = false;
+                return;
+            }
+            body.isKinematic = false;
+            body.position = transform.position;
+            capsule.enabled = true;
+            playerCamera.transform.localPosition = Vector3.zero;
+            playerCamera.transform.localRotation = Quaternion.identity;
+            thirdPersonCamera.transform.SetPositionAndRotation(transform.position - Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * 2.5f + Vector3.up * 1.7f, Quaternion.Euler(8f, yaw, 0f));
+            thirdPersonCamera.enabled = true;
+            thirdPersonCamera.Init();
+            thirdPersonCamera.mouseX = yaw;
+            thirdPersonCamera.mouseY = 8f;
             Physics.SyncTransforms();
         }
 
