@@ -4,9 +4,13 @@ using UnityEngine.InputSystem;
 #endif
 
 // Single place for gameplay input. Uses the Input System when it is active and
-// the old Input Manager otherwise.
+// the old Input Manager otherwise. On phones the on-screen buttons (MobileGameButtons, Ghost's VirtualButton) press the same
+// actions through CrossPlatformInputManager, and a screen tap counts as the primary click.
 public static class GameInput
 {
+    static bool Touch(string button) => UnityStandardAssets.CrossPlatformInput.CrossPlatformInputManager.GetButtonDown(button);
+    static bool TouchHeld(string button) => UnityStandardAssets.CrossPlatformInput.CrossPlatformInputManager.GetButton(button);
+
     public static Vector2 Move
     {
         get
@@ -59,17 +63,21 @@ public static class GameInput
         }
     }
 
-    public static bool Sprint => KeyHeld(KeyCode.LeftShift);
-    public static bool JumpDown => KeyDown(KeyCode.Space);
+    public static bool Sprint => KeyHeld(KeyCode.LeftShift) || TouchHeld("M_Sprint");
+    public static bool JumpDown => KeyDown(KeyCode.Space) || Touch("M_Jump");
     public static bool InteractDown => KeyDown(KeyCode.E);
-    public static bool WhistleDown => KeyDown(KeyCode.T);
-    public static bool EnterDown => KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter);
-    public static bool MapDown => KeyDown(KeyCode.M);
-    public static bool CameraDown => KeyDown(KeyCode.C);
+    public static bool HornDown => KeyDown(KeyCode.H) || Touch("M_Horn");
+    public static bool WhistleDown => KeyDown(KeyCode.T) || Touch("M_Taxi");
+    public static bool EnterDown => KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter) || Touch("M_Enter");
+    public static bool MapDown => KeyDown(KeyCode.M) || Touch("M_Map");
+    public static bool CameraDown => KeyDown(KeyCode.C) || Touch("M_Camera");
     public static bool OutfitDown => KeyDown(KeyCode.O);
-    public static bool WatchOptionDown => KeyDown(KeyCode.Alpha1);
-    public static bool SkipOptionDown => KeyDown(KeyCode.Alpha2);
-    public static bool CancelDown => KeyDown(KeyCode.Escape);
+    public static bool WatchOptionDown => KeyDown(KeyCode.Alpha1) || Touch("M_Watch");
+    public static bool SkipOptionDown => KeyDown(KeyCode.Alpha2) || Touch("M_Skip");
+    public static bool CancelDown => KeyDown(KeyCode.Escape) || Touch("M_Cancel");
+    // Starting a mission (the ambulance): E, or the START MISSION button.
+    public static bool MissionDown => KeyDown(KeyCode.E) || Touch("M_Mission");
+
 
     // Menus: arrows or WASD move the selection, Q and E turn the preview.
     public static bool MenuUpDown => KeyDown(KeyCode.UpArrow) || KeyDown(KeyCode.W);
@@ -79,15 +87,18 @@ public static class GameInput
     public static bool MenuBackDown => KeyDown(KeyCode.Escape) || KeyDown(KeyCode.Backspace);
     public static float TurnKeys => (KeyHeld(KeyCode.E) ? 1f : 0f) - (KeyHeld(KeyCode.Q) ? 1f : 0f);
     public static bool ResetViewDown => KeyDown(KeyCode.R);
-    public static bool SwitchHeld => KeyHeld(KeyCode.LeftAlt) || KeyHeld(KeyCode.RightAlt);
-    public static bool SwitchDown => KeyDown(KeyCode.LeftAlt) || KeyDown(KeyCode.RightAlt);
+    // Holding Alt (or the SWITCH button) opens the character wheel; letting go switches to the picked character.
+    public static bool SwitchHeld => KeyHeld(KeyCode.LeftAlt) || KeyHeld(KeyCode.RightAlt) || TouchHeld("M_Switch");
+    public static bool SwitchDown => KeyDown(KeyCode.LeftAlt) || KeyDown(KeyCode.RightAlt) || Touch("M_Switch");
 
     public static bool PrimaryClickDown
     {
         get
         {
 #if ENABLE_INPUT_SYSTEM
-            if (Mouse.current != null) return Mouse.current.leftButton.wasPressedThisFrame;
+            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) return true;
+            if (Touchscreen.current != null) return Touchscreen.current.primaryTouch.press.wasPressedThisFrame;
+            if (Mouse.current != null) return false;
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
             return Input.GetMouseButtonDown(0);
@@ -117,7 +128,9 @@ public static class GameInput
         get
         {
 #if ENABLE_INPUT_SYSTEM
-            if (Mouse.current != null) return Mouse.current.leftButton.isPressed;
+            if (Mouse.current != null && Mouse.current.leftButton.isPressed) return true;
+            if (Touchscreen.current != null) return Touchscreen.current.primaryTouch.press.isPressed;
+            if (Mouse.current != null) return false;
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
             return Input.GetMouseButton(0);
@@ -179,6 +192,7 @@ public static class GameInput
             case KeyCode.LeftShift: return kb.leftShiftKey;
             case KeyCode.Space: return kb.spaceKey;
             case KeyCode.E: return kb.eKey;
+            case KeyCode.H: return kb.hKey;
             case KeyCode.M: return kb.mKey;
             case KeyCode.C: return kb.cKey;
             case KeyCode.O: return kb.oKey;

@@ -13,10 +13,9 @@ namespace OpenworldCrime.EditorTools
     /// volumes and <see cref="CityAtmosphere"/> into the open gameplay scene. Re-running rebuilds the profiles with the values
     /// below (they are plain assets; tune them in the Inspector afterwards if preferred).
     ///
-    /// Mobile notes: Mobile_RPAsset grades in Low Dynamic Range, where URP has no tonemapping step (the LDR LUT builder has no
-    /// tonemapper), so the look is built from colour adjustments, white balance and lift / gamma / gain, which all bake into
-    /// the one 32^3 LUT URP already builds - their cost is the same as one. Tonemapping is explicitly None so the editor and
-    /// other pipeline assets show the same image as the phone. Bloom runs at quarter resolution with few iterations.
+    /// Mobile notes: Mobile_RPAsset grades in Low Dynamic Range. URP still applies the tonemapper there (ALU in the uber
+    /// pass, before the internal LUT), and colour adjustments, white balance and split toning all bake into the one 32^3 LUT
+    /// URP already builds, so the whole grade costs the same as one LUT lookup. Bloom runs at quarter resolution, few iterations.
     /// Menu: Tools > OpenworldCrime > Lighting > Setup City Post Processing.
     /// </summary>
     public static class CityPostProcessSetup
@@ -26,6 +25,13 @@ namespace OpenworldCrime.EditorTools
         private const string SwitcherName = "CityLighting";
         private const int DayPriority = 110;   // above the scene's Global / Outdoor volumes and Hamza's Night Effects (100)
         private const int NightPriority = 120;
+        // ACES darkens mid-tones a little, so exposure is higher than it was with no tonemapping.
+        private const float DayExposure = 0.6f;
+        private const float DayContrast = 12f;
+        private const float DaySaturation = 6f;
+        private const float DayTemperature = 4f;
+        private const float DayTint = 6f;
+        private const float NightExposure = 0.35f;
 
         [MenuItem("Tools/OpenworldCrime/Lighting/Setup City Post Processing")]
         public static void SetupMenu() => Debug.Log(Setup());
@@ -64,49 +70,63 @@ namespace OpenworldCrime.EditorTools
         private static VolumeProfile BuildDayProfile()
         {
             VolumeProfile p = NewProfile("OWC_City_Day");
-            Add<Tonemapping>(p).mode.Override(TonemappingMode.None);
-            // The day preset is already a warm golden-hour light: a gentle contrast / saturation lift is enough. postExposure
-            // replaces the Outdoor volume's +0.25 (this volume has the higher priority), slightly lower to hold the facades.
+            // Golden-hour "Vice" look: ACES filmic tonemapping rolls bright facades and signs off softly instead of clipping
+            // (URP applies it in the LDR grading path too, inside the same LUT pass, so the phone pays nothing extra), then a
+            // soft pink / lavender grade: peach-pink highlights, violet shadows, a touch of magenta tint.
+            Add<Tonemapping>(p).mode.Override(TonemappingMode.ACES);
             var color = Add<ColorAdjustments>(p);
-            color.postExposure.Override(0.2f);
-            color.contrast.Override(6f);
-            color.saturation.Override(10f);
+            color.postExposure.Override(DayExposure);
+            color.contrast.Override(DayContrast);
+            color.saturation.Override(DaySaturation);
             color.colorFilter.Override(Color.white);
+            var white = Add<WhiteBalance>(p);
+            white.temperature.Override(DayTemperature);
+            white.tint.Override(DayTint);
+            var split = Add<SplitToning>(p);
+            split.shadows.Override(new Color(0.48f, 0.45f, 0.58f));
+            split.highlights.Override(new Color(1f, 0.72f, 0.72f));
+            split.balance.Override(-15f);
             var bloom = Add<Bloom>(p);
-            bloom.threshold.Override(1.0f);
-            bloom.intensity.Override(0.3f);
-            bloom.scatter.Override(0.6f);
+            bloom.threshold.Override(0.95f);
+            bloom.intensity.Override(0.45f);
+            bloom.scatter.Override(0.65f);
+            bloom.tint.Override(new Color(1f, 0.82f, 0.86f));
             bloom.highQualityFiltering.Override(false);
             bloom.downscale.Override(BloomDownscaleMode.Quarter);
             bloom.maxIterations.Override(5);
             var vignette = Add<Vignette>(p);
-            vignette.intensity.Override(0.18f);
+            vignette.intensity.Override(0.22f);
             vignette.smoothness.Override(0.45f);
-            vignette.color.Override(Color.black);
+            vignette.color.Override(new Color(0.12f, 0.02f, 0.1f));
             return Save(p);
         }
 
         private static VolumeProfile BuildNightProfile()
         {
             VolumeProfile p = NewProfile("OWC_City_Night");
-            Add<Tonemapping>(p).mode.Override(TonemappingMode.None);
+            // Neon night: ACES keeps signs and lamp pools from clipping, cool blue-violet shadows, magenta tint for the neon.
+            Add<Tonemapping>(p).mode.Override(TonemappingMode.ACES);
             var color = Add<ColorAdjustments>(p);
-            color.postExposure.Override(0.1f);
-            color.contrast.Override(12f);
-            color.saturation.Override(12f);
+            color.postExposure.Override(NightExposure);
+            color.contrast.Override(14f);
+            color.saturation.Override(14f);
             color.colorFilter.Override(new Color(0.96f, 0.98f, 1f));
             var white = Add<WhiteBalance>(p);
-            white.temperature.Override(-8f);
-            white.tint.Override(4f);
+            white.temperature.Override(-10f);
+            white.tint.Override(12f);
+            var split = Add<SplitToning>(p);
+            split.shadows.Override(new Color(0.4f, 0.42f, 0.7f));
+            split.highlights.Override(new Color(1f, 0.7f, 0.85f));
+            split.balance.Override(-10f);
             var lgg = Add<LiftGammaGain>(p);
             lgg.lift.Override(new Vector4(0.97f, 0.99f, 1.05f, -0.03f));
             lgg.gamma.Override(new Vector4(1f, 1f, 1.02f, 0f));
             lgg.gain.Override(new Vector4(1.03f, 1f, 0.97f, 0.02f));
             var bloom = Add<Bloom>(p);
-            bloom.threshold.Override(0.85f);
-            bloom.intensity.Override(0.85f);
-            bloom.scatter.Override(0.65f);
-            bloom.tint.Override(new Color(1f, 0.93f, 0.85f));
+            bloom.threshold.Override(0.9f);
+            bloom.intensity.Override(0.8f);
+            bloom.scatter.Override(0.7f);
+            bloom.tint.Override(new Color(1f, 0.8f, 0.95f));
             bloom.highQualityFiltering.Override(false);
             bloom.downscale.Override(BloomDownscaleMode.Quarter);
             bloom.maxIterations.Override(5);

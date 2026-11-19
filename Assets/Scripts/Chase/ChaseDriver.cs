@@ -45,6 +45,7 @@ public class ChaseDriver : MonoBehaviour
     private WheelCollider[] _rear = new WheelCollider[0];
     private WheelFrictionCurve[] _rearGrip = new WheelFrictionCurve[0];
     private bool _isDrifting;
+    private bool _ended;
     private float _weaveSeed;
 
     // Drift effects.
@@ -103,8 +104,13 @@ public class ChaseDriver : MonoBehaviour
 
     public void SetStopped(bool stopped) { Stopped = stopped; _stuckTime = 0f; }
 
-    private void OnDestroy()
+    private void OnDestroy() => End();
+
+    public void End()
     {
+        if (_ended) return;
+        _ended = true;
+        enabled = false;
         if (_car != null)
         {
             _car.EngineTorque = _savedTorque;
@@ -120,11 +126,11 @@ public class ChaseDriver : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (_car == null || _path.Count < 2) return;
+        if (_car == null) return;
         Vector3 pos = transform.position;
         Speed = Vector3.Dot(_body.linearVelocity, transform.forward);
 
-        if (Stopped)
+        if (Stopped || _path.Count < 2)
         {
             _car.OnAIUpdate(0f, 1f, 0f, false);
             UpdateDrift(0f, false);

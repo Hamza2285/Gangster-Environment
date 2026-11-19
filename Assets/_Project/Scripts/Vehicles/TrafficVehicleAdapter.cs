@@ -139,9 +139,10 @@ namespace OpenworldCrime.Vehicles
         public bool IsWrecked => health != null && health.IsDestroyed;
         public bool IsPolice => policeDriver;
         public Rigidbody Body => body;
+        internal bool CanLeaveTraffic => isActiveAndEnabled && State == TrafficVehicleState.TrafficControlled
+            && HasDriver && !IsDriverKilled && !IsWrecked && trafficAI != null && trafficAI.IsEnabled && simpleCar != null && body != null;
         /// <summary>A living driver in a normal physics car (not a far kinematic one) who can panic (bail out or flee).</summary>
-        public bool CanPanic => isActiveAndEnabled && State == TrafficVehicleState.TrafficControlled && HasDriver && !IsDriverKilled && !IsWrecked
-                                      && trafficAI != null && trafficAI.IsEnabled && simpleCar != null && body != null && !body.isKinematic;
+        public bool CanPanic => CanLeaveTraffic && !body.isKinematic;
 
         public bool CanEnter => isValid && isActiveAndEnabled && State == TrafficVehicleState.TrafficControlled
                                 && !IsWrecked && trafficAI.IsEnabled && CurrentSpeed <= maxTakeoverSpeed;

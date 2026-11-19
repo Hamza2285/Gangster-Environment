@@ -19,7 +19,9 @@ namespace OpenworldCrime.Police
     /// - Search: walks to points around the last known position.
     /// - Return: walks away and is recalled once out of sight.
     /// Health, hits, knock-downs and death are the pedestrian damage setup (<see cref="PedestrianDamage"/> with its ragdoll):
-    /// a knocked-down officer gets up and carries on; a dead one is cleared out of sight after Corpse Seconds.
+    /// an officer who goes down (shot, run over, knocked out) dies; after Corpse Seconds the body is cleared, at once when it is out
+    /// of sight, otherwise it sinks into the ground first.
+    /// Officers on foot spread round the suspect (each has his own flank angle and firing distance) instead of queuing behind each other.
     /// Movement is Unity's NavMeshAgent on the pedestrians' panic NavMesh (kept loaded by the dispatcher while officers are out).
     /// Car crews (<see cref="ActivateFromCar"/>): the officer starts in his seat of a <see cref="PoliceCarUnit"/> and climbs out with the
     /// car-exit clip (door opened and closed by <see cref="PoliceCarCrew"/>, root steered onto the ground beside the door), then joins
@@ -84,6 +86,12 @@ namespace OpenworldCrime.Police
         [Tooltip("A returning officer is removed once out of sight and at least this far (m) from the camera.")]
         [SerializeField, Min(5f)] private float recallKeepDistance = 25f;
 
+        [Header("Death")]
+        [Tooltip("A body still on screen after Corpse Seconds waits this long, then sinks into the ground over Sink Seconds and is cleared.")]
+        [SerializeField, Min(0f)] private float sinkDelay = 1.5f;
+        [SerializeField, Min(0.1f)] private float sinkSeconds = 1.5f;
+        [SerializeField, Min(0.1f)] private float sinkDepth = 1.2f;
+
         private static readonly List<PoliceOfficerUnit> active = new List<PoliceOfficerUnit>();
         /// <summary>Officers on the street right now (alive, standing or knocked down).</summary>
         public static IReadOnlyList<PoliceOfficerUnit> Active => active;
@@ -92,6 +100,7 @@ namespace OpenworldCrime.Police
         public bool IsAlive => State != UnitState.Inactive && State != UnitState.Dead;
         /// <summary>On his feet (can see, arrest and shoot).</summary>
         public bool IsStanding => IsAlive && State != UnitState.Down;
+        internal bool TrackingSuspect => State == UnitState.Pursue || State == UnitState.Engage || State == UnitState.Search;
         public Vector3 EyePosition => transform.position + Vector3.up * (settings != null ? settings.eyeHeight : 1.6f);
         /// <summary>The car this officer climbed out of (null for officers who came on foot or whose car is gone).</summary>
         public PoliceCarUnit HomeCar { get; private set; }
@@ -120,6 +129,11 @@ namespace OpenworldCrime.Police
         private Quaternion lastGoal;
         private bool ikCalibrated;
         private Coroutine carRoutine;
+        // Where round the suspect this officer goes (degrees) and how far from him he stops to shoot.
+        private float flankAngle;
+        private float standDistance;
+        private bool sinking;
+        private static int flankCounter;
         private Collider[] ownColliders = new Collider[0];
         private PedestrianRagdoll ragdoll;
         private float boardingSince;
@@ -203,6 +217,7 @@ namespace OpenworldCrime.Police
             nextLineCheck = 0f;
             hasLineOfFire = false;
             searchPointUntil = 0f;
+            PickFlank();
             HomeCar = null;
             HomeSeat = -1;
             SetState(UnitState.Pursue);
@@ -244,6 +259,7 @@ namespace OpenworldCrime.Police
             nextLineCheck = 0f;
             hasLineOfFire = false;
             searchPointUntil = 0f;
+            PickFlank();
             HomeCar = car;
             HomeSeat = seat;
             car.Crew.SetCollisionIgnored(ownColliders, true);
@@ -251,6 +267,22 @@ namespace OpenworldCrime.Police
             if (!active.Contains(this)) active.Add(this);
             carRoutine = StartCoroutine(ExitCarRoutine(car, seat, ground));
             return true;
+        }
+
+        // Golden-angle steps: however many officers are out, each new one takes a side nobody else covers yet.
+        private void PickFlank()
+        {
+            flankAngle = (flankCounter++ * 137.5f) % 360f;
+            standDistance = settings.fireStandDistance * Random.Range(0.75f, 1.35f);
+            sinking = false;
+        }
+
+        // The point this officer heads for while engaging: his side of the suspect, at his own distance.
+        private Vector3 FlankPoint(Vector3 target)
+        {
+            Vector3 offset = Quaternion.Euler(0f, flankAngle, 0f) * Vector3.forward * standDistance;
+            Vector3 point = target + offset;
+            return NavMesh.SamplePosition(point, out NavMeshHit hit, 4f, NavMesh.AllAreas) ? hit.position : target;
         }
 
         /// <summary>His car is leaving: run back to its door and get in (the car shows him seated again and he goes back to the pool).</summary>
@@ -265,9 +297,34 @@ namespace OpenworldCrime.Police
         /// <summary>The car is gone (recalled, wrecked) or gave up waiting: he carries on as an officer on foot.</summary>
         public void ClearHomeCar()
         {
+            PoliceCarUnit car = HomeCar;
+            int seat = HomeSeat;
             HomeCar = null;
             HomeSeat = -1;
-            if (State == UnitState.Boarding && carRoutine == null) SetState(UnitState.Pursue);
+            if (State != UnitState.Boarding) return;
+            if (carRoutine != null)
+            {
+                StopCoroutine(carRoutine);
+                carRoutine = null;
+                animator.speed = 1f;
+                animator.applyRootMotion = false;
+                animator.CrossFadeInFixedTime(LocomotionStateId, 0.25f, 0, 0f);
+                if (car != null && car.Crew != null)
+                {
+                    car.Crew.SetCollisionIgnored(ownColliders, false);
+                    if (seat >= 0) car.Crew.CloseDoor(seat);
+                }
+                damage.SetAliveColliderEnabled(true);
+                if (!NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+                {
+                    owner.Release(this);
+                    return;
+                }
+                transform.position = hit.position;
+                agent.enabled = true;
+                agent.Warp(hit.position);
+            }
+            SetState(UnitState.Pursue);
         }
 
         private IEnumerator ExitCarRoutine(PoliceCarUnit car, int seat, Vector3 groundTarget)
@@ -329,7 +386,6 @@ namespace OpenworldCrime.Police
             {
                 if (HomeCar != null) HomeCar.OnCrewGaveUp(this);
                 ClearHomeCar();
-                SetState(UnitState.Pursue);
                 return;
             }
             if (carRoutine != null) return;
@@ -426,7 +482,7 @@ namespace OpenworldCrime.Police
         /// <summary>True when this officer can see the point (within Officer Sight Radius, nothing solid in between).</summary>
         public bool CanSee(Vector3 point, float radius)
         {
-            if (!IsStanding) return false;
+            if (!TrackingSuspect) return false;
             Vector3 eye = EyePosition;
             Vector3 target = point + Vector3.up * 1.2f;
             float sqr = (target - eye).sqrMagnitude;
@@ -492,7 +548,11 @@ namespace OpenworldCrime.Police
                 Hold(target);
                 return;
             }
-            MoveTo(target, !drawn);
+            // Close in from his own side, so several officers end up round the suspect instead of in a line behind him.
+            Vector3 approach = distance > settings.drawWeaponDistance
+                ? target
+                : target + Quaternion.Euler(0f, flankAngle, 0f) * Vector3.forward * stand;
+            MoveTo(approach, !drawn);
             if (drawn) Face(target);
         }
 
@@ -514,16 +574,17 @@ namespace OpenworldCrime.Police
 
             if (!hasLineOfFire)
             {
+                // No shot from here: run to his own side of the suspect (close in when far, round him when near).
                 agent.speed = settings.officerRunSpeed;
-                MoveTo(target, true);
+                MoveTo(distance > standDistance * 2.5f ? target : FlankPoint(target), true);
                 return;
             }
             Face(target);
-            if (distance <= settings.fireStandDistance) Hold(target);
+            if (distance <= standDistance) Hold(target);
             else
             {
-                agent.speed = settings.officerWalkSpeed;
-                MoveTo(target, false);
+                agent.speed = settings.officerWalkSpeed * 1.4f;
+                MoveTo(FlankPoint(target), false);
             }
             if (now >= nextShot && now - engagedSince >= settings.fireReactionSeconds && armsWeight > 0.8f)
             {
@@ -663,6 +724,15 @@ namespace OpenworldCrime.Police
             armsTarget = 0f;
             armsWeight = 0f;
             if (weaponModel != null) weaponModel.SetActive(false);
+            // Police do not get back up: whatever put him down (bullet, car, fists) kills him. A frame later, so the damage
+            // component finishes the knock-down it is in the middle of.
+            if (isActiveAndEnabled) StartCoroutine(DieFromFall());
+        }
+
+        private IEnumerator DieFromFall()
+        {
+            yield return null;
+            if (State == UnitState.Down && !damage.IsDead) damage.Kill(null, damage.BodyPosition);
         }
 
         // Back up: the ragdoll plays its get-up clip (sits up, stands) and only then does the officer move and draw again.
@@ -732,9 +802,33 @@ namespace OpenworldCrime.Police
         private void UpdateCorpse()
         {
             float now = Time.time;
-            if (now < nextCorpseCheck) return;
-            nextCorpseCheck = now + 1f;
-            if (now - deadSince >= settings.corpseSeconds && owner.CanVanish(damage.BodyPosition, recallKeepDistance)) owner.Release(this);
+            if (sinking || now < nextCorpseCheck) return;
+            nextCorpseCheck = now + 0.5f;
+            float age = now - deadSince;
+            if (age < settings.corpseSeconds) return;
+            if (owner.CanVanish(damage.BodyPosition, recallKeepDistance)) owner.Release(this);
+            else if (age >= settings.corpseSeconds + sinkDelay) StartCoroutine(SinkRoutine());
+        }
+
+        // Still in view: the body (frozen, no physics) slides down into the ground, then goes back to the pool.
+        private IEnumerator SinkRoutine()
+        {
+            sinking = true;
+            if (ragdoll != null)
+            {
+                ragdoll.Freeze();
+                IReadOnlyList<Collider> colliders = ragdoll.Colliders;
+                for (int i = 0; i < colliders.Count; i++) if (colliders[i] != null) colliders[i].enabled = false;
+            }
+            Vector3 start = transform.position;
+            for (float t = 0f; t < sinkSeconds; t += Time.deltaTime)
+            {
+                if (State != UnitState.Dead) yield break;
+                transform.position = start + Vector3.down * (sinkDepth * t / sinkSeconds);
+                yield return null;
+            }
+            sinking = false;
+            if (State == UnitState.Dead) owner.Release(this);
         }
 
         /// <summary>True for a police officer: one of these units or a street officer of the pedestrian system.</summary>

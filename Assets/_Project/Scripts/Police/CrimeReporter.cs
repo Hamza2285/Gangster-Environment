@@ -46,6 +46,10 @@ namespace OpenworldCrime.Police
         private float nextAimCheck;
         private float aimedAtOfficerTime;
         private bool aimThreatReported;
+        [Tooltip("Vehicles whose name contains any of these are never reported stolen (mission / service vehicles).")]
+        [SerializeField] private string[] notStolenNames = { "Ambulance" };
+        // Vehicles the player has driven already: getting back into his own getaway car is not a new theft.
+        private readonly System.Collections.Generic.HashSet<int> drivenVehicles = new System.Collections.Generic.HashSet<int>();
         private bool valid;
 
         private void Awake()
@@ -136,10 +140,22 @@ namespace OpenworldCrime.Police
             aimThreatReported = false;
         }
 
+        // Pulling a driver out is always a theft; taking a parked car is too (GTA style), unless the player drove it before or it
+        // is a mission / service vehicle. Either way it only counts when police see it (WantedManager asks the witnesses).
         private void HandleVehicleEnterStarted(IVehicleController vehicle)
         {
-            if (vehicle != null && vehicle.EntryPrompt == VehicleEntryPrompt.Steal)
+            if (vehicle == null) return;
+            bool carjack = vehicle.EntryPrompt == VehicleEntryPrompt.Steal;
+            bool firstTime = drivenVehicles.Add(vehicle.transform.GetInstanceID());
+            if (carjack || (firstTime && !IsNeverStolen(vehicle.transform.name)))
                 Report(CrimeType.VehicleStolen, vehicle.transform.position, vehicle.transform, false);
+        }
+
+        private bool IsNeverStolen(string vehicleName)
+        {
+            for (int i = 0; i < notStolenNames.Length; i++)
+                if (!string.IsNullOrEmpty(notStolenNames[i]) && vehicleName.IndexOf(notStolenNames[i], StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         private void HandlePedestrianDamaged(PedestrianDamage pedestrian, vDamage damage, bool killed)

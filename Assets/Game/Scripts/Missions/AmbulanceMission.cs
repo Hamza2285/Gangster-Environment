@@ -93,8 +93,12 @@ public class AmbulanceMission : MonoBehaviour
         if (stage == Stage.Idle)
         {
             bool offer = inAmbulance && !hidden && hasDropOff;
+            if (offer && !promptBox.activeSelf) PlacePrompt(MobileControls());
+            if (offer && !promptBox.activeSelf) promptText.text = MobileControls()
+                ? "Tap <color=#FFC83D><b>START MISSION</b></color> for a paramedic mission"
+                : "Press <color=#FFC83D><b> E </b></color> to start a paramedic mission";
             promptBox.SetActive(offer);
-            if (offer && GameInput.InteractDown) Begin(vehicle.transform);
+            if (offer && GameInput.MissionDown) Begin(vehicle.transform);
             hudPanel.SetActive(false);
             UpdateMessage();
             return;
@@ -343,6 +347,23 @@ public class AmbulanceMission : MonoBehaviour
     }
 
     public bool Active => stage != Stage.Idle;
+
+    OpenworldCrime.Controls.ControlsModeManager controlsMode;
+
+    void PlacePrompt(bool mobile)
+    {
+        var rect = (RectTransform)promptBox.transform;
+        rect.anchorMin = rect.anchorMax = mobile ? new Vector2(0.5f, 1f) : new Vector2(0f, 1f);
+        rect.pivot = mobile ? new Vector2(0.5f, 1f) : new Vector2(0f, 1f);
+        rect.anchoredPosition = mobile ? new Vector2(0f, -96f) : new Vector2(36f, -96f);
+    }
+    bool MobileControls()
+    {
+        if (controlsMode == null) controlsMode = FindFirstObjectByType<OpenworldCrime.Controls.ControlsModeManager>(FindObjectsInactive.Include);
+        return controlsMode != null && controlsMode.IsMobile;
+    }
+    // In an ambulance with no mission running: the moment to offer "start a mission" (the on-screen button shows then).
+    public bool OfferingStart => promptBox != null && promptBox.activeSelf;
 
     // Ends a running mission from outside, for example when the player dies.
     public void Abort(string reason)

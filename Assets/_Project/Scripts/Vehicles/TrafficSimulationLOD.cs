@@ -102,6 +102,7 @@ namespace OpenworldCrime.Vehicles
             public float Speed;
             public float Throttle;
             public float Brake;
+            public float AppliedBrake;
             public float Steering;
             public float WheelAngle;
             public float Slope;
@@ -122,6 +123,22 @@ namespace OpenworldCrime.Vehicles
         {
             nearPhysicsDistance = Mathf.Max(10f, nearDistance);
             behindPhysicsDistance = Mathf.Clamp(behindDistance, 10f, nearPhysicsDistance);
+        }
+
+        internal float SpeedForPursuit(TrafficVehicleAdapter adapter)
+        {
+            if (adapter.Body.isKinematic && adapter.TryGetComponent(out TSTrafficAI ai)
+                && byAi.TryGetValue(ai, out Car car) && car.Tier == Tier.Far) return car.Speed;
+            return adapter.CurrentSpeed;
+        }
+
+        internal bool WakeForPursuit(TrafficVehicleAdapter adapter)
+        {
+            if (!adapter.Body.isKinematic) return true;
+            if (!adapter.TryGetComponent(out TSTrafficAI ai) || !byAi.TryGetValue(ai, out Car car)
+                || car.Tier != Tier.Far || !car.Started) return false;
+            SetNear(car);
+            return true;
         }
 
         private void OnEnable()
@@ -410,8 +427,12 @@ namespace OpenworldCrime.Vehicles
         {
             // Speed from the AI's own pedals (it brakes for lights, queues and junctions exactly as it would with physics).
             float speed = car.Speed;
-            if (car.Brake > 0.01f) speed -= car.Brake * brakeDeceleration * dt;
-            else if (car.Throttle > 0.01f) speed += car.Throttle * acceleration * dt;
+            float brake = car.Brake;
+            float throttle = car.Throttle;
+            if (car.Simple != null) car.Simple.ApplySirenSpeedLimit(speed, ref brake, ref throttle);
+            car.AppliedBrake = brake;
+            if (brake > 0.01f) speed -= brake * brakeDeceleration * dt;
+            else if (throttle > 0.01f) speed += throttle * acceleration * dt;
             else speed -= coastDeceleration * dt;
             speed = Mathf.Clamp(speed, 0f, car.MaxSpeed);
             car.Speed = speed;
@@ -420,6 +441,8 @@ namespace OpenworldCrime.Vehicles
             if (target == null) return;
             Vector3 position = car.Body.position;
             Vector3 toTarget = target.point - position;
+            if (car.Simple != null && !float.IsPositiveInfinity(car.Simple.SirenSpeedLimit))
+                toTarget += car.Ai.PointOffset;
             toTarget.y = 0f;
 
             // The body's pose, not the transform: with interpolation on, the transform holds the in-between render pose.
@@ -490,7 +513,7 @@ namespace OpenworldCrime.Vehicles
                     if (visual == null) continue;
                     visual.rotation = visual.parent.rotation * Quaternion.Euler(car.WheelAngle, car.WheelIsFront[w] ? steer : 0f, 0f);
                 }
-                if (car.Simple != null) car.Simple.BrakeLight(car.Brake);
+                if (car.Simple != null) car.Simple.BrakeLight(car.AppliedBrake);
             }
         }
     }

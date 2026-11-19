@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using OpenworldCrime.Interiors;
 using OpenworldCrime.UI;
 using OpenworldCrime.Vehicles;
 using UnityEngine;
@@ -26,7 +27,7 @@ namespace OpenworldCrime.Police
     [RequireComponent(typeof(Rigidbody))]
     public class PoliceCarUnit : MonoBehaviour
     {
-        public enum UnitState { Inactive, Pursue, Deployed, Search, Return, Wrecked }
+        public enum UnitState { Inactive, Pursue, Deployed, Search, Return, Wrecked, AmbientPursuit }
 
         private const float RouteRefreshDistance = 10f;
 
@@ -62,6 +63,8 @@ namespace OpenworldCrime.Police
 
         [Header("Siren")]
         [SerializeField, Range(0f, 1f)] private float sirenVolume = 0.75f;
+        [Tooltip("Recorded siren loop. Empty = a generated wail.")]
+        [SerializeField] private AudioClip sirenRecording;
 
         private static readonly List<PoliceCarUnit> active = new List<PoliceCarUnit>();
         /// <summary>Police cars out right now (any state but wrecked).</summary>
@@ -77,6 +80,9 @@ namespace OpenworldCrime.Police
         public bool IsChasing => State == UnitState.Pursue || State == UnitState.Search;
         /// <summary>On the job (chasing, searching or parked at the suspect with its crew out): counts towards Car Units Per Star.</summary>
         public bool IsOnDuty => IsChasing || State == UnitState.Deployed;
+        public bool IsAmbient { get; private set; }
+        public bool SirenActive { get; private set; }
+        internal bool WatchingPlayer => IsOnDuty && !IsAmbient && !crewOut;
         public float Speed => body.linearVelocity.magnitude;
         public PoliceCarCrew Crew => crew;
 
@@ -84,6 +90,8 @@ namespace OpenworldCrime.Police
         private PoliceSettings settings;
         private WantedManager wanted;
         private ChaseDriver chase;
+        private TrafficPanicManager ambientTraffic;
+        private TrafficVehicleAdapter ambientSuspect;
         private Transform lastAttacker;
         private readonly List<Vector3> route = new List<Vector3>(128);
         private readonly List<RoadNetwork.Link> links = new List<RoadNetwork.Link>();
@@ -93,6 +101,8 @@ namespace OpenworldCrime.Police
         private float stoppedSince = -1f;
         private float nextDeployTime;
         private Vector3 lastRouteTarget;
+        // Each searching car checks its own part of the search area.
+        private Vector3 searchOffset;
         private bool routeWasRoad;
         private bool crewOut;
         private bool boarding;
@@ -116,7 +126,7 @@ namespace OpenworldCrime.Police
             if (crew != null) crewOnFoot = new PoliceOfficerUnit[crew.SeatCount];
             if (siren != null)
             {
-                siren.clip = SirenClip;
+                siren.clip = sirenRecording != null ? sirenRecording : SirenClip;
                 siren.loop = true;
                 siren.playOnAwake = false;
             }
@@ -140,8 +150,30 @@ namespace OpenworldCrime.Police
         }
 
         /// <summary>Puts the car on the road at the given pose and speed and starts the chase.</summary>
-        public void Activate(PoliceDispatcher dispatcher, Vector3 position, Quaternion rotation, Vector3 velocity)
+        public void Activate(PoliceDispatcher dispatcher, Vector3 position, Quaternion rotation, Vector3 velocity) =>
+            Activate(dispatcher, position, rotation, velocity, UnitState.Pursue);
+
+        internal void ActivateAmbient(PoliceDispatcher dispatcher, TrafficPanicManager traffic, TrafficVehicleAdapter suspect,
+            List<Vector3> approach, Quaternion rotation)
         {
+            ambientTraffic = traffic;
+            ambientSuspect = suspect;
+            Activate(dispatcher, approach[0], rotation, rotation * Vector3.forward * 11f, UnitState.AmbientPursuit);
+            chase.target = suspect.transform;
+            SetInitialApproach(approach, suspect.transform.position);
+        }
+
+        internal void SetInitialApproach(List<Vector3> approach, Vector3 target)
+        {
+            chase.SetPath(approach);
+            routeWasRoad = true;
+            lastRouteTarget = target;
+            nextRepath = Time.time + 0.5f;
+        }
+
+        private void Activate(PoliceDispatcher dispatcher, Vector3 position, Quaternion rotation, Vector3 velocity, UnitState state)
+        {
+            IsAmbient = state == UnitState.AmbientPursuit;
             owner = dispatcher;
             settings = dispatcher.Settings;
             wanted = WantedManager.Instance;
@@ -164,20 +196,20 @@ namespace OpenworldCrime.Police
             ReleaseCrewOnFoot();
             if (crew != null) crew.Board(settings.officersPerCar);
             else for (int i = 0; i < seatedCrew.Length; i++) if (seatedCrew[i] != null) seatedCrew[i].SetActive(true);
-            if (mapBlip != null) mapBlip.enabled = true;
-            SetEmergency(true);
             lastAttacker = null;
             nextRepath = 0f;
             nextShot = 0f;
             stoppedSince = -1f;
             nextDeployTime = 0f;
-            SetState(UnitState.Pursue);
+            SetState(state);
             if (!active.Contains(this)) active.Add(this);
         }
 
         /// <summary>Back to the pool (called by the dispatcher).</summary>
         public void Deactivate()
         {
+            EndAmbientFlight();
+            IsAmbient = false;
             active.Remove(this);
             State = UnitState.Inactive;
             if (exitRoutine != null) StopCoroutine(exitRoutine);
@@ -192,7 +224,7 @@ namespace OpenworldCrime.Police
         /// <summary>True when the car's crew can see the point (within Car Sight Radius, nothing solid in between).</summary>
         public bool CanSee(Vector3 point, float radius)
         {
-            if (State == UnitState.Inactive || State == UnitState.Wrecked || crewOut) return false;
+            if (!WatchingPlayer) return false;
             Vector3 eye = transform.position + Vector3.up * 1.5f;
             Vector3 target = point + Vector3.up * 1.2f;
             float sqr = (target - eye).sqrMagnitude;
@@ -204,6 +236,12 @@ namespace OpenworldCrime.Police
         private void Update()
         {
             if (State == UnitState.Inactive || State == UnitState.Wrecked) return;
+            if (IsAmbient)
+            {
+                if (State == UnitState.AmbientPursuit) PursueAmbient();
+                else Return();
+                return;
+            }
             if (wanted == null)
             {
                 owner.Release(this);
@@ -216,8 +254,10 @@ namespace OpenworldCrime.Police
                 Deployed();
                 return;
             }
-            if (wanted.Stars == 0 && State != UnitState.Return) SetState(UnitState.Return);
-            else if (wanted.Stars > 0 && State == UnitState.Return) SetState(UnitState.Pursue);
+            bool dispatchCruisers = settings.CarUnitsFor(wanted.Stars) > 0;
+            if (!dispatchCruisers && State != UnitState.Return) SetState(UnitState.Return);
+            else if (dispatchCruisers && State == UnitState.Return && owner.HasCruiserSlot(wanted.Stars))
+                SetState(wanted.IsSearching ? UnitState.Search : UnitState.Pursue);
             else if (wanted.IsSearching && State == UnitState.Pursue) SetState(UnitState.Search);
             else if (!wanted.IsSearching && State == UnitState.Search) SetState(UnitState.Pursue);
 
@@ -242,30 +282,51 @@ namespace OpenworldCrime.Police
                 return;
             }
 
+            bool ram = wanted.PlayerInVehicle && wanted.IsLethal && wanted.Stars >= settings.ramFromStars;
+            FollowTarget(targetTransform, wanted.PlayerInVehicle, ram);
             float now = Time.time;
-            if (now >= nextRepath)
-            {
-                // Staggered so several cars never plan in the same frame.
-                nextRepath = now + settings.carRepathInterval * UnityEngine.Random.Range(0.8f, 1.2f);
-                chase.target = wanted.PlayerInVehicle ? targetTransform : null;
-                bool direct = distance <= directApproachDistance;
-                // A road route costs a graph search: only re-plan when the suspect has moved on or the route is nearly used up.
-                bool stale = (target - lastRouteTarget).sqrMagnitude > RouteRefreshDistance * RouteRefreshDistance
-                             || chase.RemainingOnPath < RouteRefreshDistance * 2f || !routeWasRoad;
-                if (direct || stale)
-                {
-                    BuildRouteTo(target, direct);
-                    lastRouteTarget = target;
-                    routeWasRoad = !direct;
-                    chase.SetPath(route);
-                }
-            }
 
             if (wanted.IsLethal && gun != null && distance <= settings.carFireRange && now >= nextShot)
             {
                 nextShot = now + UnityEngine.Random.Range(settings.fireInterval.x, settings.fireInterval.y) * 1.5f;
                 if (PoliceGunfire.HasLineOfFire(gun.Muzzle.position, wanted, settings, out _)) PoliceGunfire.ShootPlayer(gun, transform, wanted, settings);
             }
+        }
+
+        private void PursueAmbient()
+        {
+            if (wanted == null || wanted.Stars > 0 || !settings.ambientChases || ambientTraffic == null
+                || (InteriorTravelManager.Instance != null && InteriorTravelManager.Instance.IsInside)
+                || !ambientTraffic.IsPoliceFlightActive(ambientSuspect))
+            {
+                EndAmbientFlight();
+                SetState(UnitState.Return);
+                return;
+            }
+            FollowTarget(ambientSuspect.transform, true, false);
+        }
+
+        private void EndAmbientFlight()
+        {
+            if (ambientTraffic != null) ambientTraffic.EndPoliceFlight(ambientSuspect);
+            ambientTraffic = null;
+            ambientSuspect = null;
+        }
+
+        private void FollowTarget(Transform targetTransform, bool driving, bool ram)
+        {
+            float now = Time.time;
+            if (now < nextRepath) return;
+            nextRepath = now + settings.carRepathInterval * UnityEngine.Random.Range(0.8f, 1.2f);
+            chase.target = driving ? targetTransform : null;
+            chase.targetGap = ram ? 0f : settings.carChaseGap;
+            chase.cautious = !ram;
+
+            Vector3 target = targetTransform.position;
+            bool direct = FlatDistance(target) <= directApproachDistance && HasClearApproach(transform.position, target);
+            bool stale = (target - lastRouteTarget).sqrMagnitude > RouteRefreshDistance * RouteRefreshDistance
+                         || chase.RemainingOnPath < RouteRefreshDistance * 2f || !routeWasRoad;
+            if (direct || stale) RefreshRoute(target, direct);
         }
 
         private void Deployed()
@@ -316,6 +377,8 @@ namespace OpenworldCrime.Police
         // One officer after the other (driver first), each only while the on-foot limit of the wanted level allows; the others stay seated.
         private IEnumerator CrewExitRoutine()
         {
+            // Store the coroutine handle before a blocked or single-seat exit can complete.
+            yield return null;
             int spawned = 0;
             for (int seat = 0; seat < crew.SeatCount && State == UnitState.Deployed; seat++)
             {
@@ -344,13 +407,12 @@ namespace OpenworldCrime.Police
             if (!boarding)
             {
                 Transform target = wanted.PlayerTarget;
-                bool suspectGone = wanted.Stars == 0
+                bool suspectGone = settings.CarUnitsFor(wanted.Stars) == 0 || wanted.IsSearching
                                    || (wanted.PlayerInVehicle && wanted.PlayerSpeed > settings.crewReboardSpeed && FlatDistance(target.position) > settings.crewReboardDistance)
                                    || FlatDistance(target.position) > settings.crewReboardDistance * 2.5f;
                 if (!suspectGone) return;
                 boarding = true;
                 boardingSince = Time.time;
-                for (int i = 0; i < crewOnFoot.Length; i++) if (crewOnFoot[i] != null) crewOnFoot[i].BeginBoarding(this);
             }
 
             bool waiting = false;
@@ -359,6 +421,8 @@ namespace OpenworldCrime.Police
                 PoliceOfficerUnit officer = crewOnFoot[i];
                 if (officer == null) continue;
                 if (officer.HomeCar != this || !officer.IsAlive) { crewOnFoot[i] = null; continue; }
+                // An officer may still be playing the exit animation when the recall starts.
+                if (officer.State != PoliceOfficerUnit.UnitState.Boarding) officer.BeginBoarding(this);
                 waiting = true;
             }
             if (waiting && Time.time - boardingSince < settings.crewBoardTimeout) return;
@@ -367,7 +431,8 @@ namespace OpenworldCrime.Police
             boarding = false;
             crewOut = false;
             nextDeployTime = Time.time + 6f;
-            SetState(wanted.Stars == 0 ? UnitState.Return : UnitState.Pursue);
+            SetState(settings.CarUnitsFor(wanted.Stars) == 0 ? UnitState.Return
+                : wanted.IsSearching ? UnitState.Search : UnitState.Pursue);
         }
 
         /// <summary>An officer of this car got back into his seat (he goes back to the pool; the seated mesh shows him again).</summary>
@@ -402,18 +467,18 @@ namespace OpenworldCrime.Police
             nextRepath = Time.time + settings.carRepathInterval * 2f;
             chase.target = null;
             chase.topSpeed = settings.carTopSpeed * searchSpeedShare;
-            Vector3 point = wanted.LastKnownPosition;
+            Vector3 point = wanted.LastKnownPosition + searchOffset;
             if (FlatDistance(point) < 15f)
             {
                 chase.SetStopped(true);
                 return;
             }
-            chase.SetStopped(false);
-            if (routeWasRoad && (point - lastRouteTarget).sqrMagnitude < RouteRefreshDistance * RouteRefreshDistance) return;
-            BuildRouteTo(point, false);
-            lastRouteTarget = point;
-            routeWasRoad = true;
-            chase.SetPath(route);
+            if (routeWasRoad && (point - lastRouteTarget).sqrMagnitude < RouteRefreshDistance * RouteRefreshDistance)
+            {
+                if (chase.RemainingOnPath < 5f) chase.SetStopped(true);
+                return;
+            }
+            RefreshRoute(point, false);
         }
 
         private void Return()
@@ -423,7 +488,12 @@ namespace OpenworldCrime.Police
                 owner.Release(this);
                 return;
             }
-            if (Time.time < nextRepath || chase == null) return;
+            if (chase == null) return;
+            if (nextRepath == float.MaxValue)
+            {
+                if (!chase.Stopped && chase.RemainingOnPath < 5f) chase.SetStopped(true);
+                return;
+            }
             nextRepath = float.MaxValue; // one route away is enough
             chase.target = null;
             chase.topSpeed = settings.carTopSpeed * searchSpeedShare;
@@ -439,14 +509,27 @@ namespace OpenworldCrime.Police
                     return;
                 }
             }
-            route.Clear();
-            route.Add(transform.position);
-            route.Add(transform.position + transform.forward * 80f);
-            chase.SetPath(route);
+            chase.SetStopped(true);
         }
 
-        // Road route from just ahead of the car to the point; straight at it when close (or when there is no road route).
-        private void BuildRouteTo(Vector3 point, bool direct)
+        private bool HasClearApproach(Vector3 from, Vector3 point) =>
+            !Physics.Linecast(from + Vector3.up * 1.3f, point + Vector3.up * 1.3f,
+                settings.sightBlockers, QueryTriggerInteraction.Ignore);
+
+        private void RefreshRoute(Vector3 point, bool direct)
+        {
+            if (!TryBuildRoute(point, direct))
+            {
+                if (chase.RemainingOnPath < 6f) chase.SetStopped(true);
+                return;
+            }
+            lastRouteTarget = point;
+            routeWasRoad = !direct;
+            chase.SetPath(route);
+            if (chase.Stopped) chase.SetStopped(false);
+        }
+
+        private bool TryBuildRoute(Vector3 point, bool direct)
         {
             Vector3 from = transform.position;
             RoadNetwork network = direct ? null : RoadNetwork.Instance;
@@ -455,16 +538,24 @@ namespace OpenworldCrime.Police
                 route.Insert(0, from);
                 Vector3 end = route[route.Count - 1];
                 end.y = point.y;
-                if ((end - point).sqrMagnitude <= routeExtendDistance * routeExtendDistance) route.Add(point);
-                return;
+                if ((end - point).sqrMagnitude <= routeExtendDistance * routeExtendDistance && HasClearApproach(route[route.Count - 1], point))
+                    route.Add(point);
+                return route.Count > 1;
             }
+            if (!direct) return false;
             route.Clear();
             route.Add(from);
             route.Add(point);
+            return true;
         }
 
         private void SetState(UnitState state)
         {
+            if (state == UnitState.Search && State != UnitState.Search && wanted != null)
+            {
+                Vector2 spread = UnityEngine.Random.insideUnitCircle * settings.SearchRadiusFor(wanted.Stars) * settings.carSearchSpread;
+                searchOffset = new Vector3(spread.x, 0f, spread.y);
+            }
             State = state;
             stateSince = Time.time;
             nextRepath = 0f;
@@ -474,18 +565,23 @@ namespace OpenworldCrime.Police
             switch (state)
             {
                 case UnitState.Pursue:
+                case UnitState.AmbientPursuit:
                     chase.topSpeed = settings.carTopSpeed;
+                    chase.cautious = true;
                     chase.SetStopped(false);
                     SetEmergency(true);
-                    if (mapBlip != null) mapBlip.enabled = true;
+                    if (mapBlip != null) mapBlip.enabled = !IsAmbient;
                     break;
                 case UnitState.Deployed:
                     chase.SetStopped(true);
                     break;
                 case UnitState.Search:
+                    chase.cautious = true;
                     SetEmergency(true);
+                    if (mapBlip != null) mapBlip.enabled = true;
                     break;
                 case UnitState.Return:
+                    chase.cautious = true;
                     SetEmergency(false);
                     if (mapBlip != null) mapBlip.enabled = false;
                     break;
@@ -495,8 +591,9 @@ namespace OpenworldCrime.Police
         // Light bar and siren together: on while chasing or searching, dark on the way back (patrol look).
         private void SetEmergency(bool on)
         {
+            SirenActive = on;
             PoliceLights.SetFlashing(lightBar, on);
-            if (siren == null) return;
+            if (siren == null || siren.clip == null) return;
             if (on && !siren.isPlaying)
             {
                 siren.volume = sirenVolume;
@@ -509,6 +606,7 @@ namespace OpenworldCrime.Police
         private void RemoveDriver()
         {
             if (chase == null) return;
+            chase.End();
             Destroy(chase);
             chase = null;
         }
@@ -530,6 +628,7 @@ namespace OpenworldCrime.Police
         private void HandleWrecked()
         {
             if (State == UnitState.Inactive) return;
+            EndAmbientFlight();
             active.Remove(this);
             State = UnitState.Wrecked;
             if (exitRoutine != null) StopCoroutine(exitRoutine);

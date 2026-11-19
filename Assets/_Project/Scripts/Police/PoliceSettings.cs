@@ -10,6 +10,7 @@ namespace OpenworldCrime.Police
     [CreateAssetMenu(menuName = "OpenworldCrime/Police/Police Settings", fileName = "PoliceSettings")]
     public class PoliceSettings : ScriptableObject
     {
+        public const int FirstCruiserStar = 2;
         [Serializable]
         public struct CrimeRule
         {
@@ -47,13 +48,14 @@ namespace OpenworldCrime.Police
             new CrimeRule(CrimeType.VehicleShot, 1, 0, false),
             new CrimeRule(CrimeType.VehicleStolen, 1, 0, false),
             new CrimeRule(CrimeType.PedestrianRunOver, 1, 0, false),
-            new CrimeRule(CrimeType.PedestrianHurt, 2, 0, true),
-            new CrimeRule(CrimeType.PedestrianKilled, 2, 1, true),
-            new CrimeRule(CrimeType.OfficerHurt, 2, 0, true),
-            new CrimeRule(CrimeType.OfficerKilled, 3, 1, true),
+            // Everything police see is one star; only killing an officer makes it two (and each further officer killed one more).
+            new CrimeRule(CrimeType.PedestrianHurt, 1, 0, true),
+            new CrimeRule(CrimeType.PedestrianKilled, 1, 0, true),
+            new CrimeRule(CrimeType.OfficerHurt, 1, 0, true),
+            new CrimeRule(CrimeType.OfficerKilled, 2, 1, true),
             new CrimeRule(CrimeType.PoliceVehicleRammed, 1, 0, false),
-            new CrimeRule(CrimeType.PoliceVehicleShot, 2, 0, true),
-            new CrimeRule(CrimeType.PoliceVehicleDestroyed, 3, 1, true),
+            new CrimeRule(CrimeType.PoliceVehicleShot, 1, 0, true),
+            new CrimeRule(CrimeType.PoliceVehicleDestroyed, 1, 0, true),
         };
         [Tooltip("Seconds the player has to keep a gun on an officer before it counts as a threat.")]
         [Min(0.1f)] public float aimThreatSeconds = 1.5f;
@@ -115,19 +117,27 @@ namespace OpenworldCrime.Police
         public int[] footUnitsPerStar = { 0, 2, 2, 3, 4, 5 };
         [Tooltip("Of those, officers who come on foot (not out of a car), per wanted level (index = stars). GTA style: most police " +
                  "arrive and chase by car.")]
-        public int[] walkingReinforcementsPerStar = { 0, 0, 0, 1, 1, 2 };
+        public int[] walkingReinforcementsPerStar = { 0, 1, 0, 1, 1, 2 };
         [Tooltip("Police cars at once, per wanted level (index = stars).")]
-        public int[] carUnitsPerStar = { 0, 1, 1, 2, 3, 3 };
+        public int[] carUnitsPerStar = { 0, 0, 1, 2, 3, 3 };
         [Tooltip("Seconds between reinforcements.")]
         [Min(0.5f)] public float dispatchInterval = 4f;
         [Tooltip("Reinforcements on foot appear out of sight this far (m) from the player.")]
-        public Vector2 footSpawnDistance = new Vector2(35f, 60f);
+        public Vector2 footSpawnDistance = new Vector2(60f, 90f);
         [Tooltip("Police cars appear out of sight this far (m) back along the road.")]
-        public Vector2 carSpawnDistance = new Vector2(70f, 120f);
+        public Vector2 carSpawnDistance = new Vector2(140f, 220f);
         [Tooltip("Units this far (m) from the player are recalled (once out of sight).")]
-        [Min(30f)] public float recallDistance = 200f;
+        [Min(30f)] public float recallDistance = 300f;
         [Tooltip("Officers who sit in a police car (and climb out when it reached the player on foot).")]
         [Range(0, 2)] public int officersPerCar = 2;
+
+        [Header("Ambient Police Chases")]
+        [Tooltip("Occasional cruiser pursuits of civilian traffic while the player is clear.")]
+        public bool ambientChases = true;
+        [Tooltip("Seconds between ambient pursuits.")]
+        public Vector2 ambientChaseInterval = new Vector2(45f, 90f);
+        [Tooltip("How long an ambient suspect flees before the pursuit winds down.")]
+        public Vector2 ambientChaseDuration = new Vector2(18f, 32f);
 
         [Header("Car Crews")]
         [Tooltip("Seconds between the driver and the passenger climbing out.")]
@@ -166,8 +176,8 @@ namespace OpenworldCrime.Police
         [Range(0f, 1f)] public float playerInsideDamageShare = 0.35f;
         [Tooltip("Seconds between path updates.")]
         [Min(0.1f)] public float officerRepathInterval = 0.4f;
-        [Tooltip("Seconds a dead officer stays before he is cleared (once out of sight).")]
-        [Min(1f)] public float corpseSeconds = 20f;
+        [Tooltip("Seconds a dead officer lies before he is cleared (at once out of sight, otherwise he sinks into the ground).")]
+        [Min(1f)] public float corpseSeconds = 5f;
 
         [Header("Police Car")]
         [Min(5f)] public float carTopSpeed = 30f;
@@ -181,6 +191,10 @@ namespace OpenworldCrime.Police
         [Min(0.3f)] public float carRepathInterval = 1.5f;
         [Tooltip("When lethal, officers fire from the car within this distance (m).")]
         [Min(0f)] public float carFireRange = 25f;
+        [Tooltip("From this many stars (and lethal) police cars ram the player's car instead of keeping Chase Gap behind it.")]
+        [Range(1, 5)] public int ramFromStars = 3;
+        [Tooltip("Searching cars spread over this share of the search radius instead of all parking on the last known position.")]
+        [Range(0f, 1f)] public float carSearchSpread = 0.6f;
 
         public bool TryGetRule(CrimeType crime, out CrimeRule rule)
         {
@@ -196,7 +210,9 @@ namespace OpenworldCrime.Police
 
         public int FootUnitsFor(int stars) => footUnitsPerStar.Length == 0 ? 0 : footUnitsPerStar[Mathf.Clamp(stars, 0, footUnitsPerStar.Length - 1)];
         public int WalkingReinforcementsFor(int stars) => walkingReinforcementsPerStar.Length == 0 ? 0 : walkingReinforcementsPerStar[Mathf.Clamp(stars, 0, walkingReinforcementsPerStar.Length - 1)];
-        public int CarUnitsFor(int stars) => carUnitsPerStar.Length == 0 ? 0 : carUnitsPerStar[Mathf.Clamp(stars, 0, carUnitsPerStar.Length - 1)];
+        public int CarUnitsFor(int stars) => stars < FirstCruiserStar || carUnitsPerStar.Length == 0
+            ? 0
+            : carUnitsPerStar[Mathf.Min(stars, carUnitsPerStar.Length - 1)];
         public float SearchSecondsFor(int stars) => searchSecondsBase + searchSecondsPerStar * stars;
         public float SearchRadiusFor(int stars) => searchRadiusBase + searchRadiusPerStar * stars;
     }

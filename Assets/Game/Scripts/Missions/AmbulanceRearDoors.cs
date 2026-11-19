@@ -22,6 +22,10 @@ public class AmbulanceRearDoors : MonoBehaviour
         return local.z > rearZ - 0.45f && local.z < rearZ + 3.5f && Mathf.Abs(local.x) < 1.1f;
     }
 
+    [SerializeField] private AudioClip openClip;
+    [SerializeField] private AudioClip closeClip;
+
+    private AudioSource doorAudio;
     float open, target;
 
     public bool IsOpen => open >= 0.999f;
@@ -34,7 +38,12 @@ public class AmbulanceRearDoors : MonoBehaviour
     // Inside, out of sight.
     public Vector3 InsidePoint => transform.TransformPoint(new Vector3(0f, floorY, rearZ + 1.5f));
 
-    public void Open() => target = 1f;
+    public void Open()
+    {
+        if (target == 1f) return;
+        target = 1f;
+        if (!IsOpen) PlayDoorSound(openClip);
+    }
     public void Close() => target = 0f;
 
     void Update()
@@ -45,5 +54,21 @@ public class AmbulanceRearDoors : MonoBehaviour
         // The left door's leaf runs to +x from its hinge and swings back (+y turns +x towards -z); the right one mirrors it.
         if (leftHinge != null) leftHinge.localRotation = Quaternion.Euler(0f, openAngle * eased, 0f);
         if (rightHinge != null) rightHinge.localRotation = Quaternion.Euler(0f, -openAngle * eased, 0f);
+        if (open == 0f) PlayDoorSound(closeClip);
+    }
+
+    private void PlayDoorSound(AudioClip clip)
+    {
+        if (clip == null || leftHinge == null) return;
+        if (doorAudio == null)
+        {
+            doorAudio = leftHinge.gameObject.AddComponent<AudioSource>();
+            doorAudio.playOnAwake = false;
+            doorAudio.spatialBlend = 1f;
+            doorAudio.minDistance = 2f;
+            doorAudio.maxDistance = 30f;
+            doorAudio.rolloffMode = AudioRolloffMode.Linear;
+        }
+        doorAudio.PlayOneShot(clip);
     }
 }

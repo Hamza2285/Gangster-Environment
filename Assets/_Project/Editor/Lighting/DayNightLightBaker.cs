@@ -40,17 +40,17 @@ namespace OpenworldCrime.EditorTools
         private const string SwitcherName = "CityLighting";
 
         // --- Bake settings (mobile budget) ---
-        private const float TexelsPerMetre = 1.25f;
-        private const float BuildingScale = 0.5f;   // facades: soft bounce / sky light only
+        private const float TexelsPerMetre = 2f;
+        private const float BuildingScale = 0.6f;   // facades: soft bounce / sky light only
         private const float TerrainScale = 0.25f;   // coast cliffs, far terrain
         private const float MinLightmapSize = 1.5f; // smaller objects use probes
         private const float DayBounce = 1.0f;
         private const float NightBounce = 1.0f;
 
         // --- Baked street lamps ---
-        private const float LampIntensity = 7f;
-        private const float LampRange = 14f;
-        private static readonly Color LampColor = new Color(1f, 0.72f, 0.42f);
+        private const float LampIntensity = 8f;
+        private const float LampRange = 16f;
+        private static readonly Color LampColor = new Color(1f, 0.7f, 0.45f);
         private const float ShopLightIntensity = 10f;
         private const float ShopLightRange = 10f;
         private static readonly Color ShopLightColor = new Color(1f, 0.78f, 0.5f);
@@ -235,19 +235,29 @@ namespace OpenworldCrime.EditorTools
             s.mixedBakeMode = MixedLightingMode.IndirectOnly;
             s.lightmapper = LightingSettings.Lightmapper.ProgressiveGPU;
             s.lightmapResolution = TexelsPerMetre;
-            s.lightmapPadding = 2;
+            s.lightmapPadding = 4; // wider gutters: no dark / coloured seams at the higher resolution
             s.lightmapMaxSize = 2048;
             s.lightmapCompression = LightmapCompression.NormalQuality;
             s.directionalityMode = LightmapsMode.NonDirectional; // half the memory; normal maps keep realtime sun detail
             s.ao = true;
-            s.aoMaxDistance = 2f;
+            s.aoMaxDistance = 1.5f;
             s.aoExponentIndirect = 1f;
             s.aoExponentDirect = 0f;
-            s.maxBounces = 2;
-            s.directSampleCount = 32;
-            s.indirectSampleCount = 256;
-            s.environmentSampleCount = 256;
-            s.filteringMode = LightingSettings.FilterMode.Auto;
+            s.maxBounces = 3;
+            s.directSampleCount = 64;
+            s.indirectSampleCount = 512;
+            s.environmentSampleCount = 512;
+            // Denoised, then lightly blurred: smooth light without the blotches of a raw path-traced result.
+            s.filteringMode = LightingSettings.FilterMode.Advanced;
+            s.denoiserTypeDirect = LightingSettings.DenoiserType.OpenImage;
+            s.denoiserTypeIndirect = LightingSettings.DenoiserType.OpenImage;
+            s.denoiserTypeAO = LightingSettings.DenoiserType.OpenImage;
+            s.filterTypeDirect = LightingSettings.FilterType.Gaussian;
+            s.filterTypeIndirect = LightingSettings.FilterType.Gaussian;
+            s.filterTypeAO = LightingSettings.FilterType.Gaussian;
+            s.filteringGaussianRadiusDirect = 1f;
+            s.filteringGaussianRadiusIndirect = 3f;
+            s.filteringGaussianRadiusAO = 2f;
             s.prioritizeView = false;
             s.autoGenerate = false;
             EditorUtility.SetDirty(s);

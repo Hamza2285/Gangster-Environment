@@ -41,6 +41,13 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Band (m) along the door's free edge where a hand may wrap around the door (it is not blocked there).")]
         [SerializeField, Min(0f)] private float clearanceEdgeBand = 0.12f;
 
+        [Header("Sound (optional)")]
+        [Tooltip("Played when the door starts to open (latch).")]
+        [SerializeField] private AudioClip openClip;
+        [Tooltip("Played when the door shuts.")]
+        [SerializeField] private AudioClip closeClip;
+        [SerializeField, Range(0f, 1f)] private float soundVolume = 0.9f;
+
         [Header("Physics (optional)")]
         [Tooltip("Door Rigidbody, held kinematic while the door is open or moving.")]
         [SerializeField] private Rigidbody doorBody;
@@ -62,6 +69,7 @@ namespace OpenworldCrime.Vehicles
         public Transform Handle => handle;
 
         private Transform hingeParent;
+        private AudioSource audioSource;
         private Vector3 closedLocalPosition;
         private Quaternion closedLocalRotation;
         private Coroutine moveRoutine;
@@ -249,6 +257,7 @@ namespace OpenworldCrime.Vehicles
             float remaining = MaxOpenAngle - OpenAngle;
             if (IsOpen && remaining < 0.5f) return true;
             SetPhysicsHeld(true);
+            if (!IsOpen) PlaySound(openClip);
             IsOpen = true;
             // A door already pushed partly open keeps its momentum (ease-out) instead of starting from rest.
             bool alreadyMoving = OpenAngle > 1f;
@@ -287,6 +296,7 @@ namespace OpenworldCrime.Vehicles
             if (clamped > 0f)
             {
                 SetPhysicsHeld(true);
+                if (!IsOpen) PlaySound(openClip);
                 IsOpen = true;
             }
             ApplyAngle(clamped * Mathf.Sign(doorOpenAngle));
@@ -333,8 +343,29 @@ namespace OpenworldCrime.Vehicles
             else
             {
                 SetPhysicsHeld(false);
+                PlaySound(closeClip);
                 OnClosed?.Invoke(this);
             }
+        }
+
+        // 3D one-shot from the door itself (the source is only created for doors that have a sound).
+        private void PlaySound(AudioClip clip)
+        {
+            if (clip == null || !isActiveAndEnabled) return;
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 1f;
+                audioSource.minDistance = 4f;
+                audioSource.maxDistance = 30f;
+                audioSource.rolloffMode = AudioRolloffMode.Linear;
+                audioSource.dopplerLevel = 0f;
+            }
+            audioSource.pitch = UnityEngine.Random.Range(0.95f, 1.05f);
+            audioSource.volume = soundVolume;
+            audioSource.clip = clip;
+            audioSource.Play();
         }
 
         private float GetCurrentAngle()

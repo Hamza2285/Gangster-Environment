@@ -48,6 +48,17 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Logs every judged hit (impact speed, angle, verdict) for tuning.")]
         [SerializeField] private bool logHits;
 
+        [Header("Knocked Off By A Car")]
+        [Tooltip("A car (any moving vehicle) hitting the bike at least this hard (km/h) knocks the rider off, even when the hit is " +
+                 "too soft for Bike Crash Settings to throw him: the bike wobbles, then he topples off and it falls over.")]
+        [SerializeField, Min(0f)] private float carKnockOffKmh = 8f;
+        [Tooltip("Seconds the bike wobbles before the rider goes down.")]
+        [SerializeField, Min(0f)] private float carKnockOffDelay = 0.4f;
+        [Tooltip("How hard (m/s) the soft fall throws rider and bike: low = he slides off and the bike tips over, no flying.")]
+        [SerializeField, Min(0.5f)] private float softFallImpact = 2f;
+        [Tooltip("Fastest (m/s) the rider and bike carry on along the road in a soft fall.")]
+        [SerializeField, Min(0f)] private float softFallMaxSpeed = 4f;
+
         [Header("Takeover")]
         [Tooltip("Drivable twin of this bike (same model), placed at the bike's ground point when the player gets on.")]
         [SerializeField] private RCCVehicleAdapter drivablePrefab;
@@ -80,6 +91,7 @@ namespace OpenworldCrime.Vehicles
         private float nextHitTime;
         private Vector3 velocityBefore;
         private Coroutine stumbleRoutine;
+        private Coroutine knockOffRoutine;
         private Transform lastShooter;
         private Transform usedEnterPoint;
 
@@ -148,6 +160,8 @@ namespace OpenworldCrime.Vehicles
 
         private void OnDisable()
         {
+            if (knockOffRoutine != null) StopCoroutine(knockOffRoutine);
+            knockOffRoutine = null;
             if (riderHealth != null)
             {
                 riderHealth.OnKilled -= HandleRiderKilled;
@@ -303,6 +317,18 @@ namespace OpenworldCrime.Vehicles
             if (!valid || state == BikeState.Gone || bikeCrash.Crashed || !HasRider || Time.time < nextHitTime || collision.contactCount == 0) return;
             if (!BikeImpact.Measure(transform, velocityBefore, collision, crashSettings, out BikeImpact.Result hit)) return;
             BikeCrashSettings.Outcome outcome = crashSettings.Judge(hit.ImpactKmh, hit.AngleDegrees);
+            // A car that hits the bike knocks the rider off however soft the hit (a hard one throws him, below).
+            Rigidbody hitter = collision.rigidbody;
+            bool byVehicle = hitter != null && !hitter.isKinematic && hitter.mass >= crashSettings.minOtherMass;
+            if (byVehicle && outcome != BikeCrashSettings.Outcome.Thrown && hit.ImpactKmh >= carKnockOffKmh)
+            {
+                if (knockOffRoutine != null) return;
+                nextHitTime = Time.time + crashSettings.hitCooldown;
+                if (logHits) Debug.Log($"[{nameof(TrafficBikeAdapter)}] '{name}' knocked by '{hitter.name}': {hit.ImpactKmh:F0} km/h -> soft fall", this);
+                BikeImpact.Wobble(body, transform, hit.Normal, crashSettings.stumbleRollSpeed);
+                if (isActiveAndEnabled) knockOffRoutine = StartCoroutine(SoftFallRoutine(hitter, hit));
+                return;
+            }
             if (outcome == BikeCrashSettings.Outcome.None) return;
             nextHitTime = Time.time + crashSettings.hitCooldown;
             if (logHits) Debug.Log($"[{nameof(TrafficBikeAdapter)}] '{name}' hit '{collision.collider.name}': {hit.ImpactKmh:F0} km/h at {hit.AngleDegrees:F0} deg -> {outcome}", this);
@@ -330,6 +356,23 @@ namespace OpenworldCrime.Vehicles
                 if (stumbleRoutine != null) StopCoroutine(stumbleRoutine);
                 stumbleRoutine = StartCoroutine(StumbleStopRoutine());
             }
+        }
+
+        // Hit by a car softly: the bike wobbles for a moment, then the rider slides off and the bike tips over (Hamza's crash with a
+        // small impact, so neither flies).
+        private IEnumerator SoftFallRoutine(Rigidbody hitter, BikeImpact.Result hit)
+        {
+            trafficAI.Pause();
+            if (carKnockOffDelay > 0f) yield return new WaitForSeconds(carKnockOffDelay);
+            knockOffRoutine = null;
+            if (!valid || state == BikeState.Gone || bikeCrash.Crashed || !HasRider) yield break;
+            Vector3 travel = Vector3.ClampMagnitude(body.linearVelocity * 0.6f + hit.OtherVelocity * 0.25f, softFallMaxSpeed);
+            if (state == BikeState.Reserved) state = BikeState.Traffic;
+            trafficAI.reservedForEventTrigger = false;
+            bikeCrash.Crash(hitter, travel, softFallImpact, hit.Point);
+            state = BikeState.Gone;
+            FallenBikeTarget.AttachToNewestWreck(transform.position, drivablePrefab, paintRenderer != null ? paintRenderer.sharedMaterial : null);
+            OnRiderKnockedOff?.Invoke(this, hitter != null ? hitter.transform : null);
         }
 
         // A short stop to get his balance back, then the traffic AI rides on (any other sequence takes precedence).

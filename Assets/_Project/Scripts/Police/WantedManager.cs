@@ -198,10 +198,11 @@ namespace OpenworldCrime.Police
             if (IsBustInProgress || playerManager.Health.IsDead) return;
             if (InteriorTravelManager.Instance != null && InteriorTravelManager.Instance.IsInside) return;
             if (!settings.TryGetRule(report.Type, out PoliceSettings.CrimeRule rule)) return;
-            if (!report.AgainstPolice && !dispatcher.TryWitness(report)) return;
-
             int stars = Stars > 0 ? Mathf.Max(Stars + rule.addStarsWhileWanted, rule.minStars) : rule.minStars;
-            Stars = Mathf.Clamp(Mathf.Max(stars, Stars), 1, MaxStars);
+            stars = Mathf.Clamp(Mathf.Max(stars, Stars), 1, MaxStars);
+            if (!report.AgainstPolice && !dispatcher.TryWitness(report, stars)) return;
+
+            Stars = stars;
             IsLethal |= rule.lethal || Stars >= settings.lethalFromStars;
             trackedUntil = Time.time + settings.crimeTrackingSeconds;
             MarkSeen();

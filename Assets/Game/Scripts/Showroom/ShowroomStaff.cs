@@ -5,7 +5,7 @@ using UnityEngine;
 // body so the player walks round them.
 public class ShowroomStaff : MonoBehaviour
 {
-    public enum Duty { Sit, Stand, Patrol }
+    public enum Duty { Sit, Stand, Patrol, SitLow }
 
     public Duty duty = Duty.Stand;
     [Tooltip("Sit: the middle of the chair's seat. Stand: where they stand. Patrol: the stops, in order.")]
@@ -20,6 +20,7 @@ public class ShowroomStaff : MonoBehaviour
 
     static readonly string[] StandMoves = { "idle1", "idle2", "listen", "idle1", "talk1", "idle2", "talk2" };
     static readonly string[] SitMoves = { "sit_a", "sit_b", "sit_c" };
+    static readonly string[] SitLowMoves = { "sit_low_a", "sit_low_b", "sit_low_c" };
 
     Animator animator;
     Transform hips;
@@ -42,10 +43,15 @@ public class ShowroomStaff : MonoBehaviour
         switch (duty)
         {
             case Duty.Sit:
+            case Duty.SitLow:
                 transform.rotation = Quaternion.Euler(0f, facingYaw, 0f);
                 seatHips = points[0] + Vector3.up * hipsAboveSeat;
                 transform.position = points[0];
-                Play(SitMoves[Random.Range(0, SitMoves.Length)], 0f);
+                var moves = duty == Duty.Sit ? SitMoves : SitLowMoves;
+                Play(moves[Random.Range(0, moves.Length)], 0f);
+                // Animate fully while the hips are lined up on the seat: a culled (off-screen) body keeps its standing pose,
+                // which would line up the wrong hips.
+                if (animator != null) animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                 break;
             case Duty.Stand:
                 transform.SetPositionAndRotation(points[0], Quaternion.Euler(0f, facingYaw, 0f));
@@ -86,9 +92,10 @@ public class ShowroomStaff : MonoBehaviour
     // Seated: the sitting clip puts the hips wherever its root is, so the body is moved until the hips are on the seat.
     void LateUpdate()
     {
-        if (duty != Duty.Sit || hips == null || sitAligned > 30) return;
+        if ((duty != Duty.Sit && duty != Duty.SitLow) || hips == null || sitAligned > 30) return;
         transform.position += seatHips - hips.position;
         sitAligned++;
+        if (sitAligned > 30 && animator != null) animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
     }
 
     void Arrive()

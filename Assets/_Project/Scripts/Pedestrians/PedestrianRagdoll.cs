@@ -109,6 +109,7 @@ namespace OpenworldCrime.Pedestrians
         private Vector3 lyingHead, lyingFeet;
         private Avatar ownAvatar;
         private RuntimeAnimatorController ownController;
+        private AnimatorCullingMode ownCulling;
         private bool clipGetUp;
         private float getUpEndTime;
         private int alignFrames;
@@ -411,6 +412,11 @@ namespace OpenworldCrime.Pedestrians
             {
                 ownAvatar = animator.avatar;
                 ownController = animator.runtimeAnimatorController;
+                // Pedestrians cull their animation off screen; the get-up must play through even unseen, or someone who comes
+                // into view mid-get-up would lie frozen and then pop upright.
+                ownCulling = animator.cullingMode;
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                animator.speed = 1f;
                 animator.avatar = getUpAvatar;
                 animator.runtimeAnimatorController = getUpController;
                 animator.applyRootMotion = false;
@@ -459,14 +465,23 @@ namespace OpenworldCrime.Pedestrians
         private void EndClipGetUp()
         {
             clipGetUp = false;
+            // The clip carries the body (it plays without root motion), so where the person now stands is the hips, not the
+            // root: remember it and put the root under it after the swap, or the body would pop back over the root.
+            Vector3 standingAt = hipsBone.position;
             // Swapping the avatar back writes the humanoid's bind-time values (the lying pose) into the bones, so the rest pose
             // is restored after the swap, not before.
             animator.avatar = ownAvatar;
             animator.runtimeAnimatorController = ownController;
+            animator.cullingMode = ownCulling;
             animator.Rebind();
             for (int i = 0; i < boneTransforms.Length && i < bindPositions.Length; i++)
                 if (boneTransforms[i] != null) boneTransforms[i].localPosition = bindPositions[i];
             animator.Update(0f);
+            Vector3 shift = standingAt - hipsBone.position;
+            Vector3 root = transform.position + new Vector3(shift.x, 0f, shift.z);
+            if (Physics.Raycast(root + Vector3.up, Vector3.down, out RaycastHit hit, 3f, groundLayers, QueryTriggerInteraction.Ignore))
+                root.y = hit.point.y;
+            transform.position = root;
         }
 
         // The ragdoll moves bones in world space, so their local positions drift from the skeleton's (the pelvis by most of a
@@ -487,6 +502,7 @@ namespace OpenworldCrime.Pedestrians
             {
                 animator.avatar = ownAvatar;
                 animator.runtimeAnimatorController = ownController;
+                animator.cullingMode = ownCulling;
                 clipGetUp = false;
             }
             IsActive = false;

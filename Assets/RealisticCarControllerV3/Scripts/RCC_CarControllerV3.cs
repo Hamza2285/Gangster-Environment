@@ -212,6 +212,8 @@ public class RCC_CarControllerV3 : RCC_Core {
 	private AudioSource engineSoundIdle;
 	public AudioClip engineClipIdle;
 	private AudioSource gearShiftingSound;
+	[SerializeField] private AudioClip gearShiftClipOverride;
+	[SerializeField] private AudioClip brakeClipOverride;
 
 	internal AudioSource engineSoundHighOff;
 	public AudioClip engineClipHighOff;
@@ -572,7 +574,13 @@ public class RCC_CarControllerV3 : RCC_Core {
 		engineSoundIdle = NewAudioSource(RCCSettings.audioMixer, gameObject, engineSoundPosition, "Engine Sound Idle AudioSource", 5, 25, 0, engineClipIdle, true, true, false);
 		reversingSound = NewAudioSource(RCCSettings.audioMixer, gameObject, gearSoundPosition, "Reverse Sound AudioSource", 10, 50, 0, reversingClip, true, false, false);
 		windSound = NewAudioSource(RCCSettings.audioMixer, gameObject, windSoundPosition, "Wind Sound AudioSource", 1, 10, 0, windClip, true, true, false);
-		brakeSound = NewAudioSource(RCCSettings.audioMixer, gameObject, "Brake Sound AudioSource", 1, 10, 0, brakeClip, true, true, false);
+		if (brakeClipOverride != null) {
+			brakeSound = NewAudioSource(RCCSettings.audioMixer, gameObject, "Brake Sound AudioSource", 3f, 24f, 0f, brakeClipOverride, true, false, false);
+			brakeSound.rolloffMode = AudioRolloffMode.Linear;
+			brakeSound.dopplerLevel = 0f;
+		} else {
+			brakeSound = NewAudioSource(RCCSettings.audioMixer, gameObject, "Brake Sound AudioSource", 1, 10, 0, brakeClip, true, true, false);
+		}
 
         if (useNOS)
 			NOSSound = NewAudioSource(RCCSettings.audioMixer, gameObject, exhaustSoundPosition, "NOS Sound AudioSource", 5, 10, .5f, NOSClip, true, false, false);
@@ -1435,11 +1443,31 @@ public class RCC_CarControllerV3 : RCC_Core {
 		windSound.volume = Mathf.Lerp (0f, RCCSettings.maxWindSoundVolume, speed / 300f);
 		windSound.pitch = UnityEngine.Random.Range(.9f, 1f);
 		
-		if(direction == 1)
+		if (brakeClipOverride != null) {
+			float pressure = canControl ? Mathf.Max(brakeInput, handbrakeInput * .6f) : 0f;
+			float speedFade = Mathf.InverseLerp(2f, 25f, speed);
+			float targetVolume = Mathf.Clamp01(RCCSettings.maxBrakeSoundVolume * 2.4f) * pressure * speedFade;
+			if (targetVolume > 0f && !isGrounded && !HasBrakingWheelOnGround())
+				targetVolume = 0f;
+			float fadeSpeed = targetVolume > brakeSound.volume ? 3f : 1.6f;
+			brakeSound.volume = Mathf.MoveTowards(brakeSound.volume, targetVolume, Time.deltaTime * fadeSpeed);
+			if (targetVolume > 0f && !brakeSound.isPlaying)
+				brakeSound.Play();
+			else if (brakeSound.volume == 0f && brakeSound.isPlaying)
+				brakeSound.Stop();
+		} else if(direction == 1)
 			brakeSound.volume = Mathf.Lerp (0f, RCCSettings.maxBrakeSoundVolume, Mathf.Clamp01((FrontLeftWheelCollider.wheelCollider.brakeTorque + FrontRightWheelCollider.wheelCollider.brakeTorque) / (brakeTorque * 2f)) * Mathf.Lerp(0f, 1f, FrontLeftWheelCollider.wheelCollider.rpm / 50f));
 		else
 			brakeSound.volume = 0f;
 
+	}
+
+	private bool HasBrakingWheelOnGround() {
+		foreach (var wheel in allWheelColliders) {
+			if (wheel.isGrounded && (wheel.canBrake || wheel.canHandbrake))
+				return true;
+		}
+		return false;
 	}
 
 	/// <summary>
@@ -1932,7 +1960,14 @@ public class RCC_CarControllerV3 : RCC_Core {
 		if(RCCSettings.useTelemetry)
 			print ("Shifted to: " + (gear).ToString()); 
 
-		if(gearShiftingClips.Length > 0){
+		if (gearShiftClipOverride != null) {
+			if (gearShiftingSound == null) {
+				gearShiftingSound = NewAudioSource(RCCSettings.audioMixer, gameObject, gearSoundPosition, "Gear Shifting AudioSource", 3f, 18f, Mathf.Clamp01(RCCSettings.maxGearShiftingSoundVolume * 1.4f), gearShiftClipOverride, false, false, false);
+				gearShiftingSound.rolloffMode = AudioRolloffMode.Linear;
+				gearShiftingSound.dopplerLevel = 0f;
+			}
+			gearShiftingSound.Play();
+		} else if(gearShiftingClips.Length > 0){
 			
 			gearShiftingSound = NewAudioSource(RCCSettings.audioMixer, gameObject, gearSoundPosition, "Gear Shifting AudioSource", 1f, 5f, RCCSettings.maxGearShiftingSoundVolume, gearShiftingClips[UnityEngine.Random.Range(0, gearShiftingClips.Length)], false, true, true);
 

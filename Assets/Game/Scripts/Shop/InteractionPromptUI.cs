@@ -49,11 +49,20 @@ public class InteractionPromptUI : MonoBehaviour
         box.SetActive(false);
     }
 
+    OpenworldCrime.Controls.ControlsModeManager controlsMode;
+
+    bool MobileControls()
+    {
+        if (controlsMode == null) controlsMode = FindFirstObjectByType<OpenworldCrime.Controls.ControlsModeManager>(FindObjectsInactive.Include);
+        return controlsMode != null && controlsMode.IsMobile;
+    }
+
     void Update()
     {
         if (interaction == null) interaction = FindFirstObjectByType<PlayerInteractionController>();
         var focus = interaction != null && interaction.isActiveAndEnabled ? interaction.CurrentFocus : null;
-        bool show = focus != null && !ClothingStoreMenu.IsOpen && (ClothingStoreTravel.Instance == null || !ClothingStoreTravel.Instance.Busy);
+        bool show = focus != null && !ClothingStoreMenu.IsOpen && (ClothingStoreTravel.Instance == null || !ClothingStoreTravel.Instance.Busy)
+                    && !MobileControls();   // phones get a button with the action's name instead of "Press E"
         if (show)
         {
             text.text = "Press <color=#FFC83D><b> " + keyLabel + " </b></color> to " + Lower(focus.InteractionPrompt);

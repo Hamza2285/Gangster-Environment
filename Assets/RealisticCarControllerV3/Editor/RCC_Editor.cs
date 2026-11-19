@@ -931,6 +931,8 @@ public class RCC_Editor : Editor {
 			EditorGUILayout.Space();
 			EditorGUILayout.PropertyField(serializedObject.FindProperty("engineClipIdle"), new GUIContent("Engine Sound Idle RPM"), false);
 			EditorGUILayout.PropertyField(serializedObject.FindProperty("engineStartClip"), new GUIContent("Engine Starting Sound", "Optional"), false);
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("brakeClipOverride"), new GUIContent("Brake Loop Override", "Optional seamless loop for this vehicle"), false);
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("gearShiftClipOverride"), new GUIContent("Gear Shift Override", "Optional one-shot for this vehicle"), false);
 			EditorGUILayout.Space();
 
 			EditorGUILayout.Space();

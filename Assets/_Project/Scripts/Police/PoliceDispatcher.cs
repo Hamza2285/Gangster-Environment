@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using OpenworldCrime.Interiors;
 using OpenworldCrime.Vehicles;
 using UnityEngine;
 
@@ -48,6 +49,11 @@ namespace OpenworldCrime.Police
         [SerializeField, Min(0f)] private float outOfSightDistance = 25f;
         [Tooltip("Beyond this distance (m) from the camera a unit may be removed even on screen (too small to notice).")]
         [SerializeField, Min(30f)] private float vanishDistance = 150f;
+        [Tooltip("New police cars and reinforcements on foot only appear out of view and at least this far (m) from the camera.")]
+        [SerializeField, Min(10f)] private float spawnKeepDistance = 60f;
+        [Tooltip("A new unit must also be at least this share of its spawn distance from the suspect in a straight line (a route " +
+                 "round a block can be long while its end is just behind the corner).")]
+        [SerializeField, Range(0.3f, 1f)] private float straightLineShare = 0.75f;
 
         public PoliceSettings Settings => settings;
         /// <summary>Officers and cars currently out (for tests and debugging).</summary>
@@ -66,8 +72,12 @@ namespace OpenworldCrime.Police
         private float nextTick;
         private float nextFootDispatch;
         private float nextCarDispatch;
+        private float nextAmbientChase;
         private int lastStars;
         private bool valid;
+        private PoliceCarUnit ambientCar;
+        private TrafficPanicManager trafficPanic;
+        private TrafficSimulationLOD trafficLod;
 
         private void Awake()
         {
@@ -82,6 +92,9 @@ namespace OpenworldCrime.Police
             for (int i = 0; i < freeOfficers.Length; i++) freeOfficers[i] = new List<PoliceOfficerUnit>();
             // Units are street objects, not managers: they live under their own scene root.
             unitRoot = new GameObject("Police Units").transform;
+            trafficLod = FindFirstObjectByType<TrafficSimulationLOD>();
+            if (!TryGetComponent<TrafficSirenYield>(out _)) gameObject.AddComponent<TrafficSirenYield>();
+            nextAmbientChase = Time.time + RandomSeconds(settings.ambientChaseInterval) * 0.55f;
         }
 
         private void OnEnable()
@@ -127,7 +140,7 @@ namespace OpenworldCrime.Police
             if (now < nextTick) return;
             nextTick = now + tickInterval;
             WantedManager wanted = WantedManager.Instance;
-            if (wanted == null) return;
+            if (wanted == null || wanted.Player == null) return;
 
             if (PoliceOfficerUnit.Active.Count > 0) pedestrians.EnsurePanicNavMesh();
             // More stars: reinforcements go out at once instead of waiting for the next dispatch slot.
@@ -138,6 +151,7 @@ namespace OpenworldCrime.Police
             }
             lastStars = wanted.Stars;
             if (wanted.Stars > 0 && !wanted.IsBustInProgress) Dispatch(wanted, now);
+            if (wanted.Stars == 0 && !wanted.IsBustInProgress) TryAmbientChase(wanted, now);
             Recall(wanted);
         }
 
@@ -149,7 +163,7 @@ namespace OpenworldCrime.Police
         /// True when any police saw (or, for gunshots, heard) the crime. Street officers and patrol cars who did are swapped for
         /// pursuit units.
         /// </summary>
-        public bool TryWitness(CrimeReport report)
+        public bool TryWitness(CrimeReport report, int responseStars)
         {
             if (!valid) return false;
             bool gunshot = report.Type == CrimeType.GunshotFired;
@@ -161,10 +175,11 @@ namespace OpenworldCrime.Police
                 seen = Witnesses(officers[i].IsStanding, officers[i].EyePosition, point, gunshot);
             IReadOnlyList<PoliceCarUnit> cars = PoliceCarUnit.Active;
             for (int i = 0; i < cars.Count && !seen; i++)
-                seen = Witnesses(true, cars[i].transform.position + Vector3.up * 1.5f, point, gunshot);
+                seen = Witnesses(cars[i].WatchingPlayer,
+                    cars[i].transform.position + Vector3.up * 1.5f, point, gunshot);
 
-            seen |= WitnessPatrolCars(point, gunshot);
-            seen |= WitnessStreetOfficers(point, gunshot);
+            seen |= WitnessPatrolCars(point, gunshot, responseStars);
+            seen |= WitnessStreetOfficers(point, gunshot, responseStars);
             return seen;
         }
 
@@ -177,7 +192,7 @@ namespace OpenworldCrime.Police
             return !Physics.Linecast(eye, point + Vector3.up * 1.2f, settings.sightBlockers, QueryTriggerInteraction.Ignore);
         }
 
-        private bool WitnessPatrolCars(Vector3 point, bool gunshot)
+        private bool WitnessPatrolCars(Vector3 point, bool gunshot, int responseStars)
         {
             IReadOnlyList<TrafficVehicleAdapter> traffic = TrafficVehicleAdapter.ActiveCars;
             bool seen = false;
@@ -187,12 +202,12 @@ namespace OpenworldCrime.Police
                 if (car == null || !car.IsPolice || !car.HasDriver || car.IsDriverKilled || car.IsWrecked) continue;
                 if (!Witnesses(true, car.transform.position + Vector3.up * 1.5f, point, gunshot)) continue;
                 seen = true;
-                TakeOverPatrolCar(car);
+                TakeOverPatrolCar(car, responseStars);
             }
             return seen;
         }
 
-        private bool WitnessStreetOfficers(Vector3 point, bool gunshot)
+        private bool WitnessStreetOfficers(Vector3 point, bool gunshot, int responseStars)
         {
             float radius = Mathf.Max(settings.sightRadius, gunshot ? settings.hearingRadius : 0f);
             int count = Physics.OverlapSphereNonAlloc(point, radius, overlap, 1 << BodyPartLayer, QueryTriggerInteraction.Collide);
@@ -204,7 +219,7 @@ namespace OpenworldCrime.Police
                 if (walker == null || !IsStreetOfficer(walker) || walker.State == PedestrianWalker.Mode.Down || !witnessed.Add(walker)) continue;
                 if (!Witnesses(true, walker.transform.position + Vector3.up * settings.eyeHeight, point, gunshot)) continue;
                 seen = true;
-                TakeOverStreetOfficer(walker);
+                TakeOverStreetOfficer(walker, responseStars);
             }
             witnessed.Clear();
             return seen;
@@ -212,11 +227,16 @@ namespace OpenworldCrime.Police
 
         // The patrol car leaves the iTS traffic and a pursuit car takes its place at the same pose and speed. Panic's flee
         // hand-over (TryBeginFlee + EndFlee) is the adapter's public way to hand a car straight back to the iTS pool.
-        private void TakeOverPatrolCar(TrafficVehicleAdapter car)
+        private void TakeOverPatrolCar(TrafficVehicleAdapter car, int responseStars)
         {
-            if (!car.CanPanic || CountChasingCars() >= MaxCars()) return;
+            if (!car.CanLeaveTraffic || !HasCruiserSlot(responseStars)) return;
             PoliceCarUnit unit = TakeCar();
             if (unit == null) return;
+            if (!WakeTrafficForPursuit(car))
+            {
+                ReturnCar(unit);
+                return;
+            }
             Vector3 position = car.transform.position;
             Quaternion rotation = car.transform.rotation;
             Vector3 velocity = car.Body != null ? car.Body.linearVelocity : Vector3.zero;
@@ -229,9 +249,9 @@ namespace OpenworldCrime.Police
             unit.Activate(this, position, rotation, velocity);
         }
 
-        private void TakeOverStreetOfficer(PedestrianWalker walker)
+        private void TakeOverStreetOfficer(PedestrianWalker walker, int responseStars)
         {
-            if (CountStandingOfficers() >= MaxOfficers()) return;
+            if (CountStandingOfficers() >= settings.FootUnitsFor(responseStars)) return;
             PoliceOfficerUnit unit = TakeOfficer(PrefabIndexFor(walker.name));
             if (unit == null) return;
             Vector3 position = walker.transform.position;
@@ -253,7 +273,7 @@ namespace OpenworldCrime.Police
                 if (officers[i].CanSee(point, settings.officerSightRadius)) return true;
             IReadOnlyList<PoliceCarUnit> cars = PoliceCarUnit.Active;
             for (int i = 0; i < cars.Count; i++)
-                if (cars[i].CanSee(point, settings.carSightRadius)) return true;
+                if (!cars[i].IsAmbient && cars[i].CanSee(point, settings.carSightRadius)) return true;
             return false;
         }
 
@@ -264,7 +284,7 @@ namespace OpenworldCrime.Police
             float sqr = radius * radius;
             for (int i = 0; i < officers.Count; i++)
             {
-                if (!officers[i].IsStanding) continue;
+                if (!officers[i].TrackingSuspect) continue;
                 Vector3 d = officers[i].transform.position - point;
                 if (Mathf.Abs(d.y) > 2.5f) continue;
                 d.y = 0f;
@@ -288,10 +308,9 @@ namespace OpenworldCrime.Police
                 SpawnFootReinforcement(wanted);
                 if (missing > 1) SpawnFootReinforcement(wanted);
             }
-            if (now >= nextCarDispatch && CountChasingCars() < MaxCars())
+            if (now >= nextCarDispatch && CountChasingCars() < settings.CarUnitsFor(stars))
             {
-                nextCarDispatch = now + settings.dispatchInterval;
-                SpawnCar(wanted);
+                nextCarDispatch = now + (SpawnCar(wanted) ? settings.dispatchInterval : Mathf.Min(1.5f, settings.dispatchInterval));
             }
         }
 
@@ -310,6 +329,7 @@ namespace OpenworldCrime.Police
             for (int i = cars.Count - 1; i >= 0; i--)
             {
                 PoliceCarUnit unit = cars[i];
+                if (unit.IsAmbient) continue;
                 if ((unit.transform.position - player).sqrMagnitude > sqr && CanVanish(unit.transform.position, outOfSightDistance)) Release(unit);
             }
         }
@@ -322,13 +342,14 @@ namespace OpenworldCrime.Police
             // Reinforcements go where police last saw (or, right after a crime, know) the player, never straight to where he
             // really is: a player who slipped away is not found by units appearing next to him.
             Vector3 player = wanted.LastKnownPosition;
-            for (int attempt = 0; attempt < 8; attempt++)
+            for (int attempt = 0; attempt < 12; attempt++)
             {
                 Vector2 direction = Random.insideUnitCircle.normalized;
                 float distance = Random.Range(settings.footSpawnDistance.x, settings.footSpawnDistance.y);
                 Vector3 candidate = player + new Vector3(direction.x, 0f, direction.y) * distance;
                 if (!pedestrians.TrySampleOpenNavPoint(candidate, 8f, out Vector3 point)) continue;
-                if (!VehicleHealth.IsOutOfSight(point, outOfSightDistance)) continue;
+                if (FlatDistance(point, player) < settings.footSpawnDistance.x * straightLineShare) continue;
+                if (!VehicleHealth.IsOutOfSight(point, spawnKeepDistance)) continue;
                 Vector3 toPlayer = player - point;
                 toPlayer.y = 0f;
                 Quaternion facing = toPlayer.sqrMagnitude > 0.01f ? Quaternion.LookRotation(toPlayer) : Quaternion.identity;
@@ -337,32 +358,104 @@ namespace OpenworldCrime.Police
             ReturnOfficer(unit);
         }
 
-        private void SpawnCar(WantedManager wanted)
+        private bool SpawnCar(WantedManager wanted)
         {
             RoadNetwork network = RoadNetwork.Instance;
             Vector3 target = wanted.LastKnownPosition;
-            if (network == null || !network.TryFindNearest(target, out RoadNetwork.RoadPoint near)) return;
-            float wantedLength = Random.Range(settings.carSpawnDistance.x, settings.carSpawnDistance.y);
-            List<Vector3> path = network.BuildApproachPath(near, wantedLength, links, out _);
-            if (path.Count < 2) return;
+            if (network == null || !network.TryFindNearest(target, out RoadNetwork.RoadPoint near)) return false;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (!TryFindCarApproach(network, near, target, settings.carSpawnDistance,
+                    spawnKeepDistance, out var path, out Quaternion rotation)) continue;
+                PoliceCarUnit unit = TakeCar();
+                if (unit == null) return false;
+                unit.Activate(this, path[0], rotation, rotation * Vector3.forward * 10f);
+                unit.SetInitialApproach(path, target);
+                return true;
+            }
+            return false;
+        }
 
+        private bool TryFindCarApproach(RoadNetwork network, RoadNetwork.RoadPoint destination, Vector3 target,
+            Vector2 distance, float keepDistance, out List<Vector3> path, out Quaternion rotation)
+        {
+            path = network.BuildApproachPath(destination, Random.Range(distance.x, Mathf.Max(distance.x, distance.y)), links, out _);
+            rotation = Quaternion.identity;
             // Walk back from the player along the approach to the first clear, unseen spot at least Car Spawn Distance away.
             float travelled = 0f;
             for (int i = path.Count - 2; i >= 0; i--)
             {
                 travelled += Vector3.Distance(path[i], path[i + 1]);
-                if (travelled < settings.carSpawnDistance.x) continue;
+                if (travelled < distance.x) continue;
+                if (FlatDistance(path[i], target) < distance.x * straightLineShare) continue;
                 Vector3 direction = path[i + 1] - path[i];
                 direction.y = 0f;
                 if (direction.sqrMagnitude < 0.01f) continue;
-                Quaternion rotation = Quaternion.LookRotation(direction.normalized);
+                rotation = Quaternion.LookRotation(direction.normalized);
                 if (!TryGetClearRoadSpot(path[i], rotation, out Vector3 spot)) continue;
-                if (!VehicleHealth.IsOutOfSight(spot, outOfSightDistance)) continue;
-                PoliceCarUnit unit = TakeCar();
-                if (unit == null) return;
-                unit.Activate(this, spot, rotation, direction.normalized * 10f);
+                if (!VehicleHealth.IsOutOfSight(spot, keepDistance)) continue;
+                path.RemoveRange(0, i);
+                path[0] = spot;
+                return true;
+            }
+            return false;
+        }
+
+        private void TryAmbientChase(WantedManager wanted, float now)
+        {
+            if (!settings.ambientChases || now < nextAmbientChase || (ambientCar != null && ambientCar.IsAmbient)
+                || GamePlayer.MenuOpen || (InteriorTravelManager.Instance != null && InteriorTravelManager.Instance.IsInside)
+                || freeCars.Count == 0 || wanted.PlayerManager.Health.IsDead) return;
+
+            nextAmbientChase = now + 7f;
+            if (trafficPanic == null) trafficPanic = FindFirstObjectByType<TrafficPanicManager>();
+            RoadNetwork network = RoadNetwork.Instance;
+            if (trafficPanic == null || network == null) return;
+            IReadOnlyList<TrafficVehicleAdapter> traffic = TrafficVehicleAdapter.ActiveCars;
+            if (traffic.Count == 0) return;
+            int first = Random.Range(0, traffic.Count);
+            int routeAttempts = 0;
+            for (int i = 0; i < traffic.Count && routeAttempts < 6; i++)
+            {
+                TrafficVehicleAdapter suspect = traffic[(i + first) % traffic.Count];
+                if (suspect == null || suspect.IsPolice || !suspect.CanLeaveTraffic) continue;
+                float speed = trafficLod != null ? trafficLod.SpeedForPursuit(suspect) : suspect.CurrentSpeed;
+                if (speed < 4f) continue;
+                Vector3 target = suspect.transform.position;
+                Vector3 towardPlayer = wanted.PlayerPosition - target;
+                float height = Mathf.Abs(towardPlayer.y);
+                towardPlayer.y = 0f;
+                float playerDistance = towardPlayer.magnitude;
+                if (playerDistance < 25f || playerDistance > 120f || height > 8f
+                    || Vector3.Dot(suspect.transform.forward, towardPlayer) < -0.35f * playerDistance) continue;
+                if (!network.TryFindLaneAhead(target, suspect.transform.forward, 7f, out RoadNetwork.RoadPoint near)) continue;
+                routeAttempts++;
+                if (!TryFindCarApproach(network, near, target, new Vector2(28f, 68f), outOfSightDistance,
+                    out var path, out Quaternion rotation)) continue;
+                PoliceCarUnit cruiser = TakeCar();
+                if (cruiser == null) return;
+                if (!WakeTrafficForPursuit(suspect)
+                    || !trafficPanic.TryStartPoliceFlight(suspect, cruiser.transform, RandomSeconds(settings.ambientChaseDuration)))
+                {
+                    ReturnCar(cruiser);
+                    continue;
+                }
+                ambientCar = cruiser;
+                cruiser.ActivateAmbient(this, trafficPanic, suspect, path, rotation);
+                nextAmbientChase = now + RandomSeconds(settings.ambientChaseInterval);
                 return;
             }
+        }
+
+        private bool WakeTrafficForPursuit(TrafficVehicleAdapter car) =>
+            !car.Body.isKinematic || (trafficLod != null && trafficLod.WakeForPursuit(car));
+
+        private static float RandomSeconds(Vector2 range) => Random.Range(Mathf.Max(1f, range.x), Mathf.Max(1f, range.x, range.y));
+
+        private static float FlatDistance(Vector3 a, Vector3 b)
+        {
+            a.y = b.y = 0f;
+            return Vector3.Distance(a, b);
         }
 
         private static bool TryGetClearRoadSpot(Vector3 point, Quaternion rotation, out Vector3 spot)
@@ -403,7 +496,7 @@ namespace OpenworldCrime.Police
         /// <summary>An officer climbing out of a police car (crews may go beyond the reinforcement count, not beyond the pool).</summary>
         public bool SpawnCrewOfficer(Vector3 position, Quaternion rotation)
         {
-            if (!pedestrians.EnsurePanicNavMesh()) return false;
+            if (CountStandingOfficers() >= MaxOfficers() || !pedestrians.EnsurePanicNavMesh()) return false;
             PoliceOfficerUnit unit = TakeOfficer(Random.Range(0, officerPrefabs.Length));
             if (unit == null) return false;
             if (unit.Activate(this, position, rotation, pedestrians.CarSensorLayer)) return true;
@@ -437,7 +530,8 @@ namespace OpenworldCrime.Police
         // ---------------------------------------------------------------------------------------------------------------
 
         private int MaxOfficers() => settings.FootUnitsFor(WantedManager.Instance != null ? Mathf.Max(1, WantedManager.Instance.Stars) : 1);
-        private int MaxCars() => settings.CarUnitsFor(WantedManager.Instance != null ? Mathf.Max(1, WantedManager.Instance.Stars) : 1);
+
+        internal bool HasCruiserSlot(int stars) => CountChasingCars() < settings.CarUnitsFor(stars);
 
         private static int CountStandingOfficers()
         {
@@ -461,7 +555,7 @@ namespace OpenworldCrime.Police
             int count = 0;
             IReadOnlyList<PoliceCarUnit> cars = PoliceCarUnit.Active;
             // Parked cars whose crew is out count too, or every stop would bring another car (and two more officers on foot).
-            for (int i = 0; i < cars.Count; i++) if (cars[i].IsOnDuty) count++;
+            for (int i = 0; i < cars.Count; i++) if (cars[i].IsOnDuty && !cars[i].IsAmbient) count++;
             return count;
         }
 

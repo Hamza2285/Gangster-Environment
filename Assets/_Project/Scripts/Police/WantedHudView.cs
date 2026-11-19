@@ -53,6 +53,7 @@ namespace OpenworldCrime.Police
             WantedManager.OnBustProgressChanged += HandleBustProgress;
             WantedManager.OnBusted += HandleBusted;
             BustedSequence.OnFined += HandleFined;
+            BustedSequence.OnKneeling += HandleKneeling;
             WantedManager wanted = WantedManager.Instance;
             if (wanted != null) HandleWantedChanged(wanted.Stars, wanted.State);
         }
@@ -63,6 +64,7 @@ namespace OpenworldCrime.Police
             WantedManager.OnBustProgressChanged -= HandleBustProgress;
             WantedManager.OnBusted -= HandleBusted;
             BustedSequence.OnFined -= HandleFined;
+            BustedSequence.OnKneeling -= HandleKneeling;
         }
 
         // Only does work for the search flashing and the fine message timer (the component stays enabled: it holds the subscriptions).
@@ -98,9 +100,14 @@ namespace OpenworldCrime.Police
             if (bustBarFill != null) bustBarFill.localScale = new Vector3(progress, 1f, 1f);
         }
 
+        // Caught: the arrest bar goes; BUSTED itself waits until the player is on his knees.
         private void HandleBusted()
         {
             if (bustBarRoot != null) bustBarRoot.SetActive(false);
+        }
+
+        private void HandleKneeling()
+        {
             if (bustedScreen != null) bustedScreen.SetActive(true);
         }
 

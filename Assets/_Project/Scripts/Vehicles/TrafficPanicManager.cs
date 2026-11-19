@@ -39,6 +39,7 @@ namespace OpenworldCrime.Vehicles
         private sealed class Flight
         {
             public TrafficVehicleAdapter Car;
+            public Transform PolicePursuer;
             public float StartedAt;
             public float PanicUntil;
             public bool Calm;
@@ -138,6 +139,33 @@ namespace OpenworldCrime.Vehicles
         {
             if (car == null || reaction == Reaction.None || PanickingCount >= settings.maxPanicking || !CanPanic(car)) return false;
             return StartReaction(car, reaction, player.position);
+        }
+
+        internal bool TryStartPoliceFlight(TrafficVehicleAdapter car, Transform pursuer, float seconds)
+        {
+            return valid && isActiveAndEnabled && pursuer != null && CanPanic(car) && !car.IsPolice
+                && PanickingCount < settings.maxPanicking
+                && StartReaction(car, Reaction.FloorIt, pursuer.position, pursuer, seconds);
+        }
+
+        internal bool IsPoliceFlightActive(TrafficVehicleAdapter car)
+        {
+            Flight flight = FindPoliceFlight(car);
+            return flight != null && !flight.Calm && !flight.Parked && car.State == TrafficVehicleState.Fleeing;
+        }
+
+        internal void EndPoliceFlight(TrafficVehicleAdapter car)
+        {
+            Flight flight = FindPoliceFlight(car);
+            if (flight != null && !flight.Calm) BeginCalm(flight, "police pursuit ended");
+        }
+
+        private Flight FindPoliceFlight(TrafficVehicleAdapter car)
+        {
+            if (car == null) return null;
+            for (int i = 0; i < flights.Count; i++)
+                if (flights[i].Car == car && flights[i].PolicePursuer != null) return flights[i];
+            return null;
         }
 
         // ---------- threats ----------
@@ -307,7 +335,8 @@ namespace OpenworldCrime.Vehicles
             }
         }
 
-        private bool StartReaction(TrafficVehicleAdapter car, Reaction reaction, Vector3 threat)
+        private bool StartReaction(TrafficVehicleAdapter car, Reaction reaction, Vector3 threat,
+            Transform policePursuer = null, float pursuitSeconds = 0f)
         {
             // No drivable twin (no door to open): he floors it instead.
             if (reaction == Reaction.BailOut && car.TryBeginBailOut(threat, settings.bailOutBrakeScale))
@@ -322,8 +351,10 @@ namespace OpenworldCrime.Vehicles
             var flight = new Flight
             {
                 Car = car,
+                PolicePursuer = policePursuer,
                 StartedAt = Time.time,
-                PanicUntil = Time.time + UnityEngine.Random.Range(settings.fleeSeconds.x, Mathf.Max(settings.fleeSeconds.x, settings.fleeSeconds.y))
+                PanicUntil = Time.time + (policePursuer != null ? pursuitSeconds
+                    : UnityEngine.Random.Range(settings.fleeSeconds.x, Mathf.Max(settings.fleeSeconds.x, settings.fleeSeconds.y)))
             };
             PlanRoute(flight);
             flights.Add(flight);
@@ -387,9 +418,10 @@ namespace OpenworldCrime.Vehicles
 
             if (!flight.Calm)
             {
+                float calmDistance = flight.PolicePursuer != null ? settings.calmDistance * 1.6f : settings.calmDistance;
                 if (t.up.y < 0.4f) BeginCalm(flight, "flipped");
                 else if (Time.time >= flight.PanicUntil) BeginCalm(flight, "calmed down");
-                else if (toPlayer.sqrMagnitude > settings.calmDistance * settings.calmDistance) BeginCalm(flight, "far away");
+                else if (toPlayer.sqrMagnitude > calmDistance * calmDistance) BeginCalm(flight, "far away");
             }
             if (flight.Calm || flight.Parked)
             {
@@ -454,7 +486,8 @@ namespace OpenworldCrime.Vehicles
             {
                 // Stuck: he waits on the brakes until the car can be recycled out of sight (or, if the settings allow, leaves the car
                 // and runs; a car without a drivable twin always waits).
-                if (settings.bailOutWhenStuck && car.TryBailOutFromFlee(player.position, settings.bailOutBrakeScale))
+                Vector3 threat = flight.PolicePursuer != null ? flight.PolicePursuer.position : player.position;
+                if (settings.bailOutWhenStuck && car.TryBailOutFromFlee(threat, settings.bailOutBrakeScale))
                 {
                     flight.EndReason = "stuck, bailed out";
                     bailing.Add(car);

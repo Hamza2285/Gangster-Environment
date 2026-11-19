@@ -81,6 +81,17 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private string stumbleRightStateName = "Carjack_StumbleRight";
         [Tooltip("Upper-body flinch played on the Flinch Layer while he is grabbed (optional).")]
         [SerializeField] private string flinchStateName = "Carjack_Flinch";
+        [Tooltip("Shoved away: stumbles backwards and falls on his back (Stumble Backwards). When the controller has this state it " +
+                 "is used for every shove (he is turned to have his back to the push) instead of the four directional stumbles.")]
+        [SerializeField] private string fallBackwardStateName = "Carjack_FallBackward";
+        [Tooltip("Playback speed of the backward fall.")]
+        [SerializeField, Min(0.1f)] private float fallBackwardSpeed = 1.1f;
+        [Tooltip("Normalized time of the backward fall at which he lies flat: the body then goes limp (ragdoll) and gets up later.")]
+        [SerializeField, Range(0f, 1f)] private float fallBackwardLieTime = 0.56f;
+        [Tooltip("Seconds to turn his back to the push at the start of the fall.")]
+        [SerializeField, Min(0.01f)] private float fallBackwardTurnTime = 0.25f;
+        [Tooltip("Seconds he stays down after the backward fall before getting up (he is already lying: the fall was the clip).")]
+        [SerializeField, Min(0f)] private float fallBackwardGroundTime = 0.3f;
         [SerializeField] private string flinchLayerName = "UpperBodyReact";
 
         [Header("Carjack Points")]
@@ -203,6 +214,7 @@ namespace OpenworldCrime.Vehicles
         private int standingStateHash;
         private int stumbleForwardHash;
         private int stumbleBackwardHash;
+        private int fallBackwardHash;
         private int stumbleLeftHash;
         private int stumbleRightHash;
         private int flinchStateHash;
@@ -242,6 +254,7 @@ namespace OpenworldCrime.Vehicles
             standingStateHash = Animator.StringToHash(standingStateName);
             stumbleForwardHash = Animator.StringToHash(stumbleForwardStateName);
             stumbleBackwardHash = Animator.StringToHash(stumbleBackwardStateName);
+            fallBackwardHash = Animator.StringToHash(fallBackwardStateName);
             stumbleLeftHash = Animator.StringToHash(stumbleLeftStateName);
             stumbleRightHash = Animator.StringToHash(stumbleRightStateName);
             flinchStateHash = Animator.StringToHash(flinchStateName);
@@ -802,6 +815,13 @@ namespace OpenworldCrime.Vehicles
                 yield break;
             }
 
+            // The full backward fall when the controller has it: back to the push, stumbles back and lands on his back.
+            if (heldAnimator != null && heldAnimator.HasState(0, fallBackwardHash))
+            {
+                yield return FallBackwardRoutine();
+                yield break;
+            }
+
             // Pick the stumble whose travel direction is closest to the shove, then turn only the small remaining angle.
             Transform npcTransform = HeldTransform;
             Vector3 local = Quaternion.Inverse(npcTransform.rotation) * shoveDirection;
@@ -838,6 +858,33 @@ namespace OpenworldCrime.Vehicles
             if (IsHolding) Fall(shoveDirection);
         }
 
+        // Turned so his back is to the push, he plays the backward stumble-and-fall with its root motion (feet kept on the road)
+        // and, once lying flat, goes limp gently: the ragdoll takes over from the lying pose and he gets up later as usual.
+        private IEnumerator FallBackwardRoutine()
+        {
+            Transform npcTransform = HeldTransform;
+            Vector3 push = shoveDirection;
+            push.y = 0f;
+            push = push.sqrMagnitude > 0.0001f ? push.normalized : -npcTransform.forward;
+            Quaternion startRotation = npcTransform.rotation;
+            Quaternion endRotation = Quaternion.LookRotation(-push, Vector3.up);
+
+            heldAnimator.applyRootMotion = true;
+            heldAnimator.speed = fallBackwardSpeed;
+            heldAnimator.CrossFadeInFixedTime(fallBackwardHash, stumbleCrossFade + 0.05f, 0, 0f);
+            float timer = 0f;
+            while (IsHolding && timer < 6f)
+            {
+                npcTransform.rotation = Quaternion.Slerp(startRotation, endRotation, Mathf.SmoothStep(0f, 1f, timer / fallBackwardTurnTime));
+                AnimatorStateInfo info = heldAnimator.GetCurrentAnimatorStateInfo(0);
+                if (info.shortNameHash == fallBackwardHash && info.normalizedTime >= fallBackwardLieTime) break;
+                timer += Time.deltaTime;
+                yield return null;
+            }
+            shoveRoutine = null;
+            if (IsHolding) Fall(push, true);
+        }
+
         private void SetFlinch(bool on)
         {
             if (heldAnimator == null || flinchLayer < 0) return;
@@ -845,7 +892,7 @@ namespace OpenworldCrime.Vehicles
             heldAnimator.SetLayerWeight(flinchLayer, on ? flinchWeight : 0f);
         }
 
-        private void Fall(Vector3 direction)
+        private void Fall(Vector3 direction, bool alreadyDown = false)
         {
             Component npc = heldNpc;
             PedestrianDamage ped = heldPed;
@@ -870,17 +917,28 @@ namespace OpenworldCrime.Vehicles
 
             direction.y = 0f;
             direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
-            Vector3 velocity = direction * fallSpeed + Vector3.up * fallUpSpeed;
-            Vector3 tumble = Vector3.Cross(Vector3.up, direction) * fallTumble;
+            // Already lying (the backward fall clip): he only goes limp, no throw.
+            Vector3 velocity = alreadyDown ? direction * 0.15f : direction * fallSpeed + Vector3.up * fallUpSpeed;
+            Vector3 tumble = alreadyDown ? Vector3.zero : Vector3.Cross(Vector3.up, direction) * fallTumble;
             Transform car = vehicle != null ? vehicle.transform : transform;
             if (ped != null)
             {
-                // Down for a moment, then he gets up and runs from the car with the crowd (ped panic).
-                ped.KnockDownBy(velocity, tumble, groundTime, car.position);
-                if (animator != null) RestorePersonAnimator(animator, heldOriginalAvatar, heldOriginalController);
+                // Down for a moment, then he gets up and runs from the car with the crowd (ped panic). His own avatar goes back on
+                // first, keeping the pose he is in (the swap would otherwise reset him to standing for a frame, very visible when
+                // he already lies on his back), and the ragdoll takes over from that pose.
+                if (animator != null)
+                {
+                    Transform[] bones = animator.GetComponentsInChildren<Transform>(true);
+                    var pose = new (Vector3 position, Quaternion rotation)[bones.Length];
+                    for (int i = 0; i < bones.Length; i++) pose[i] = (bones[i].position, bones[i].rotation);
+                    RestorePersonAnimator(animator, heldOriginalAvatar, heldOriginalController);
+                    for (int i = 0; i < bones.Length; i++)
+                        if (bones[i] != null && bones[i] != animator.transform) bones[i].SetPositionAndRotation(pose[i].position, pose[i].rotation);
+                }
+                ped.KnockDownBy(velocity, tumble, alreadyDown ? fallBackwardGroundTime : groundTime, car.position);
                 return;
             }
-            if (npc is EnemyVehicleImpact impact) impact.Launch(velocity, tumble, groundTime, car);
+            if (npc is EnemyVehicleImpact impact) impact.Launch(velocity, tumble, alreadyDown ? fallBackwardGroundTime : groundTime, car);
 
             EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
             if (dummy != null) OnDriverEjected?.Invoke(dummy);

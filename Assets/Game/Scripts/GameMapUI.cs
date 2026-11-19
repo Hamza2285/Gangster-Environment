@@ -34,6 +34,7 @@ public class GameMapUI : MonoBehaviour
     int closedFrame = -1;
     Text fullMapHelp;
     const string MapHelp = "Left click: set destination     Drag: move map     Scroll: zoom     Right click: remove marker     M: close map";
+    const string MobileMapHelp = "Tap: set destination     Drag: move map     + / –: zoom";
     const string TaxiMapHelp = "Left click: choose destination     Drag: move map     Scroll: zoom     Right click: remove marker     Esc: go";
 
     const float MaxFullZoom = 6f, FindPlayerZoom = 3f;
@@ -121,11 +122,60 @@ public class GameMapUI : MonoBehaviour
 
     public void SetHint(string text)
     {
-        hintText.text = text;
+        hintText.text = MobileControls() ? ForTouch(text) : text;
+    }
+
+    OpenworldCrime.Controls.ControlsModeManager controlsMode;
+
+    bool MobileControls()
+    {
+        if (controlsMode == null) controlsMode = FindFirstObjectByType<OpenworldCrime.Controls.ControlsModeManager>(FindObjectsInactive.Include);
+        return controlsMode != null && controlsMode.IsMobile;
+    }
+
+    // "T: whistle for a taxi     M: map" -> the buttons' names; key-only hints (with no button) are left out.
+    static string ForTouch(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var parts = text.Split(new[] { "     " }, System.StringSplitOptions.RemoveEmptyEntries);
+        var kept = new System.Collections.Generic.List<string>();
+        foreach (var raw in parts)
+        {
+            string part = raw.Trim();
+            if (part.StartsWith("T: ")) kept.Add("TAXI: " + part.Substring(3));
+            else if (part.StartsWith("Enter: ")) kept.Add("GET IN: " + part.Substring(7));
+            else if (part.StartsWith("M: ")) continue;                       // the MAP button is always there
+            else if (part.Length > 1 && part[1] == ':' && char.IsUpper(part[0])) continue;   // other single keys
+            else kept.Add(part);
+        }
+        return string.Join("     ", kept.ToArray());
+    }
+
+    // Phones: the minimap sits in the top-left corner (under the health bars); MobileGameButtons lays a tap area over it
+    // that opens the full map.
+    bool? laidOutMobile;
+    public RectTransform MinimapRect => miniRoot;
+
+    void LayOutMinimap(bool mobile)
+    {
+        if (miniRoot == null || laidOutMobile == mobile) return;
+        laidOutMobile = mobile;
+        Vector2 anchor = mobile ? new Vector2(0f, 1f) : Vector2.zero;
+        Vector2 position = mobile
+            ? new Vector2(minimapMargin + miniRadius, -(105f + miniRadius))
+            : Vector2.one * (minimapMargin + miniRadius);
+        foreach (var rect in new[] { miniRoot, miniRing })
+        {
+            if (rect == null) continue;
+            rect.anchorMin = rect.anchorMax = anchor;
+            rect.anchoredPosition = position;
+        }
+        if (fullMapHelp != null && (fullMapHelp.text == MapHelp || fullMapHelp.text == MobileMapHelp)) fullMapHelp.text = mobile ? MobileMapHelp : MapHelp;
     }
 
     void Update()
     {
+        LayOutMinimap(MobileControls());
         var player = GamePlayer.Current;
         if (player != null && GameInput.MapDown && (IsMapOpen || player.ControlEnabled)) ToggleMap();
         else if (IsMapOpen && GameInput.CancelDown) ToggleMap();
@@ -173,7 +223,7 @@ public class GameMapUI : MonoBehaviour
         if (!IsMapOpen)
         {
             chooseDestinationMode = false;
-            fullMapHelp.text = MapHelp;
+            fullMapHelp.text = MobileControls() ? MobileMapHelp : MapHelp;
         }
         routeDirty = true;
     }

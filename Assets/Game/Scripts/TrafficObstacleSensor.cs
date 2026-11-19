@@ -28,8 +28,12 @@ public class TrafficObstacleSensor : MonoBehaviour
         public Transform transform;
         public Collider[] own;
         public float halfLength, halfWidth, height;
-        public float braking;
+        public float braking, target;
     }
+
+    // Each car looks ahead every few physics steps (staggered), keeping its last reading in between.
+    const int LookEvery = 3;
+    int tick;
 
     // iTS's own external brake (what its player sensor uses), which is not public in the compiled traffic library.
     static readonly System.Action<TSTrafficAI, float> addExternalBrake = MakeBrake();
@@ -68,15 +72,17 @@ public class TrafficObstacleSensor : MonoBehaviour
         if (player == null) return;
         Vector3 centre = player.transform.position;
         float radiusSqr = activeRadius * activeRadius;
+        tick++;
 
         for (int i = cars.Count - 1; i >= 0; i--)
         {
             var car = cars[i];
             if (car.ai == null) { cars.RemoveAt(i); continue; }
-            if (!car.ai.isActiveAndEnabled || car.body == null || car.body.isKinematic) { car.braking = 0f; continue; }
-            if ((car.transform.position - centre).sqrMagnitude > radiusSqr) { car.braking = 0f; continue; }
+            if (!car.ai.isActiveAndEnabled || car.body == null || car.body.isKinematic) { car.braking = car.target = 0f; continue; }
+            if ((car.transform.position - centre).sqrMagnitude > radiusSqr) { car.braking = car.target = 0f; continue; }
 
-            float brake = Look(car);
+            if ((i + tick) % LookEvery == 0) car.target = Look(car);
+            float brake = car.target;
             // Ease off rather than snapping off, so a car does not lurch forward the moment the obstacle leaves the box.
             car.braking = brake > car.braking ? brake : Mathf.MoveTowards(car.braking, brake, Time.fixedDeltaTime * 2f);
             if (car.braking > 0.01f && addExternalBrake != null) addExternalBrake(car.ai, car.braking);
@@ -117,7 +123,7 @@ public class TrafficObstacleSensor : MonoBehaviour
 
     void Refresh()
     {
-        nextRefresh = Time.time + 2f;
+        nextRefresh = Time.time + 4f;
         foreach (var ai in FindObjectsByType<TSTrafficAI>(FindObjectsSortMode.None))
         {
             if (!known.Add(ai)) continue;

@@ -266,6 +266,7 @@ public class TSSimpleCar : MonoBehaviour
     /// My speed.
     /// </summary>
     private float mySpeed = 0f;
+    internal float SirenSpeedLimit { get; set; } = float.PositiveInfinity;
 
     /// <summary>
     /// The velo.
@@ -768,6 +769,7 @@ public class TSSimpleCar : MonoBehaviour
     /// <param name="throttle">Throttle.</param>
     public void OnAIUpdate(float steering, float brake, float throttle, bool isUpSideDown)
     {
+        ApplySirenSpeedLimit(mySpeed, ref brake, ref throttle);
         upSideDown = isUpSideDown;
         this.steering = steering;
         float steerAngle = maxSteering * Mathf.Clamp(steering, -1f, 1f);
@@ -826,6 +828,15 @@ public class TSSimpleCar : MonoBehaviour
         }
         this.brake = Mathf.Clamp01(this.brake);
 
+    }
+
+    internal void ApplySirenSpeedLimit(float speed, ref float brake, ref float throttle)
+    {
+        if (float.IsPositiveInfinity(SirenSpeedLimit)) return;
+        float headroom = SirenSpeedLimit - speed;
+        throttle = Mathf.Min(throttle, Mathf.Clamp01(headroom * 0.45f));
+        brake = Mathf.Max(brake, Mathf.Clamp01(-headroom * 0.18f));
+        if (SirenSpeedLimit == 0f) brake = Mathf.Max(brake, 0.48f);
     }
 
     /*EXPERIMENTAL CODE FOR ATTEMPTING TO AUTO SWITCH BETWEEN PHYSICS

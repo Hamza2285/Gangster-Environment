@@ -230,6 +230,8 @@ namespace OpenworldCrime.Vehicles
 
         private void RegisterTaken(RCCVehicleAdapter drivable)
         {
+            // Teleported onto the road this frame: let its suspension settle without launching it.
+            drivable.SettleAfterSpawn();
             drivable.SetVehicleCamera(vehicleCamera);
             if (takenVehiclesParent != null && drivable.transform.parent != takenVehiclesParent) drivable.transform.SetParent(takenVehiclesParent, true);
 

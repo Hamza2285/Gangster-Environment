@@ -268,7 +268,7 @@ public static class ShowroomSetup
         staff.points = localPoints.Select(p => holder.TransformPoint(p)).ToArray();
 
         // A body the player bumps into (a seated employee is behind their desk and chair already).
-        if (duty != ShowroomStaff.Duty.Sit)
+        if (duty != ShowroomStaff.Duty.Sit && duty != ShowroomStaff.Duty.SitLow)
         {
             var body = go.AddComponent<CapsuleCollider>();
             body.center = new Vector3(0f, 0.9f, 0f);

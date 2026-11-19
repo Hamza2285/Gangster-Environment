@@ -162,12 +162,36 @@ namespace OpenworldCrime.Police
         public void OpenDoor(int seat) => SwingDoor(seat, true);
         public void CloseDoor(int seat) => SwingDoor(seat, false);
 
+        [Header("Door Sounds (optional)")]
+        [SerializeField] private AudioClip doorOpenClip;
+        [SerializeField] private AudioClip doorCloseClip;
+        [SerializeField, Range(0f, 1f)] private float doorVolume = 0.9f;
+        private AudioSource doorAudio;
+
+        private void PlayDoor(int seat, AudioClip clip)
+        {
+            if (clip == null || !isActiveAndEnabled) return;
+            if (doorAudio == null)
+            {
+                doorAudio = gameObject.AddComponent<AudioSource>();
+                doorAudio.playOnAwake = false;
+                doorAudio.spatialBlend = 1f;
+                doorAudio.minDistance = 2f;
+                doorAudio.maxDistance = 30f;
+                doorAudio.rolloffMode = AudioRolloffMode.Linear;
+            }
+            doorAudio.pitch = Random.Range(0.95f, 1.05f);
+            doorAudio.PlayOneShot(clip, doorVolume);
+        }
+
         private void SwingDoor(int seat, bool open)
         {
             if (seat < 0 || seat >= hinges.Length || hinges[seat] == null || !isActiveAndEnabled) return;
             StopDoor(seat);
             float side = seats[seat].door != null && transform.InverseTransformPoint(hinges[seat].position).x < 0f ? 1f : -1f;
             Quaternion target = open ? Quaternion.AngleAxis(doorOpenAngle * side, Vector3.up) : Quaternion.identity;
+            bool wasOpen = Quaternion.Angle(hinges[seat].localRotation, Quaternion.identity) > 2f;
+            if (open && !wasOpen) PlayDoor(seat, doorOpenClip);
             doorRoutines[seat] = StartCoroutine(DoorRoutine(seat, target, open ? doorOpenSeconds : doorCloseSeconds));
         }
 
@@ -181,8 +205,11 @@ namespace OpenworldCrime.Police
                 hinge.localRotation = Quaternion.Slerp(from, target, k);
                 yield return null;
             }
+            // Shut: the slam.
+            bool shut = Quaternion.Angle(target, Quaternion.identity) < 0.5f && Quaternion.Angle(from, Quaternion.identity) > 2f;
             hinge.localRotation = target;
             doorRoutines[seat] = null;
+            if (shut) PlayDoor(seat, doorCloseClip);
         }
 
         private void StopDoor(int seat)

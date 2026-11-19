@@ -112,9 +112,20 @@ public class BikeCrash : MonoBehaviour
         var model = Instantiate(_model.gameObject, _model.position, _model.rotation, root.transform);
         model.name = _model.name;
 
+        // The wreck's collider is the bike itself (wheels to handlebars), so it lies on the road on its side instead of sinking
+        // into it (the crash box only covers the rider's hips and chest).
         var box = root.AddComponent<BoxCollider>();
-        box.center = _crashBody.center;
-        box.size = _crashBody.size;
+        Bounds shape = LocalBounds(root.transform, model);
+        if (shape.size.sqrMagnitude > 0.01f)
+        {
+            box.center = shape.center;
+            box.size = new Vector3(Mathf.Max(0.35f, shape.size.x * 0.9f), shape.size.y, shape.size.z * 0.95f);
+        }
+        else
+        {
+            box.center = _crashBody.center;
+            box.size = _crashBody.size;
+        }
         var rb = root.AddComponent<Rigidbody>();
         rb.mass = wreckMass;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
@@ -122,12 +133,60 @@ public class BikeCrash : MonoBehaviour
         rb.maxDepenetrationVelocity = 3f;
         rb.centerOfMass = box.center;   // a real bike's weight, in its middle, so it falls on its side and stays there
 
+        // A dropped bike: it starts already leaning 40 degrees towards the side it is pushed (past its tipping point, the box being
+        // handlebar-wide), so it falls onto its side and lies there, instead of standing on its wheels or sinking into the road.
+        float lean = Vector3.Dot(pushDir, root.transform.right) >= 0f ? -40f : 40f;
+        root.transform.RotateAround(root.transform.position, root.transform.forward, lean);
+        rb.rotation = root.transform.rotation;
+
+        // Start just above the road: a box starting even slightly inside the thin road surface can be pushed down through it.
+        float bottom = float.MaxValue;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 corner = box.center + Vector3.Scale(box.size * 0.5f, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            bottom = Mathf.Min(bottom, root.transform.TransformPoint(corner).y);
+        }
+        float roadY = float.NaN;
+        foreach (var hit in Physics.RaycastAll(root.transform.position + Vector3.up * 2f, Vector3.down, 6f, ~(1 << 2), QueryTriggerInteraction.Ignore))
+        {
+            // The road only: not this bike (its crash box is still on), the rider, the wreck or the car.
+            if (hit.collider.attachedRigidbody != null || hit.collider.transform.IsChildOf(transform) || hit.collider.transform.IsChildOf(root.transform)) continue;
+            if (float.IsNaN(roadY) || hit.point.y > roadY) roadY = hit.point.y;
+        }
+        if (!float.IsNaN(roadY) && roadY < root.transform.position.y + 0.6f && bottom < roadY + 0.04f)
+        {
+            Vector3 lift = Vector3.up * (roadY + 0.04f - bottom);
+            root.transform.position += lift;
+            rb.position = root.transform.position;
+        }
+
         rb.linearVelocity = bikeVelocity * 0.5f + pushDir * impact * 0.55f + Vector3.up * Mathf.Min(1f + impact * 0.08f, 3.5f);
         float side = Mathf.Sign(Vector3.Dot(pushDir, root.transform.right));
         if (side == 0f) side = 1f;
         rb.angularVelocity = root.transform.forward * -side * Mathf.Clamp(impact * 0.35f, 2.5f, 7f)
                              + Vector3.up * Random.Range(-1.5f, 1.5f);
         return root.AddComponent<BikeWreck>();
+    }
+
+    // Bounds of a model's meshes in the space of 'root'.
+    private static Bounds LocalBounds(Transform root, GameObject model)
+    {
+        bool any = false;
+        var bounds = new Bounds();
+        foreach (var renderer in model.GetComponentsInChildren<Renderer>())
+        {
+            if (renderer is ParticleSystemRenderer) continue;
+            Bounds local = renderer.localBounds;
+            Vector3 e = local.extents;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = local.center + new Vector3((i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z);
+                Vector3 p = root.InverseTransformPoint(renderer.transform.TransformPoint(corner));
+                if (!any) { bounds = new Bounds(p, Vector3.zero); any = true; }
+                else bounds.Encapsulate(p);
+            }
+        }
+        return bounds;
     }
 
     // ---------- ragdoll ----------
@@ -275,10 +334,15 @@ public class BikeWreck : MonoBehaviour
     private GameObject _ragdoll;
     private float _clearDistance;
 
+    private Vector3 _start;
+    private Rigidbody _body;
+
     public void Begin(GameObject ragdoll, Rigidbody car, float clearDelay, float clearDistance)
     {
         _ragdoll = ragdoll;
         _clearDistance = clearDistance;
+        _start = transform.position;
+        _body = GetComponent<Rigidbody>();
         var wreck = GetComponentsInChildren<Collider>();
         var body = ragdoll != null ? ragdoll.GetComponentsInChildren<Collider>() : new Collider[0];
         var carColliders = car != null ? car.GetComponentsInChildren<Collider>() : new Collider[0];
@@ -286,6 +350,19 @@ public class BikeWreck : MonoBehaviour
         StartCoroutine(IgnoreBriefly(body, carColliders, 0.3f));
         StartCoroutine(IgnoreBriefly(wreck, carColliders, 0.15f));
         StartCoroutine(ClearWhenUnseen(clearDelay));
+    }
+
+    // Safety net: a wreck that still slips through the road (well below where it fell) is put back on it.
+    private void FixedUpdate()
+    {
+        if (_body == null || transform.position.y > _start.y - 2f) return;
+        Vector3 back = _start + Vector3.up * 0.3f;
+        if (Physics.Raycast(_start + Vector3.up * 3f, Vector3.down, out RaycastHit road, 8f, ~(1 << 2), QueryTriggerInteraction.Ignore)
+            && !road.collider.transform.IsChildOf(transform)) back = road.point + Vector3.up * 0.3f;
+        _body.linearVelocity = Vector3.zero;
+        _body.angularVelocity = Vector3.zero;
+        _body.position = back;
+        transform.position = back;
     }
 
     private static IEnumerator IgnoreBriefly(Collider[] a, Collider[] b, float seconds)

@@ -21,6 +21,9 @@ public class CharacterWheelUI : MonoBehaviour
 
     public bool IsOpen { get; private set; }
     public int Selected { get; private set; } = -1;
+    // Where the finger holding the SWITCH button is (screen pixels), or null. Set by MobileGameButtons.
+    public static Vector2? TouchPoint;
+    int openedWith;
 
     sealed class Slot
     {
@@ -54,6 +57,7 @@ public class CharacterWheelUI : MonoBehaviour
         }
         pick = Vector2.zero;
         Selected = current;
+        openedWith = current;
         IsOpen = true;
         openedAt = Time.unscaledTime;
         canvas.gameObject.SetActive(true);
@@ -90,6 +94,17 @@ public class CharacterWheelUI : MonoBehaviour
         wheel.gameObject.SetActive(true);
         group.alpha = Mathf.Clamp01((Time.unscaledTime - openedAt) / 0.12f);
         wheel.localScale = Vector3.one * Mathf.Lerp(0.9f, 1f, group.alpha);
+
+        // A finger: the character it is dragged onto (off the wheel = stay as you are).
+        if (TouchPoint.HasValue)
+        {
+            Vector2 centre = RectTransformUtility.WorldToScreenPoint(null, wheel.position);
+            Vector2 finger = (TouchPoint.Value - centre) / Mathf.Max(0.01f, canvas.scaleFactor);
+            if (finger.magnitude > Radius + SlotSize) Selected = openedWith;
+            else if (finger.magnitude > 40f) Selected = Nearest(Mathf.Atan2(finger.y, finger.x) * Mathf.Rad2Deg);
+            Refresh();
+            return;
+        }
 
         // Mouse points at a slot; keys step through them.
         pick += GameInput.Look * 1.6f;

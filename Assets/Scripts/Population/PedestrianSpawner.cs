@@ -617,14 +617,25 @@ public class PedestrianSpawner : MonoBehaviour
 
     // Walkers only queue behind others on their own lane, so this looks at everyone nearby: a person in the way
     // is passed by stepping aside, and when there is no room to step, by slowing until they have gone by.
+    // Everyone's position, read once per pass: the pair loops below would otherwise read transform.position n² times a frame.
+    private Vector3[] _positions = new Vector3[0];
+
+    private void CachePositions()
+    {
+        int count = _active.Count;
+        if (_positions.Length < count) _positions = new Vector3[Mathf.NextPowerOfTwo(count)];
+        for (int i = 0; i < count; i++) _positions[i] = _active[i].transform.position;
+    }
+
     private void KeepApart()
     {
+        CachePositions();
         for (int i = 0; i < _active.Count; i++)
         {
             PedestrianWalker walker = _active[i];
             if (walker.State != PedestrianWalker.Mode.Lane) continue;
 
-            Vector3 position = walker.transform.position;
+            Vector3 position = _positions[i];
             Vector3 forward = walker.Forward;
             Vector3 left = new Vector3(-forward.z, 0f, forward.x);
             float step = 0f;
@@ -633,11 +644,12 @@ public class PedestrianSpawner : MonoBehaviour
             for (int j = 0; j < _active.Count; j++)
             {
                 if (j == i) continue;
-                PedestrianWalker other = _active[j];
-                Vector3 toOther = other.transform.position - position;
+                Vector3 toOther = _positions[j] - position;
                 toOther.y = 0f;
-                float distance = toOther.magnitude;
-                if (distance > AvoidRange || distance < 1e-3f) continue;
+                float distanceSqr = toOther.sqrMagnitude;
+                if (distanceSqr > AvoidRange * AvoidRange || distanceSqr < 1e-6f) continue;
+                PedestrianWalker other = _active[j];
+                float distance = Mathf.Sqrt(distanceSqr);
 
                 float ahead = Vector3.Dot(toOther, forward);
                 if (ahead < 0.1f) continue;
@@ -695,32 +707,42 @@ public class PedestrianSpawner : MonoBehaviour
     // Last line of defence: whatever the steering above missed, two people never stand inside each other.
     private void SeparateOverlaps()
     {
+        CachePositions();
         for (int i = 0; i < _active.Count; i++)
         {
             PedestrianWalker a = _active[i];
             if (a.State == PedestrianWalker.Mode.Fleeing || a.State == PedestrianWalker.Mode.Returning) continue;
             for (int j = i + 1; j < _active.Count; j++)
             {
+                Vector3 apart = _positions[j] - _positions[i];
+                apart.y = 0f;
+                float distanceSqr = apart.sqrMagnitude;
+                if (distanceSqr >= MinSeparation * MinSeparation) continue;
                 PedestrianWalker b = _active[j];
                 if (b.State == PedestrianWalker.Mode.Fleeing || b.State == PedestrianWalker.Mode.Returning) continue;
-                Vector3 apart = b.transform.position - a.transform.position;
-                apart.y = 0f;
-                float distance = apart.magnitude;
-                if (distance >= MinSeparation) continue;
+                float distance = Mathf.Sqrt(distanceSqr);
                 Vector3 direction = distance > 1e-3f ? apart / distance : a.transform.right;
                 float overlap = MinSeparation - distance;
                 bool aStands = a.State == PedestrianWalker.Mode.Standing && a.ArrivedAtSpot;
                 bool bStands = b.State == PedestrianWalker.Mode.Standing && b.ArrivedAtSpot;
                 if (aStands && bStands) continue;
-                if (aStands) b.Nudge(direction * overlap);
-                else if (bStands) a.Nudge(-direction * overlap);
+                if (aStands) NudgeCached(j, direction * overlap);
+                else if (bStands) NudgeCached(i, -direction * overlap);
                 else
                 {
-                    a.Nudge(-direction * overlap * 0.5f);
-                    b.Nudge(direction * overlap * 0.5f);
+                    NudgeCached(i, -direction * overlap * 0.5f);
+                    NudgeCached(j, direction * overlap * 0.5f);
                 }
             }
         }
+    }
+
+    private void NudgeCached(int index, Vector3 push)
+    {
+        PedestrianWalker walker = _active[index];
+        if (walker.State == PedestrianWalker.Mode.Down) return;
+        walker.Nudge(push);
+        _positions[index] += push;
     }
 
     // A few people at a time stop to talk with whoever is beside them, or just wait a moment, then walk on.

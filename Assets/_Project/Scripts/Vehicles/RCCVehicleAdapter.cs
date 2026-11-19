@@ -26,6 +26,7 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private bool engineOffWhenParked = true;
         [Tooltip("Shared driving feel (steering, grip, assists, suspension) applied when the car is created. Empty = the RCC values on this prefab.")]
         [SerializeField] private VehicleHandlingProfile handlingProfile;
+        [SerializeField] private AudioClip hornClip;
 
         [Header("Seat & Door Points")]
         [Tooltip("Character root anchor while seated (root of the seated pose, not the hips).")]
@@ -67,6 +68,16 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Max speed (m/s) at which the driver can get out.")]
         [SerializeField, Min(0f)] private float maxExitSpeed = 1f;
 
+        [Header("Physics Safety")]
+        [Tooltip("Fastest (m/s) the physics may push this car out of something it overlaps. Unity's default (10) launches a car " +
+                 "that appears slightly inside the road (a traffic car swapped for its drivable twin while its nose dips under " +
+                 "braking) into the air and onto its roof; a low value lifts it out gently. Ordinary crashes are not affected.")]
+        [SerializeField, Min(0.1f)] private float maxDepenetrationSpeed = 1.5f;
+        [Tooltip("Seconds after being swapped in for a traffic car during which the car may not be launched or spun: a pooled car " +
+                 "teleported onto the road has its wheels go from hanging free to compressed in one physics step, and the " +
+                 "suspension's damper answers that with a kick strong enough to flip it.")]
+        [SerializeField, Min(0f)] private float spawnSettleSeconds = 0.6f;
+
         [Header("Rolling On (driver bailed out)")]
         [Tooltip("A vehicle the driver bailed out of rolls on (no throttle, brake or handbrake) until it is slower than this (m/s), then parks.")]
         [SerializeField, Min(0.05f)] private float rollParkSpeed = 0.5f;
@@ -78,6 +89,7 @@ namespace OpenworldCrime.Vehicles
         private Collider[] vehicleColliders = new Collider[0];
         private RCC_WheelCollider[] wheelColliders = new RCC_WheelCollider[0];
         private AudioSource[] audioSources = new AudioSource[0];
+        private AudioSource hornSource;
         private Rigidbody body;
         private bool bodyWasKinematic;
         private bool isValid;
@@ -117,6 +129,7 @@ namespace OpenworldCrime.Vehicles
 
             vehicleColliders = GetComponentsInChildren<Collider>(true);
             body = GetComponent<Rigidbody>();
+            if (body != null) body.maxDepenetrationVelocity = maxDepenetrationSpeed;
             AddContactHelpers();
             if (handlingProfile != null) handlingProfile.ApplyTo(carController, body);
             if (driverDummy != null) driverDummy.SetActive(false);
@@ -131,6 +144,88 @@ namespace OpenworldCrime.Vehicles
             if (!isValid) return;
             carController.SetCanControl(false);
             if (engineOffWhenParked) carController.KillEngine();
+        }
+
+        private float settleUntil = -1f;
+        private Vector3 settleVelocity;
+
+        /// <summary>
+        /// Holds the car to roughly the velocity it was given for Spawn Settle Seconds (no upward launch, no sudden spin), while
+        /// its suspension settles after a teleport (traffic takeover).
+        /// </summary>
+        public void SettleAfterSpawn()
+        {
+            if (body == null) return;
+            LiftOutOfGround();
+            if (spawnSettleSeconds <= 0f) return;
+            settleVelocity = body.linearVelocity;
+            settleUntil = Time.time + spawnSettleSeconds;
+        }
+
+        private readonly Collider[] groundOverlaps = new Collider[32];
+
+        // The city has two sets of road colliders (the visible roads and the smoother traffic roads) a few centimetres apart: a car
+        // swapped in where its traffic twin drove can start partly inside the visible road, and the physics would twist it out
+        // (onto its side). Lifted straight up out of any static geometry it overlaps before the first physics step.
+        private void LiftOutOfGround()
+        {
+            Physics.SyncTransforms();
+            float lift = 0f;
+            for (int i = 0; i < vehicleColliders.Length; i++)
+            {
+                Collider own = vehicleColliders[i];
+                if (own == null || !own.enabled || own.isTrigger || own is WheelCollider || !own.gameObject.activeInHierarchy) continue;
+                Bounds bounds = own.bounds;
+                int count = Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents, groundOverlaps, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+                for (int j = 0; j < count; j++)
+                {
+                    Collider other = groundOverlaps[j];
+                    if (other == null || other.attachedRigidbody != null || other.transform.IsChildOf(transform)) continue;
+                    if (!Physics.ComputePenetration(own, own.transform.position, own.transform.rotation,
+                            other, other.transform.position, other.transform.rotation, out Vector3 direction, out float distance)) continue;
+                    // Only what is underneath (road, kerb): straight up by the depth along the push direction.
+                    if (direction.y < 0.5f) continue;
+                    lift = Mathf.Max(lift, distance / direction.y);
+                }
+            }
+            if (lift <= 0.001f) return;
+            lift = Mathf.Min(lift + 0.03f, 1f);
+            Vector3 up = Vector3.up * lift;
+            transform.position += up;
+            body.position += up;
+            Physics.SyncTransforms();
+        }
+
+        private void FixedUpdate()
+        {
+            if (settleUntil < 0f) return;
+            if (Time.time >= settleUntil || body == null || body.isKinematic)
+            {
+                settleUntil = -1f;
+                return;
+            }
+            Vector3 velocity = body.linearVelocity;
+            velocity.y = Mathf.Clamp(velocity.y, -3f, 0.8f);
+            Vector3 flat = new Vector3(velocity.x - settleVelocity.x, 0f, velocity.z - settleVelocity.z);
+            flat = Vector3.ClampMagnitude(flat, 1.5f);
+            velocity.x = settleVelocity.x + flat.x;
+            velocity.z = settleVelocity.z + flat.z;
+            body.linearVelocity = velocity;
+            body.angularVelocity = Vector3.ClampMagnitude(body.angularVelocity, 0.6f);
+        }
+
+        private void Update()
+        {
+            if (!IsControlled || IsWrecked || GamePlayer.MenuOpen || hornClip == null || !GameInput.HornDown) return;
+
+            if (hornSource == null)
+            {
+                hornSource = RCC_Core.NewAudioSource(RCC_Settings.Instance.audioMixer, gameObject,
+                    carController.engineSoundPosition, "Horn AudioSource", 5f, 50f, 0.7f, hornClip, false, false, false);
+                hornSource.rolloffMode = AudioRolloffMode.Linear;
+                hornSource.dopplerLevel = 0f;
+            }
+            if (!hornSource.isPlaying) hornSource.Play();
         }
 
         private void OnEnable()
