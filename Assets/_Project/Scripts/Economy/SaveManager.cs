@@ -16,6 +16,16 @@ namespace OpenworldCrime.Economy
         public List<int> ownedWeapons = new List<int>();
         public List<IntPair> reserveAmmo = new List<IntPair>();
         public List<IntPair> clipAmmo = new List<IntPair>();
+        [Tooltip("Best street race times (seconds) by race id.")]
+        public List<RaceTime> raceBestTimes = new List<RaceTime>();
+    }
+
+    [Serializable]
+    public struct RaceTime
+    {
+        public string raceId;
+        public float seconds;
+        public RaceTime(string raceId, float seconds) { this.raceId = raceId; this.seconds = seconds; }
     }
 
     [Serializable]
@@ -75,6 +85,31 @@ namespace OpenworldCrime.Economy
         private void OnApplicationQuit() => Flush();
 
         public void RequestSave() => dirty = true;
+
+        /// <summary>Best time for a race in seconds, or 0 when it was never finished.</summary>
+        public float GetRaceBestTime(string raceId)
+        {
+            if (Data == null) return 0f;
+            foreach (RaceTime t in Data.raceBestTimes) if (t.raceId == raceId) return t.seconds;
+            return 0f;
+        }
+
+        /// <summary>Stores a race time if it beats the best one. True when it is a new best.</summary>
+        public bool SubmitRaceTime(string raceId, float seconds)
+        {
+            if (Data == null || seconds <= 0f) return false;
+            for (int i = 0; i < Data.raceBestTimes.Count; i++)
+            {
+                if (Data.raceBestTimes[i].raceId != raceId) continue;
+                if (seconds >= Data.raceBestTimes[i].seconds) return false;
+                Data.raceBestTimes[i] = new RaceTime(raceId, seconds);
+                RequestSave();
+                return true;
+            }
+            Data.raceBestTimes.Add(new RaceTime(raceId, seconds));
+            RequestSave();
+            return true;
+        }
 
         /// <summary>Deletes the save and starts fresh (used by the editor menu / debug).</summary>
         public void ResetSave()

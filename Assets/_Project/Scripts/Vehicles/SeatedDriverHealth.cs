@@ -43,6 +43,8 @@ namespace OpenworldCrime.Vehicles
         public event Action<SeatedDriverHealth, vDamage> OnWounded;
         /// <summary>Raised once when the driver dies. Args: this, the killing damage (after the zone multiplier).</summary>
         public event Action<SeatedDriverHealth, vDamage> OnKilled;
+        /// <summary>Any seated driver or rider was killed in his seat (car drivers, bike riders).</summary>
+        public static event Action<SeatedDriverHealth> OnAnyKilled;
 
         public float CurrentHealth { get; private set; }
         public bool IsDead { get; private set; }
@@ -134,6 +136,7 @@ namespace OpenworldCrime.Vehicles
             IsDead = true;
             PlayPose(slumpAngle, slumpDuration, false);
             OnKilled?.Invoke(this, damage);
+            OnAnyKilled?.Invoke(this);
         }
 
         // Tilts the seated mesh away from the shot around its seat: a flinch eases back, a slump stays.
@@ -182,5 +185,8 @@ namespace OpenworldCrime.Vehicles
                 flinchTarget.localRotation = restLocalRotation;
             }
         }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => OnAnyKilled = null;
     }
 }

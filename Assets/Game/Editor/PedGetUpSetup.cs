@@ -11,13 +11,20 @@ public static class PedGetUpSetup
     const string ClipsPath = "Assets/Invector-3rdPersonController/Basic Locomotion/3D Models/Animations/Basic_Actions.fbx";
     const string RosterPath = "Assets/_Project/Data/Vehicles/PedDriverRoster.asset";
 
-    [MenuItem("Game/Set Up Pedestrian Get-Up")]
+    [MenuItem("Game/Set Up Pedestrian Get-Up (retired)")]
     static void Run()
     {
         Debug.Log(SetUp());
     }
 
     public static string SetUp()
+    {
+        // Retired (2026-11-19 merge): Ghost's branch bakes the get-up clips for the generic pedestrian rigs and wires them into
+        // the pedestrian prefabs (PedestrianRagdoll get-up states), which replaced this runtime avatar swap.
+        return "[PedGetUpSetup] Retired: pedestrians use Ghost's baked get-up clips now; nothing to do.";
+    }
+
+    static string SetUpOld()
     {
         AnimationClip fromBack = null, fromBelly = null;
         foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(ClipsPath))

@@ -101,7 +101,9 @@ namespace OpenworldCrime.Pedestrians
                  "them, so a fist lands on the tagged hitboxes instead of bouncing off the body (Invector's recoil).")]
         [SerializeField] private LayerMask meleeHitboxLayers = 1 << 2;
         [Tooltip("Punches in a row (within Melee Combo Reset Time) that knock the person down. Earlier ones make him stagger.")]
-        [SerializeField, Min(1)] private int meleeHitsToKnockDown = 2;
+        [SerializeField, Min(1)] private int meleeHitsToKnockDown = 3;
+        [Tooltip("A melee hit at least this strong (a strong attack) counts as heavy: a big stagger, and a knock-down if it is not the first hit.")]
+        [SerializeField, Min(0f)] private float heavyMeleeDamage = 18f;
         [Tooltip("A punch also knocks down once health is at or below this share of the maximum.")]
         [SerializeField, Range(0f, 1f)] private float meleeKnockDownHealth = 0.35f;
         [Tooltip("Seconds without a punch after which the count starts again.")]
@@ -141,10 +143,21 @@ namespace OpenworldCrime.Pedestrians
         public event Action<Vector3> OnRecovered;
         /// <summary>Raised once when the pedestrian dies. Arg: where the killing damage came from.</summary>
         public event Action<Vector3> OnDied;
+        /// <summary>Any pedestrian (street people, police officers, riders and drivers who came out) died. Arg: who died.</summary>
+        public static event Action<PedestrianDamage> OnAnyDied;
         /// <summary>Raised when the pedestrian takes damage and survives (e.g. shot or bumped). Arg: damage source position.</summary>
         public event Action<Vector3> OnHurt;
         /// <summary>A punch that does not knock down: the person staggers. Arg: push (world, horizontal, metres).</summary>
         public event Action<Vector3> OnStaggered;
+        /// <summary>
+        /// A melee hit that did not knock the person down: (push direction, hit number in the combo, heavy). When something
+        /// handles it (the hit reaction / brawler) the plain stagger + panic (OnStaggered, OnHurt) is not raised.
+        /// </summary>
+        public event Action<Vector3, int, bool> OnMeleeHit;
+        /// <summary>A melee hit taken on a guard (no damage, no reaction): the attacker's position.</summary>
+        public event Action<Vector3> OnMeleeBlocked;
+        /// <summary>Asked for each melee hit: true = the hit lands on a guard (set by the brawler while it blocks).</summary>
+        public Func<Transform, bool> BlockCheck;
         /// <summary>
         /// Raised for every damage a living pedestrian takes (any pedestrian, e.g. for crime reporting). Args: the pedestrian, the
         /// Invector damage (sender, type), whether it killed him. Hits on a body that was already dead are not reported.
@@ -152,6 +165,10 @@ namespace OpenworldCrime.Pedestrians
         public static event Action<PedestrianDamage, vDamage, bool> OnAnyDamaged;
 
         public bool IsDead => character == null || character.isDead;
+        /// <summary>Sitting on a bench / ledge (AmbientPopulationManager).</summary>
+        public bool IsSeated { get; private set; }
+        /// <summary>Remaining health, 0-1.</summary>
+        public float HealthFraction => character != null && character.MaxHealth > 0f ? character.currentHealth / character.MaxHealth : 0f;
         public bool IsDown => ragdoll != null && (ragdoll.IsActive || ragdoll.IsFrozen);
         /// <summary>World position of the body (ragdoll hips; they can be thrown away from the root).</summary>
         public Vector3 BodyPosition => ragdoll != null ? ragdoll.HipsPosition : transform.position;
@@ -170,6 +187,7 @@ namespace OpenworldCrime.Pedestrians
         private float lastMeleeTime = -100f;
         private Transform lastMeleeSender;
         private bool mergedMeleeHit;
+        private bool blockedMeleeHit;
 
         private void Awake()
         {
@@ -227,6 +245,7 @@ namespace OpenworldCrime.Pedestrians
             lastDamage = null;
             lastVehicleHitTime = -100f;
             meleeHits = 0;
+            blockedMeleeHit = false;
             lastMeleeTime = -100f;
             lastMeleeSender = null;
             if (dampingRoutine != null) StopCoroutine(dampingRoutine);
@@ -307,6 +326,7 @@ namespace OpenworldCrime.Pedestrians
         /// <summary>A seated person's solid capsule and far hitbox end at the head (height above the root); false restores the standing body.</summary>
         public void SetSeatedBody(bool seated, float height)
         {
+            IsSeated = seated;
             if (!valid) return;
             float h = seated ? height : ragdoll.FarHitboxHeight;
             if (aliveCollider is CapsuleCollider capsule)
@@ -383,12 +403,16 @@ namespace OpenworldCrime.Pedestrians
             yield return new WaitForSeconds(groundTime);
             while (!IsDead && Time.time - start < maxGroundTime && ragdoll.HipsBody != null && ragdoll.HipsBody.linearVelocity.sqrMagnitude > settledSpeed * settledSpeed)
                 yield return null;
-            recoverRoutine = null;
-            if (IsDead || !ragdoll.IsActive) yield break;
+            if (IsDead || !ragdoll.IsActive) { recoverRoutine = null; yield break; }
             ragdoll.GetUp();
-            // Up on their feet first (the get-up clip), then off they run.
-            while (ragdoll.IsGettingUp && !IsDead) yield return null;
-            if (IsDead || ragdoll.IsActive) yield break;   // knocked down again meanwhile
+            // With a get-up clip the person stands up first; whoever moves him next (flee, fight back) waits for it.
+            if (ragdoll.GetUpDuration > 0f)
+            {
+                yield return new WaitForSeconds(ragdoll.GetUpDuration);
+                ragdoll.FinishGetUp();
+            }
+            recoverRoutine = null;
+            if (IsDead || ragdoll.IsActive) yield break;
             aliveCollider.enabled = true;
             OnRecovered?.Invoke(lastThreat);
         }
@@ -415,8 +439,15 @@ namespace OpenworldCrime.Pedestrians
             lastDamage = damage;
             if (damage.sender != null) lastThreat = damage.sender.position;
             mergedMeleeHit = false;
+            blockedMeleeHit = false;
             if (IsMeleeHit(damage))
             {
+                if (BlockCheck != null && BlockCheck(damage.sender))
+                {
+                    damage.damageValue = 0;
+                    blockedMeleeHit = true;
+                    return;
+                }
                 // One swing can touch the far capsule and a bone hitbox (or two bones): it hurts once.
                 if (damage.sender == lastMeleeSender && Time.time - lastMeleeTime < meleeMergeWindow)
                 {
@@ -436,6 +467,11 @@ namespace OpenworldCrime.Pedestrians
         private void HandleDamage(vDamage damage)
         {
             if (mergedMeleeHit) return;
+            if (blockedMeleeHit)
+            {
+                OnMeleeBlocked?.Invoke(lastThreat);
+                return;
+            }
             if (!deadBeforeHit) OnAnyDamaged?.Invoke(this, damage, IsDead);
             if (IsDead) return;
             if (IsMeleeHit(damage))
@@ -469,10 +505,16 @@ namespace OpenworldCrime.Pedestrians
             direction.y = 0f;
             direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : -transform.forward;
             meleeHits++;
-            if (meleeHits >= meleeHitsToKnockDown || character.currentHealth <= character.MaxHealth * meleeKnockDownHealth)
+            bool heavy = damage.damageValue >= heavyMeleeDamage;
+            if (meleeHits >= meleeHitsToKnockDown || (heavy && meleeHits > 1) || character.currentHealth <= character.MaxHealth * meleeKnockDownHealth)
             {
                 meleeHits = 0;
                 KnockDown(direction * meleePushSpeed, Vector3.Cross(Vector3.up, direction) * meleeTopple, meleeGroundTime);
+                return;
+            }
+            if (OnMeleeHit != null)
+            {
+                OnMeleeHit(direction, meleeHits, heavy);
                 return;
             }
             OnStaggered?.Invoke(direction * meleeStaggerDistance);
@@ -499,6 +541,7 @@ namespace OpenworldCrime.Pedestrians
             ragdoll.Activate(Vector3.zero);
             if (!wasDown) ApplyDeathImpulse();
             OnDied?.Invoke(lastThreat);
+            OnAnyDied?.Invoke(this);
         }
 
         private void ApplyDeathImpulse()
@@ -615,6 +658,10 @@ namespace OpenworldCrime.Pedestrians
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics() => OnAnyDamaged = null;
+        private static void ResetStatics()
+        {
+            OnAnyDamaged = null;
+            OnAnyDied = null;
+        }
     }
 }

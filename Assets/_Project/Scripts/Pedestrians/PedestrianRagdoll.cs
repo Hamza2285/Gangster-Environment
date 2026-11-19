@@ -38,23 +38,16 @@ namespace OpenworldCrime.Pedestrians
         [SerializeField] private LayerMask groundLayers = 1;
         [Tooltip("Seconds over which the ragdoll pose blends back into the animation.")]
         [SerializeField, Min(0.01f)] private float blendToAnimationTime = 0.35f;
-        [Tooltip("Humanoid rigs only (police officers): Animator states played to get up from lying on the back / on the belly " +
-                 "(e.g. Invector's GetUpFromBack / GetUpFromBelly). The root is turned to match the body on the ground and the ragdoll " +
-                 "pose blends into the clip's first frame, so the person sits up and stands instead of popping upright. Empty = no clip.")]
+        [Tooltip("Animator states played to get up from lying on the back / on the belly (humanoid police officers: Invector's " +
+                 "GetUpFromBack / GetUpFromBelly; generic street people: the same clips baked for their rig). The root is turned to " +
+                 "match the body on the ground and the ragdoll pose blends into the clip's first frame, so the person sits up and " +
+                 "stands instead of popping upright. Empty = no clip.")]
         [SerializeField] private string getUpFromBackState = "";
         [SerializeField] private string getUpFromBellyState = "";
         [Tooltip("Seconds the get-up clips take (the owner waits this long before moving the person again).")]
         [SerializeField, Min(0f)] private float getUpClipSeconds = 1.8f;
         [Tooltip("Blend (s) from the ragdoll pose into a get-up clip.")]
         [SerializeField, Min(0.01f)] private float getUpBlendTime = 0.45f;
-
-        [Header("Getting Up")]
-        [Tooltip("Humanoid version of this person's skeleton, used only while the (humanoid) get-up clip plays. Empty = no get-up clip.")]
-        [SerializeField] private Avatar getUpAvatar;
-        [Tooltip("Controller with the states GetUpFromBack and GetUpFromBelly.")]
-        [SerializeField] private RuntimeAnimatorController getUpController;
-        [Tooltip("Share of the get-up clip played before the person's own animation takes over (they are standing by then).")]
-        [SerializeField, Range(0.5f, 1f)] private float getUpPlayedShare = 0.9f;
 
         [Header("Stability")]
         [Tooltip("Fastest speed (m/s) at which physics pushes overlapping limbs apart. Low values stop a body that starts inside " +
@@ -103,25 +96,13 @@ namespace OpenworldCrime.Pedestrians
         private Collider farHitbox;
         private Transform hipsBone;
         private Vector3 storedHipsPosition;
-        // Getting up with a clip (see GetUp).
-        private Vector3 hipsFrontLocal;
-        private Transform headBone, leftFootBone, rightFootBone;
-        private Vector3 lyingHead, lyingFeet;
-        private Avatar ownAvatar;
-        private RuntimeAnimatorController ownController;
-        private AnimatorCullingMode ownCulling;
-        private bool clipGetUp;
-        private float getUpEndTime;
-        private int alignFrames;
         private float blendStartTime;
-        private bool humanoidGetUp;
+        private bool clipGetUp;
         private bool initialized;
         private bool hitboxesEnabled;
 
         /// <summary>True while physics drives the body.</summary>
         public bool IsActive { get; private set; }
-        /// <summary>True while a survivor plays the get-up clip (still on the ground or rising, not yet able to run).</summary>
-        public bool IsGettingUp => clipGetUp || (humanoidGetUp && GetUpDuration > 0f && Time.time < blendStartTime + GetUpDuration);
         /// <summary>True while a settled dead body has no physics bodies (see <see cref="Freeze"/>).</summary>
         public bool IsFrozen { get; private set; }
         /// <summary>Hips body while the ragdoll is built (knocked down or dead), otherwise null.</summary>
@@ -163,15 +144,6 @@ namespace OpenworldCrime.Pedestrians
             storedRotations = new Quaternion[n];
             storedPositions = new Vector3[n];
             hipsBone = hipsBody.transform;
-            // In the bind pose (Awake, before the Animator has evaluated) the person stands facing the root's forward.
-            hipsFrontLocal = Quaternion.Inverse(hipsBone.rotation) * transform.forward;
-            foreach (Transform t in GetComponentsInChildren<Transform>(true))
-            {
-                string boneName = t.name.ToLowerInvariant();
-                if (headBone == null && boneName.EndsWith("head")) headBone = t;
-                else if (leftFootBone == null && (boneName.EndsWith("l foot") || boneName.EndsWith("leftfoot") || boneName.EndsWith("foot_l"))) leftFootBone = t;
-                else if (rightFootBone == null && (boneName.EndsWith("r foot") || boneName.EndsWith("rightfoot") || boneName.EndsWith("foot_r"))) rightFootBone = t;
-            }
 
             var indexOf = new Dictionary<Rigidbody, int>(n);
             for (int i = 0; i < n; i++) indexOf[bodies[i]] = i;
@@ -288,7 +260,6 @@ namespace OpenworldCrime.Pedestrians
         /// <summary>Hands the body to physics. Bodies start with the given velocity.</summary>
         public void Activate(Vector3 velocity)
         {
-            CancelClipGetUp();
             Initialize();
             if (IsActive || bodySettings.Length == 0) return;
             enabled = false;
@@ -362,18 +333,13 @@ namespace OpenworldCrime.Pedestrians
             Vector3 facing = Vector3.ProjectOnPlane(hipsBone.position - transform.position, Vector3.up);
             if (facing.sqrMagnitude < 0.01f) facing = transform.forward;
 
-            bool faceUp = hipsBone.TransformDirection(hipsFrontLocal).y > 0f;
-            if (headBone != null) lyingHead = headBone.position;
-            lyingFeet = leftFootBone != null && rightFootBone != null ? (leftFootBone.position + rightFootBone.position) * 0.5f : transform.position;
-            bool clip = animator.isHuman && !string.IsNullOrEmpty(getUpFromBackState) && !string.IsNullOrEmpty(getUpFromBellyState);
+            bool clip = !string.IsNullOrEmpty(getUpFromBackState) && !string.IsNullOrEmpty(getUpFromBellyState) && FindGetUpBones();
             bool onBack = false;
             Vector3 headToFeet = Vector3.zero;
             if (clip)
             {
                 // Which way the chest faces (from the legs' and spine's directions) and the body's line on the ground.
-                Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
-                Transform leftLeg = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg), rightLeg = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
-                Transform leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot), rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+                Transform head = headBone, leftLeg = leftThigh, rightLeg = rightThigh, leftFoot = leftFootBone, rightFoot = rightFootBone;
                 Vector3 feet = (leftFoot.position + rightFoot.position) * 0.5f;
                 Vector3 chestFront = Vector3.Cross(rightLeg.position - leftLeg.position, head.position - hipsBone.position);
                 onBack = chestFront.y > 0f;
@@ -386,16 +352,15 @@ namespace OpenworldCrime.Pedestrians
             RestoreBoneLengths();
             transform.SetPositionAndRotation(standPoint, Quaternion.LookRotation(facing.normalized, Vector3.up));
             animator.enabled = true;
-            humanoidGetUp = clip;
+            clipGetUp = clip;
             GetUpDuration = 0f;
             if (clip)
             {
                 // The clip's first frame lies like the body does: turn and move the root so its head-feet line and hips match.
                 animator.Play(onBack ? getUpFromBackState : getUpFromBellyState, 0, 0f);
                 animator.Update(0f);
-                Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
-                Vector3 animatedFeet = (animator.GetBoneTransform(HumanBodyBones.LeftFoot).position + animator.GetBoneTransform(HumanBodyBones.RightFoot).position) * 0.5f;
-                Vector3 animatedLine = Vector3.ProjectOnPlane(head.position - animatedFeet, Vector3.up);
+                Vector3 animatedFeet = (leftFootBone.position + rightFootBone.position) * 0.5f;
+                Vector3 animatedLine = Vector3.ProjectOnPlane(headBone.position - animatedFeet, Vector3.up);
                 if (animatedLine.sqrMagnitude > 0.01f && headToFeet.sqrMagnitude > 0.01f)
                     transform.rotation = Quaternion.FromToRotation(animatedLine.normalized, headToFeet.normalized) * transform.rotation;
                 animator.Update(0f);
@@ -404,84 +369,41 @@ namespace OpenworldCrime.Pedestrians
                 transform.position += offset;
                 GetUpDuration = getUpClipSeconds;
             }
-
-            // Generic rigs (the city's pedestrians): the same get-up clips through the person's humanoid avatar, swapped in for
-            // the clip and back afterwards, lined up with where the body lies.
-            clipGetUp = !clip && getUpAvatar != null && getUpController != null && headBone != null;
-            if (clipGetUp)
-            {
-                ownAvatar = animator.avatar;
-                ownController = animator.runtimeAnimatorController;
-                // Pedestrians cull their animation off screen; the get-up must play through even unseen, or someone who comes
-                // into view mid-get-up would lie frozen and then pop upright.
-                ownCulling = animator.cullingMode;
-                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-                animator.speed = 1f;
-                animator.avatar = getUpAvatar;
-                animator.runtimeAnimatorController = getUpController;
-                animator.applyRootMotion = false;
-                animator.Rebind();
-                string state = faceUp ? "GetUpFromBack" : "GetUpFromBelly";
-                animator.Play(state, 0, 0f);
-                animator.Update(0f);
-                float length = 1.8f;
-                foreach (var getUpClip in getUpController.animationClips)
-                    if (getUpClip != null && getUpClip.name == state) length = getUpClip.length;
-                getUpEndTime = Time.time + length * getUpPlayedShare;
-                GetUpDuration = length * getUpPlayedShare;
-                alignFrames = 2;
-            }
             blendStartTime = Time.time;
-            enabled = true; // LateUpdate runs for the blend (and the get-up)
+            enabled = true; // LateUpdate runs only for the blend
         }
 
-        // The clip starts with the body lying somewhere relative to the root: move and turn the root so the clip's lying body
-        // lies where the ragdoll does (hips over the ragdoll's hips, head-to-feet the same way).
-        private void AlignRootToLyingBody()
-        {
-            Vector3 lying = lyingHead - lyingFeet;
-            lying.y = 0f;
-            Vector3 feet = leftFootBone != null && rightFootBone != null ? (leftFootBone.position + rightFootBone.position) * 0.5f : transform.position;
-            Vector3 animated = headBone.position - feet;
-            animated.y = 0f;
-            if (lying.sqrMagnitude > 0.01f && animated.sqrMagnitude > 0.01f)
-                transform.rotation = Quaternion.FromToRotation(animated.normalized, lying.normalized) * transform.rotation;
+        private Transform headBone, leftThigh, rightThigh, leftFootBone, rightFootBone;
 
-            Vector3 toRagdoll = storedHipsPosition - hipsBone.position;
-            Vector3 root = transform.position + new Vector3(toRagdoll.x, 0f, toRagdoll.z);
-            if (Physics.Raycast(root + Vector3.up, Vector3.down, out RaycastHit hit, 3f, groundLayers, QueryTriggerInteraction.Ignore))
-                root.y = hit.point.y;
-            transform.position = root;
-        }
-
-        // Knocked over again while getting up: the clip stops and the own animator setup comes back before the ragdoll.
-        private void CancelClipGetUp()
+        // Head, thighs and feet: from the humanoid avatar, or by the Biped (Bip01) names of the generic street rigs.
+        private bool FindGetUpBones()
         {
-            if (!clipGetUp) return;
-            EndClipGetUp();
-        }
-
-        // The person's own animation back after the get-up clip: bones to the bind pose, own avatar and controller rebound.
-        private void EndClipGetUp()
-        {
-            clipGetUp = false;
-            // The clip carries the body (it plays without root motion), so where the person now stands is the hips, not the
-            // root: remember it and put the root under it after the swap, or the body would pop back over the root.
-            Vector3 standingAt = hipsBone.position;
-            // Swapping the avatar back writes the humanoid's bind-time values (the lying pose) into the bones, so the rest pose
-            // is restored after the swap, not before.
-            animator.avatar = ownAvatar;
-            animator.runtimeAnimatorController = ownController;
-            animator.cullingMode = ownCulling;
-            animator.Rebind();
-            for (int i = 0; i < boneTransforms.Length && i < bindPositions.Length; i++)
-                if (boneTransforms[i] != null) boneTransforms[i].localPosition = bindPositions[i];
-            animator.Update(0f);
-            Vector3 shift = standingAt - hipsBone.position;
-            Vector3 root = transform.position + new Vector3(shift.x, 0f, shift.z);
-            if (Physics.Raycast(root + Vector3.up, Vector3.down, out RaycastHit hit, 3f, groundLayers, QueryTriggerInteraction.Ignore))
-                root.y = hit.point.y;
-            transform.position = root;
+            if (headBone != null) return true;
+            if (animator.isHuman)
+            {
+                headBone = animator.GetBoneTransform(HumanBodyBones.Head);
+                leftThigh = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+                rightThigh = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+                leftFootBone = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                rightFootBone = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+            }
+            else
+            {
+                foreach (Transform t in animator.GetComponentsInChildren<Transform>(true))
+                {
+                    switch (t.name)
+                    {
+                        case "Bip01 Head": headBone = t; break;
+                        case "Bip01 L Thigh": leftThigh = t; break;
+                        case "Bip01 R Thigh": rightThigh = t; break;
+                        case "Bip01 L Foot": leftFootBone = t; break;
+                        case "Bip01 R Foot": rightFootBone = t; break;
+                    }
+                }
+            }
+            bool ok = headBone != null && leftThigh != null && rightThigh != null && leftFootBone != null && rightFootBone != null;
+            if (!ok) headBone = null;
+            return ok;
         }
 
         // The ragdoll moves bones in world space, so their local positions drift from the skeleton's (the pelvis by most of a
@@ -492,19 +414,23 @@ namespace OpenworldCrime.Pedestrians
                 if (boneTransforms[i] != null) boneTransforms[i].localPosition = bindPositions[i];
         }
 
+        /// <summary>
+        /// Called by the owner once a get-up clip has played (<see cref="GetUpDuration"/>): a generic rig's walk / run clips do not
+        /// animate the Bip01 / pelvis positions, so they are put back at their standing (bind pose) places here.
+        /// </summary>
+        public void FinishGetUp()
+        {
+            if (!clipGetUp || IsActive || animator == null || animator.isHuman) return;
+            clipGetUp = false;
+            RestoreBoneLengths();
+        }
+
         /// <summary>Back to the plain animated state at once (pool recycling). Also restores the bind pose.</summary>
         public void ResetToAnimated()
         {
             Initialize();
             enabled = false;
-            bool wasRagdoll = IsActive || IsFrozen || clipGetUp;
-            if (clipGetUp && animator != null)
-            {
-                animator.avatar = ownAvatar;
-                animator.runtimeAnimatorController = ownController;
-                animator.cullingMode = ownCulling;
-                clipGetUp = false;
-            }
+            bool wasRagdoll = IsActive || IsFrozen;
             IsActive = false;
             IsFrozen = false;
             DestroyBodies();
@@ -515,58 +441,23 @@ namespace OpenworldCrime.Pedestrians
                 animator.enabled = true;
                 if (wasRagdoll) animator.Rebind();
             }
-            // Rebind only resets what the clips animate; bone positions the physics moved go back to the bind pose here.
-            if (wasRagdoll) RestoreBindPositions();
-        }
-
-        // Bone positions back to the prefab's bind pose (the clips only rotate these bones).
-        private void RestoreBindPositions()
-        {
-            if (boneTransforms == null || bindPositions == null) return;
-            for (int i = 0; i < boneTransforms.Length && i < bindPositions.Length; i++)
-                if (boneTransforms[i] != null) boneTransforms[i].localPosition = bindPositions[i];
         }
 
         // Runs after the Animator: blends from the stored ragdoll pose into the animated pose. The pelvis position is not animated,
         // so its standing position is its bind-pose place under its parent (blending from its own last value would never return).
         private void LateUpdate()
         {
-            if (clipGetUp)
-            {
-                if (alignFrames > 0)
-                {
-                    AlignRootToLyingBody();
-                    alignFrames--;
-                }
-                if (Time.time >= getUpEndTime)
-                {
-                    EndClipGetUp();
-                    enabled = false;
-                    return;
-                }
-                // Out of the ragdoll pose into the clip (the clip moves the hips itself).
-                float tc = (Time.time - blendStartTime) / Mathf.Max(blendToAnimationTime, 0.45f);
-                if (tc < 1f)
-                {
-                    float w = 1f - tc;
-                    hipsBone.position = Vector3.Lerp(hipsBone.position, storedHipsPosition, w);
-                    for (int i = 0; i < boneTransforms.Length; i++)
-                        boneTransforms[i].rotation = Quaternion.Slerp(boneTransforms[i].rotation, storedRotations[i], w);
-                }
-                return;
-            }
-
-            float t = (Time.time - blendStartTime) / (humanoidGetUp ? getUpBlendTime : blendToAnimationTime);
+            float t = (Time.time - blendStartTime) / (clipGetUp ? getUpBlendTime : blendToAnimationTime);
             if (t >= 1f)
             {
-                // A humanoid's clip moves the hips itself; a generic rig's bones go back to their bind-pose places.
-                if (!humanoidGetUp) RestoreBindPositions();
+                if (!clipGetUp) hipsBone.localPosition = bindPositions[0];
                 enabled = false;
                 return;
             }
             float weight = 1f - t;
-            // A humanoid's hips are animated by the clip; a generic rig's pelvis position is not (see RestoreBoneLengths).
-            Vector3 standing = humanoidGetUp ? hipsBone.position
+            // A get-up clip animates the hips (humanoid, or the baked generic clips); the generic walk / run clips do not
+            // (see RestoreBoneLengths).
+            Vector3 standing = clipGetUp ? hipsBone.position
                 : hipsBone.parent != null ? hipsBone.parent.TransformPoint(bindPositions[0]) : hipsBone.position;
             hipsBone.position = Vector3.Lerp(standing, storedHipsPosition, weight);
             for (int i = 0; i < boneTransforms.Length; i++)

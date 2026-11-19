@@ -20,6 +20,10 @@ public class GameMapUI : MonoBehaviour
     public Color minimapRoadColor = new Color(0.86f, 0.87f, 0.84f, 1f);
     [Tooltip("How soft the ground's edge is, in metres of world.")]
     public float minimapGroundBlur = 8f;
+    [Tooltip("Soft glow fading in toward the minimap's rim (alpha 0 = off).")]
+    public Color minimapEdgeGlow = new Color(1f, 0.22f, 0.72f, 0.75f);
+    [Tooltip("How far in from the rim the glow reaches, as a share of the radius.")]
+    [Range(0.05f, 0.8f)] public float minimapEdgeGlowWidth = 0.28f;
 
     [Header("Colors")]
     public Color routeArrowColor = new Color(0.15f, 0.95f, 0.3f, 1f);
@@ -530,6 +534,19 @@ public class GameMapUI : MonoBehaviour
         map.raycastTarget = false;
 
         miniRoute = NewRoute("Route", miniContent, 7f);
+
+        // Soft pink glow fading in toward the rim, inside the circle's mask (over the map, under the icons).
+        if (minimapEdgeGlow.a > 0f)
+        {
+            float inner = Mathf.Clamp01(1f - minimapEdgeGlowWidth);
+            var glow = NewImage("Edge Glow", miniRoot, MakeSprite(256, (u, v) =>
+            {
+                float r = Vector2.Distance(new Vector2(u, v), new Vector2(0.5f, 0.5f)) * 2f;
+                float t = Mathf.InverseLerp(inner, 1f, r);
+                return t * t * (3f - 2f * t);
+            }), minimapEdgeGlow, minimapSize);
+            glow.anchoredPosition = Vector2.zero;
+        }
 
         // Icons sit outside the rotating content so they stay upright and can clamp to the edge.
         var ring = NewImage("Ring", miniRoot.parent, ringSprite, new Color(0.82f, 0.82f, 0.82f, 1f), minimapSize + 4f);

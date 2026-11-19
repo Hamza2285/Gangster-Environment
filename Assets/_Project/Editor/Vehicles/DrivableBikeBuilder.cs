@@ -84,6 +84,7 @@ namespace OpenworldCrime.EditorTools
         public static void BuildAll()
         {
             var built = new List<string> { Build(Sport), Build(Chopper) };
+            Debug.Log(BikeHandlingTuning.Apply());
             Debug.Log("[DrivableBikeBuilder] Built " + string.Join(", ", built) + ". Run Tools > OpenworldCrime > Vehicles > Setup Vehicle Lights afterwards.");
         }
 

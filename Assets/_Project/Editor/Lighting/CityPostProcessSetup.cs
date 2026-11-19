@@ -26,12 +26,12 @@ namespace OpenworldCrime.EditorTools
         private const int DayPriority = 110;   // above the scene's Global / Outdoor volumes and Hamza's Night Effects (100)
         private const int NightPriority = 120;
         // ACES darkens mid-tones a little, so exposure is higher than it was with no tonemapping.
-        private const float DayExposure = 0.6f;
+        private const float DayExposure = 0.45f;
         private const float DayContrast = 12f;
-        private const float DaySaturation = 6f;
-        private const float DayTemperature = 4f;
-        private const float DayTint = 6f;
-        private const float NightExposure = 0.35f;
+        private const float DaySaturation = 10f;
+        private const float DayTemperature = 6f;
+        private const float DayTint = 0f;
+        private const float NightExposure = 0.8f; // Ghost's night exposure
 
         [MenuItem("Tools/OpenworldCrime/Lighting/Setup City Post Processing")]
         public static void SetupMenu() => Debug.Log(Setup());
@@ -78,17 +78,17 @@ namespace OpenworldCrime.EditorTools
             color.postExposure.Override(DayExposure);
             color.contrast.Override(DayContrast);
             color.saturation.Override(DaySaturation);
-            color.colorFilter.Override(Color.white);
+            color.colorFilter.Override(new Color(1f, 0.753f, 0.912f)); // Ghost's pink filter: the main pink of the day look
             var white = Add<WhiteBalance>(p);
             white.temperature.Override(DayTemperature);
             white.tint.Override(DayTint);
             var split = Add<SplitToning>(p);
-            split.shadows.Override(new Color(0.48f, 0.45f, 0.58f));
-            split.highlights.Override(new Color(1f, 0.72f, 0.72f));
+            split.shadows.Override(new Color(0.5f, 0.48f, 0.56f));
+            split.highlights.Override(new Color(1f, 0.86f, 0.74f));
             split.balance.Override(-15f);
             var bloom = Add<Bloom>(p);
             bloom.threshold.Override(0.95f);
-            bloom.intensity.Override(0.45f);
+            bloom.intensity.Override(0.2f); // Ghost's
             bloom.scatter.Override(0.65f);
             bloom.tint.Override(new Color(1f, 0.82f, 0.86f));
             bloom.highQualityFiltering.Override(false);
@@ -110,7 +110,7 @@ namespace OpenworldCrime.EditorTools
             color.postExposure.Override(NightExposure);
             color.contrast.Override(14f);
             color.saturation.Override(14f);
-            color.colorFilter.Override(new Color(0.96f, 0.98f, 1f));
+            color.colorFilter.Override(new Color(1f, 0.783f, 0.956f)); // Ghost's pink night filter
             var white = Add<WhiteBalance>(p);
             white.temperature.Override(-10f);
             white.tint.Override(12f);
@@ -119,9 +119,9 @@ namespace OpenworldCrime.EditorTools
             split.highlights.Override(new Color(1f, 0.7f, 0.85f));
             split.balance.Override(-10f);
             var lgg = Add<LiftGammaGain>(p);
-            lgg.lift.Override(new Vector4(0.97f, 0.99f, 1.05f, -0.03f));
-            lgg.gamma.Override(new Vector4(1f, 1f, 1.02f, 0f));
-            lgg.gain.Override(new Vector4(1.03f, 1f, 0.97f, 0.02f));
+            lgg.lift.Override(new Vector4(0.92f, 0.94f, 1f, -0.03f)); // Ghost's lift / gamma / gain
+            lgg.gamma.Override(new Vector4(0.98f, 0.98f, 1f, 0f));
+            lgg.gain.Override(new Vector4(1f, 0.97f, 0.94f, 0.02f));
             var bloom = Add<Bloom>(p);
             bloom.threshold.Override(0.9f);
             bloom.intensity.Override(0.8f);

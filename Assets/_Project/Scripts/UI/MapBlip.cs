@@ -46,6 +46,21 @@ namespace OpenworldCrime.UI
         /// <summary>Changes an area blip's radius (world metres); the overlay picks it up next frame.</summary>
         public void SetWorldRadius(float radius) => worldRadius = Mathf.Max(0f, radius);
 
+        /// <summary>Changes the icon and background colours (e.g. a greyed-out, unavailable place). The overlay redraws it.</summary>
+        public void SetColours(Color icon, Color background)
+        {
+            if (iconColour == icon && backgroundColour == background) return;
+            iconColour = icon;
+            backgroundColour = background;
+            // The overlay reads the colours when a blip registers: register again so it is redrawn.
+            if (isActiveAndEnabled && active.Remove(this))
+            {
+                OnBlipRemoved?.Invoke(this);
+                active.Add(this);
+                OnBlipAdded?.Invoke(this);
+            }
+        }
+
         private void OnEnable()
         {
             active.Add(this);
