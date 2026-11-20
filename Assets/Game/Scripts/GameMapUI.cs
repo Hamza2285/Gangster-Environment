@@ -9,7 +9,17 @@ public class GameMapUI : MonoBehaviour
 
     public MiniMapData mapData;
 
+    public enum MinimapShape { Circle, Square, Rectangle }
+
     [Header("Minimap")]
+    [Tooltip("Round, square or wide rectangle minimap (the Minimap Manager in the scene sets this).")]
+    public MinimapShape minimapShape = MinimapShape.Rectangle;
+    [Tooltip("Square minimap: corner rounding as a share of its size.")]
+    [Range(0f, 0.3f)] public float minimapCornerRadius = 0.08f;
+    [Tooltip("Rectangle minimap: width and height (reference pixels at 1920x1080).")]
+    public Vector2 minimapRectangleSize = new Vector2(400f, 250f);
+    [Tooltip("Rectangle minimap: how far its edges blur out, in reference pixels.")]
+    [Range(0f, 80f)] public float minimapEdgeBlur = 34f;
     public float minimapSize = 280f;
     public float minimapMargin = 36f;
     [Tooltip("Metres of world shown from the centre to the edge of the minimap.")]
@@ -20,10 +30,21 @@ public class GameMapUI : MonoBehaviour
     public Color minimapRoadColor = new Color(0.86f, 0.87f, 0.84f, 1f);
     [Tooltip("How soft the ground's edge is, in metres of world.")]
     public float minimapGroundBlur = 8f;
-    [Tooltip("Soft glow fading in toward the minimap's rim (alpha 0 = off).")]
-    public Color minimapEdgeGlow = new Color(1f, 0.22f, 0.72f, 0.75f);
-    [Tooltip("How far in from the rim the glow reaches, as a share of the radius.")]
-    [Range(0.05f, 0.8f)] public float minimapEdgeGlowWidth = 0.28f;
+
+    [Header("Full Map Look")]
+    [Tooltip("Empty space around the city (outside the road network): a soft pink glow blurring out from the city's edge...")]
+    public Color fullMapGlow = new Color(0.95f, 0.25f, 0.68f, 1f);
+    [Tooltip("...fading to this colour further out; the blocks inside the city are this colour too.")]
+    public Color fullMapGround = new Color(0.122f, 0.106f, 0.15f, 1f); // times MapColorTheme's map tint = its background
+    public Color fullMapRoad = new Color(0.78f, 0.74f, 0.86f, 1f);
+    [Tooltip("How far the pink glow reaches from the roads, in metres of world.")]
+    public float fullMapGlowReach = 120f;
+
+    [Header("Place Icons")]
+    [Tooltip("Soft halo behind every place icon so it stands out on the map (alpha 0 = off).")]
+    public Color iconGlow = new Color(1f, 0.82f, 0.96f, 0.95f);
+    [Tooltip("Place icons on the full map are drawn this much larger than on the minimap.")]
+    public float fullMapIconScale = 1.6f;
 
     [Header("Colors")]
     public Color routeArrowColor = new Color(0.15f, 0.95f, 0.3f, 1f);
@@ -70,7 +91,13 @@ public class GameMapUI : MonoBehaviour
 
     Text messageText, hintText;
     float messageUntil;
-    Sprite circleSprite, ringSprite, arrowSprite, diamondSprite, personSprite;
+    Sprite circleSprite, ringSprite, squareSprite, squareRingSprite, arrowSprite, diamondSprite, personSprite, glowSprite;
+    Image miniMaskImage, miniRingImage;
+    Mask miniMask;
+    RectMask2D miniSoftMask;
+    Sprite softRectSprite;
+    Vector2 miniHalf; // half width / height of the minimap as shown
+    Color fullMapEdgeColor;
     Font font;
     readonly List<Vector2> linePoints = new List<Vector2>();
     bool routeDirty;
@@ -85,12 +112,24 @@ public class GameMapUI : MonoBehaviour
             float d = Vector2.Distance(new Vector2(u, v), new Vector2(0.5f, 0.5f));
             return Mathf.Clamp01((0.5f - d) * 256f) * Mathf.Clamp01((d - 0.475f) * 256f);
         });
+        squareSprite = MakeSprite(256, (u, v) => Mathf.Clamp01(-RoundedSquare(u, v) * 256f));
+        squareRingSprite = MakeSprite(256, (u, v) =>
+        {
+            float d = RoundedSquare(u, v);
+            return Mathf.Clamp01(-d * 256f) * Mathf.Clamp01((d + 0.022f) * 256f);
+        });
         arrowSprite = MakeSprite(64, (u, v) =>
         {
             // Arrow pointing up with a notch at the base.
             float x = Mathf.Abs(u - 0.5f) * 2f;
             float notch = 0.18f + x * 0.34f;
             return v > notch && x < (1f - v) * 0.92f ? 1f : 0f;
+        });
+        glowSprite = MakeSprite(128, (u, v) =>
+        {
+            float d = Mathf.Clamp01(Vector2.Distance(new Vector2(u, v), new Vector2(0.5f, 0.5f)) * 2f);
+            float t = 1f - d;
+            return t * t;
         });
         diamondSprite = MakeSprite(64, (u, v) => Mathf.Abs(u - 0.5f) + Mathf.Abs(v - 0.5f) < 0.48f ? 1f : 0f);
         personSprite = MakeSprite(64, (u, v) =>
@@ -164,17 +203,24 @@ public class GameMapUI : MonoBehaviour
     {
         if (miniRoot == null || laidOutMobile == mobile) return;
         laidOutMobile = mobile;
+        PlaceMinimap();
+        if (fullMapHelp != null && (fullMapHelp.text == MapHelp || fullMapHelp.text == MobileMapHelp)) fullMapHelp.text = mobile ? MobileMapHelp : MapHelp;
+    }
+
+    // Bottom-left on desktop, top-left under the health bars on phones, by the minimap's current size.
+    void PlaceMinimap()
+    {
+        bool mobile = laidOutMobile == true;
         Vector2 anchor = mobile ? new Vector2(0f, 1f) : Vector2.zero;
         Vector2 position = mobile
-            ? new Vector2(minimapMargin + miniRadius, -(105f + miniRadius))
-            : Vector2.one * (minimapMargin + miniRadius);
+            ? new Vector2(minimapMargin + miniHalf.x, -(105f + miniHalf.y))
+            : Vector2.one * minimapMargin + miniHalf;
         foreach (var rect in new[] { miniRoot, miniRing })
         {
             if (rect == null) continue;
             rect.anchorMin = rect.anchorMax = anchor;
             rect.anchoredPosition = position;
         }
-        if (fullMapHelp != null && (fullMapHelp.text == MapHelp || fullMapHelp.text == MobileMapHelp)) fullMapHelp.text = mobile ? MobileMapHelp : MapHelp;
     }
 
     void Update()
@@ -384,7 +430,7 @@ public class GameMapUI : MonoBehaviour
         miniPlayer.localRotation = miniPlayerOutline.localRotation = Quaternion.Euler(0f, 0f, yaw - GamePlayer.Current.FacingYaw);
         miniContent.localRotation = rot;
         miniContent.anchoredPosition = -(Vector2)(rot * playerLocal);
-        northLabel.anchoredPosition = (Vector2)(rot * Vector2.up) * (miniRadius - 14f);
+        northLabel.anchoredPosition = InsideEdge((Vector2)(rot * Vector2.up) * miniRadius * 2f, miniRadius - 14f);
 
         var waypoints = WaypointSystem.Instance;
         bool hasMarker = waypoints != null && waypoints.HasMarker;
@@ -412,10 +458,10 @@ public class GameMapUI : MonoBehaviour
         {
             if (!placeIcons.TryGetValue(place, out var rects))
             {
-                var mini = NewImage("Place " + place.label, miniRing, place.icon, place.tint, place.size);
+                var mini = NewGlowIcon("Place " + place.label, miniRing, place.icon, place.tint, place.size);
                 Reparent(mini, miniRing);
                 mini.SetSiblingIndex(miniMarker.GetSiblingIndex());
-                var full = NewImage("Place " + place.label, fullMap, place.icon, place.tint, place.size * 1.15f);
+                var full = NewGlowIcon("Place " + place.label, fullMap, place.icon, place.tint, place.size * fullMapIconScale);
                 full.SetSiblingIndex(fullPlayer.GetSiblingIndex());
                 full.localScale = Vector3.one / fullZoom;
                 rects = new[] { mini, full };
@@ -424,7 +470,7 @@ public class GameMapUI : MonoBehaviour
 
             Vector2 offset = rot * (MiniLocal(place.transform.position) - playerLocal);
             bool inRange = place.minimapRange <= 0f || Vector3.Distance(place.transform.position, player.position) <= place.minimapRange;
-            bool onMinimap = inRange && offset.magnitude <= miniRadius - 12f;
+            bool onMinimap = inRange && FitsInside(offset, miniRadius - 12f);
             rects[0].gameObject.SetActive(onMinimap);
             if (onMinimap) rects[0].anchoredPosition = offset;
             rects[1].anchoredPosition = FullLocal(place.transform.position);
@@ -433,7 +479,7 @@ public class GameMapUI : MonoBehaviour
 
     Vector2 Clamp(Vector2 v)
     {
-        return Vector2.ClampMagnitude(v, miniRadius - 12f);
+        return InsideEdge(v, miniRadius - 12f);
     }
 
     void UpdateFullMap(Transform player)
@@ -520,10 +566,15 @@ public class GameMapUI : MonoBehaviour
         miniRoot.anchoredPosition = Vector2.one * (minimapMargin + miniRadius);
 
         var maskImage = miniRoot.gameObject.AddComponent<Image>();
+        miniMaskImage = maskImage;
         maskImage.sprite = circleSprite;
         maskImage.color = minimapGroundColor;
         maskImage.raycastTarget = false;
-        miniRoot.gameObject.AddComponent<Mask>().showMaskGraphic = true;
+        miniMask = miniRoot.gameObject.AddComponent<Mask>();
+        miniMask.showMaskGraphic = true;
+        // The rectangle fades its map out at the edges instead of a hard stencil cut.
+        miniSoftMask = miniRoot.gameObject.AddComponent<RectMask2D>();
+        miniSoftMask.enabled = false;
 
         miniContentSize = mapData.worldSize * (miniRadius / minimapRange);
         miniContent = NewRect("Map Content", miniRoot);
@@ -535,18 +586,6 @@ public class GameMapUI : MonoBehaviour
 
         miniRoute = NewRoute("Route", miniContent, 7f);
 
-        // Soft pink glow fading in toward the rim, inside the circle's mask (over the map, under the icons).
-        if (minimapEdgeGlow.a > 0f)
-        {
-            float inner = Mathf.Clamp01(1f - minimapEdgeGlowWidth);
-            var glow = NewImage("Edge Glow", miniRoot, MakeSprite(256, (u, v) =>
-            {
-                float r = Vector2.Distance(new Vector2(u, v), new Vector2(0.5f, 0.5f)) * 2f;
-                float t = Mathf.InverseLerp(inner, 1f, r);
-                return t * t * (3f - 2f * t);
-            }), minimapEdgeGlow, minimapSize);
-            glow.anchoredPosition = Vector2.zero;
-        }
 
         // Icons sit outside the rotating content so they stay upright and can clamp to the edge.
         var ring = NewImage("Ring", miniRoot.parent, ringSprite, new Color(0.82f, 0.82f, 0.82f, 1f), minimapSize + 4f);
@@ -554,6 +593,7 @@ public class GameMapUI : MonoBehaviour
         ring.anchoredPosition = miniRoot.anchoredPosition;
 
         miniRing = ring;
+        miniRingImage = ring.GetComponent<Image>();
         miniMarker = NewImage("Marker", miniRoot.parent, diamondSprite, markerColor, 22f);
         Reparent(miniMarker, ring);
         miniTaxi = NewImage("Taxi", miniRoot.parent, circleSprite, taxiColor, 15f);
@@ -569,6 +609,96 @@ public class GameMapUI : MonoBehaviour
 
         northLabel = NewText("N", ring, 22, TextAnchor.MiddleCenter, Color.white).rectTransform;
         northLabel.sizeDelta = new Vector2(30f, 30f);
+        ApplyMinimapShape();
+    }
+
+    /// <summary>Switches the minimap between round and square (also while playing).</summary>
+    public void SetMinimapShape(MinimapShape shape)
+    {
+        minimapShape = shape;
+        ApplyMinimapShape();
+    }
+
+    void ApplyMinimapShape()
+    {
+        if (miniRoot == null) return;
+        bool rectangle = minimapShape == MinimapShape.Rectangle;
+        bool square = minimapShape == MinimapShape.Square;
+        Vector2 size = rectangle ? minimapRectangleSize : Vector2.one * minimapSize;
+        miniHalf = size * 0.5f;
+        miniRoot.sizeDelta = size;
+        if (miniRing != null) miniRing.sizeDelta = size + Vector2.one * 4f;
+        PlaceMinimap();
+
+        if (rectangle && (softRectSprite == null || softRectSprite.rect.size != new Vector2(Mathf.Round(size.x), Mathf.Round(size.y)))) softRectSprite = MakeSoftRectSprite(size, minimapEdgeBlur);
+        miniMaskImage.sprite = rectangle ? softRectSprite : square ? squareSprite : circleSprite;
+        miniMask.enabled = !rectangle;
+        miniSoftMask.enabled = rectangle;
+        int blur = Mathf.RoundToInt(minimapEdgeBlur);
+        miniSoftMask.softness = new Vector2Int(blur, blur);
+        if (miniRingImage != null)
+        {
+            // The rectangle has no rim: its edges just blur out.
+            miniRingImage.enabled = !rectangle;
+            miniRingImage.sprite = square ? squareRingSprite : ringSprite;
+        }
+    }
+
+    // A rectangle whose alpha fades out over Blur pixels at every edge (drawn at its shown size, so the fade is even).
+    static Sprite MakeSoftRectSprite(Vector2 size, float blur)
+    {
+        int w = Mathf.Max(8, Mathf.RoundToInt(size.x)), h = Mathf.Max(8, Mathf.RoundToInt(size.y));
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        var pixels = new Color32[w * h];
+        float b = Mathf.Max(1f, blur);
+        for (int y = 0; y < h; y++)
+        {
+            float fy = Mathf.Clamp01(Mathf.Min(y + 0.5f, h - y - 0.5f) / b);
+            for (int x = 0; x < w; x++)
+            {
+                float fx = Mathf.Clamp01(Mathf.Min(x + 0.5f, w - x - 0.5f) / b);
+                float a = Mathf.SmoothStep(0f, 1f, fx) * Mathf.SmoothStep(0f, 1f, fy);
+                pixels[y * w + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+            }
+        }
+        tex.SetPixels32(pixels);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+    }
+
+    // Signed distance (in sprite UV) to the minimap's rounded-square outline: negative inside.
+    float RoundedSquare(float u, float v)
+    {
+        float r = minimapCornerRadius * 0.5f;
+        float half = 0.5f - 1f / 256f;
+        float x = Mathf.Max(Mathf.Abs(u - 0.5f) - (half - r), 0f);
+        float y = Mathf.Max(Mathf.Abs(v - 0.5f) - (half - r), 0f);
+        float outside = Mathf.Sqrt(x * x + y * y) - r;
+        float inside = Mathf.Min(Mathf.Max(Mathf.Abs(u - 0.5f), Mathf.Abs(v - 0.5f)) - half, 0f);
+        return outside + inside;
+    }
+
+    // Keeps a point inside the minimap's edge (circle: by distance; square: by the larger axis, keeping its direction).
+    Vector2 InsideEdge(Vector2 v, float limit)
+    {
+        if (minimapShape == MinimapShape.Circle) return Vector2.ClampMagnitude(v, limit);
+        float m = EdgeScale(v, limit);
+        return m > 1f ? v / m : v;
+    }
+
+    bool FitsInside(Vector2 v, float limit) =>
+        minimapShape == MinimapShape.Circle ? v.magnitude <= limit : EdgeScale(v, limit) <= 1f;
+
+    // How far out a point is relative to the (square / rectangle) edge, kept Limit's margin in from it: > 1 = outside.
+    float EdgeScale(Vector2 v, float limit)
+    {
+        float margin = miniRadius - limit;
+        // On the rectangle the outer part is blurred away; icons stay in the clear part.
+        if (minimapShape == MinimapShape.Rectangle) margin += minimapEdgeBlur * 0.45f;
+        float hw = Mathf.Max(1f, miniHalf.x - margin), hh = Mathf.Max(1f, miniHalf.y - margin);
+        return Mathf.Max(Mathf.Abs(v.x) / hw, Mathf.Abs(v.y) / hh);
     }
 
     // The road map with its empty ground painted a soft, blurry light green.
@@ -657,7 +787,7 @@ public class GameMapUI : MonoBehaviour
         panel.anchorMax = Vector2.one;
         panel.offsetMin = panel.offsetMax = Vector2.zero;
         var bg = panel.gameObject.AddComponent<Image>();
-        bg.color = new Color(0.13f, 0.13f, 0.13f, 1f);
+        bg.color = fullMapGround;
         fullPanel = panel.gameObject;
         // Its own canvas above everything else, so the map also covers and blocks the day/night buttons.
         var panelCanvas = panel.gameObject.AddComponent<Canvas>();
@@ -674,8 +804,9 @@ public class GameMapUI : MonoBehaviour
         fullMap = NewRect("Map", fullViewport);
         fullMap.sizeDelta = Vector2.one * 980f;
         var map = fullMap.gameObject.AddComponent<RawImage>();
-        map.texture = mapData.roadMap;
+        map.texture = MakeFullMapTexture();
         map.raycastTarget = false;
+        bg.color = fullMapEdgeColor; // the panel continues the map's own edge colour: no visible border
 
         fullRoute = NewRoute("Route", fullMap, 7f);
         fullMarker = NewImage("Marker", fullMap, diamondSprite, markerColor, 30f);
@@ -784,6 +915,72 @@ public class GameMapUI : MonoBehaviour
         var rect = go.GetComponent<RectTransform>();
         rect.SetParent(parent, false);
         return rect;
+    }
+
+    // An icon with a soft halo behind it: an empty holder (positioned like any icon) with the glow, then the icon.
+    RectTransform NewGlowIcon(string name, Transform parent, Sprite sprite, Color color, float size)
+    {
+        var holder = NewRect(name, parent);
+        holder.sizeDelta = Vector2.one * size;
+        if (iconGlow.a > 0f) NewImage("Glow", holder, glowSprite, iconGlow, size * 1.9f);
+        NewImage("Icon", holder, sprite, color, size).GetComponent<Image>().preserveAspect = true;
+        return holder;
+    }
+
+    // The full map: roads on a deep purple ground, with a soft pink glow blurring out from the road edges into the blocks.
+    Texture2D MakeFullMapTexture()
+    {
+        int size = Mathf.Min(mapData.roadMap.width, 1024);
+        var copy = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        Graphics.Blit(mapData.roadMap, copy);
+        var previous = RenderTexture.active;
+        RenderTexture.active = copy;
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, true);
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.ReadPixels(new Rect(0f, 0f, size, size), 0, 0);
+        RenderTexture.active = previous;
+        RenderTexture.ReleaseTemporary(copy);
+
+        var pixels = texture.GetPixels32();
+        var road = new float[pixels.Length];
+        var glow = new float[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            road[i] = Mathf.InverseLerp(34f, 168f, pixels[i].r);
+            glow[i] = road[i] > 0.05f ? 1f : 0f;
+        }
+        Blur(glow, size, Mathf.Max(1, Mathf.RoundToInt(fullMapGlowReach / mapData.worldSize * size)));
+
+        // Outside the city: empty ground reachable from the texture's border without crossing a road (flood fill).
+        // The blocks enclosed by roads stay dark; only the space around the city glows.
+        var outside = new float[pixels.Length];
+        var queue = new Queue<int>();
+        System.Action<int> seed = i => { if (outside[i] == 0f && road[i] < 0.05f) { outside[i] = 1f; queue.Enqueue(i); } };
+        for (int k = 0; k < size; k++) { seed(k); seed((size - 1) * size + k); seed(k * size); seed(k * size + size - 1); }
+        while (queue.Count > 0)
+        {
+            int i = queue.Dequeue(), x = i % size, y = i / size;
+            if (x > 0) seed(i - 1);
+            if (x < size - 1) seed(i + 1);
+            if (y > 0) seed(i - size);
+            if (y < size - 1) seed(i + size);
+        }
+        Blur(outside, size, 2); // soft edge where it meets the roads
+
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            int x = i % size, y = i / size;
+            // Fade to the panel's colour at the texture's edge so the map has no visible border.
+            float edge = Mathf.Clamp01(Mathf.Min(Mathf.Min(x, size - 1 - x), Mathf.Min(y, size - 1 - y)) / (size * 0.12f));
+            float g = Mathf.Clamp01(glow[i] * 1.6f);
+            float pink = Mathf.Clamp01(g * g * (3f - 2f * g) * 1.1f + 0.22f) * outside[i] * edge;
+            Color ground = Color.Lerp(fullMapGround, fullMapGlow, pink);
+            pixels[i] = Color.Lerp(ground, fullMapRoad, road[i]);
+        }
+        fullMapEdgeColor = pixels[0];
+        texture.SetPixels32(pixels);
+        texture.Apply(true, true);
+        return texture;
     }
 
     static RectTransform NewImage(string name, Transform parent, Sprite sprite, Color color, float size)

@@ -7,7 +7,8 @@ using UnityEngine;
 // - Every shop gets its icon, including the duplicate buildings that had none (second Gangfire gun shop, second and third
 //   clothing store): placed where the original's entrance sits on the same building.
 // - Every beach food stall gets a food icon (burger / pizza / taco in turn).
-// - Ghost's map blips (races, gun shops, club) and the clothing store / showroom icons switch to the neon set.
+// - Ghost's map blips (races, gun shops, club) and the clothing store / showroom icons switch to the neon set. Gun icons only on
+//   the Gangfire gun shops: the downtown gun shop entrance keeps working but shows no icon.
 // - A glowing chequered flag lies on the road at every race start.
 // Safe to run again: it rebuilds what it made (the "Map Icons" root and the "Road Flag Icon" children).
 public static class MapIconsSetup
@@ -28,6 +29,8 @@ public static class MapIconsSetup
         ImportIcons();
         Sprite gun = Icon("Gun"), clothes = Icon("Clothes"), car = Icon("Car"), club = Icon("Club"), flag = Icon("RaceFlag");
         Sprite[] food = { Icon("Burger"), Icon("Pizza"), Icon("Taco") };
+        Sprite glow = Icon("Glow");
+        Color halo = new Color(1f, 0.82f, 0.96f, 0.95f);
         if (gun == null || flag == null || food[0] == null) return "[MapIconsSetup] icons missing in " + IconFolder;
 
         var scene = EditorSceneManager.GetActiveScene();
@@ -45,11 +48,18 @@ public static class MapIconsSetup
                 : where.Contains("Gun Shop") ? gun
                 : where.Contains("Club") ? club : null;
             if (neon == null) continue;
+            // Gun icons only where a Gangfire gun shop building stands (the downtown entrance is a plain building with a sign).
+            bool gunShop = neon == gun;
+            blip.enabled = !gunShop || blip.name.ToLowerInvariant().Contains("gangfire");
+            EditorUtility.SetDirty(blip);
+            if (!blip.enabled) { log.AppendLine($"  blip {blip.name} hidden (no Gangfire shop there)"); continue; }
             var so = new SerializedObject(blip);
             so.FindProperty("icon").objectReferenceValue = neon;
             so.FindProperty("iconColour").colorValue = Color.white;
-            so.FindProperty("backgroundColour").colorValue = new Color(0f, 0f, 0f, 0f);
-            so.FindProperty("size").floatValue = blip.gameObject.name.Contains("Checkpoint") ? 26f : 34f;
+            // A soft pink halo instead of the dark disc (the icon fills the inner 72%).
+            so.FindProperty("backgroundSprite").objectReferenceValue = glow;
+            so.FindProperty("backgroundColour").colorValue = halo;
+            so.FindProperty("size").floatValue = blip.gameObject.name.Contains("Checkpoint") ? 44f : 56f;
             so.ApplyModifiedPropertiesWithoutUndo();
             log.AppendLine($"  blip {blip.name} -> {neon.name}");
         }
@@ -59,7 +69,14 @@ public static class MapIconsSetup
         {
             var so = new SerializedObject(start);
             so.FindProperty("iconColour").colorValue = Color.white;
-            so.FindProperty("backgroundColour").colorValue = new Color(0f, 0f, 0f, 0f);
+            so.FindProperty("backgroundColour").colorValue = halo;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+        // Full map icons a bit bigger than the minimap's.
+        foreach (var overlay in Object.FindObjectsByType<OpenworldCrime.UI.MapBlipOverlay>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var so = new SerializedObject(overlay);
+            so.FindProperty("fullMapScale").floatValue = 1.5f;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -71,7 +88,7 @@ public static class MapIconsSetup
             if (neon == null) continue;
             icon.icon = neon;
             icon.tint = Color.white;
-            icon.size = 34f;
+            icon.size = 40f;
             EditorUtility.SetDirty(icon);
             log.AppendLine($"  icon {icon.label} -> {neon.name}");
         }
@@ -90,7 +107,7 @@ public static class MapIconsSetup
             var icon = go.AddComponent<MapIcon>();
             icon.icon = food[n % food.Length];
             icon.label = "Food";
-            icon.size = 26f;
+            icon.size = 32f;
             n++;
         }
         log.AppendLine($"  food stalls: {n}");
@@ -161,7 +178,7 @@ public static class MapIconsSetup
             var icon = go.AddComponent<MapIcon>();
             icon.icon = sprite;
             icon.label = label;
-            icon.size = 34f;
+            icon.size = 40f;
             log.AppendLine($"  {label} icon for {copy.name} at {go.transform.position}");
         }
     }

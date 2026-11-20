@@ -2070,6 +2070,22 @@ namespace OpenworldCrime.Player
             StartCoroutine(WreckEjectRoutine(vehicle, exitPosition, exitRotation, wreck));
         }
 
+        /// <summary>
+        /// Out of the vehicle at once, standing at the given spot (no exit checks, no animation): e.g. a car sinking in the sea,
+        /// whose driver must be out before he can die and be respawned. Returns false when not in a vehicle.
+        /// </summary>
+        public bool ForceExitAt(Vector3 position, Quaternion rotation)
+        {
+            if (State != VehicleInteractionState.InVehicle || CurrentVehicle == null) return false;
+            var vehicle = CurrentVehicle;
+            SetState(VehicleInteractionState.Exiting);
+            OnVehicleExitStarted?.Invoke(vehicle);
+            vehicle.DisableControl();
+            playerCameraRoot.SetActive(true);
+            StartCoroutine(InstantExitRoutine(vehicle, position, rotation));
+            return true;
+        }
+
         private IEnumerator WreckEjectRoutine(IVehicleController vehicle, Vector3 exitPosition, Quaternion exitRotation, VehicleHealth wreck)
         {
             yield return InstantExitRoutine(vehicle, exitPosition, exitRotation);

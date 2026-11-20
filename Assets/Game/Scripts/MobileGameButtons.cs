@@ -89,13 +89,14 @@ public class MobileGameButtons : MonoBehaviour
         actionButton = Add("ACTION", "M_Interact", new Vector2(0.5f, 0f), new Vector2(0f, 330f), 160f, new Color(0.85f, 0.45f, 0.1f, 0.8f), 22,
             () => Free() && !MapOpen() && !GamePlayer.InVehicle && FocusPrompt() != null);
         // On foot, beside the minimap (top left; tapping the minimap opens the full map).
-        Add("TAXI", "M_Taxi", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20, () => Free() && !MapOpen() && !GamePlayer.InVehicle && TaxiIdle());
-        Add("HORN", "M_Horn", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20,
-            () => Free() && !MapOpen() && GamePlayer.InVehicle);
+        besideMinimap.Add(Add("TAXI", "M_Taxi", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20, () => Free() && !MapOpen() && !GamePlayer.InVehicle && TaxiIdle()));
+        besideMinimap.Add(Add("HORN", "M_Horn", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20,
+            () => Free() && !MapOpen() && GamePlayer.InVehicle));
         // Hold SWITCH: the character wheel opens; drag onto a character and let go to switch.
         switchButton = Add("SWITCH", "M_Switch", new Vector2(0f, 1f), new Vector2(395f, -285f), 100f, pink, 18,
             () => (Free() || WheelOpen()) && !MapOpen() && !GamePlayer.InVehicle && CanSwitch());
         switchButton.reportsPointer = true;
+        besideMinimap.Add(switchButton);
 
         // Sniper scope: while aiming a scoped gun (next to AIM).
         scopeButton = Add("SCOPE", "M_Scope", new Vector2(1f, 0f), new Vector2(-545f, 300f), 115f, blue, 22, () => !GamePlayer.InVehicle && !MapOpen() && CanScope());
@@ -116,6 +117,8 @@ public class MobileGameButtons : MonoBehaviour
     }
 
     TapButton switchButton, scopeButton, minimapHotspot, enterButton, actionButton;
+    // TAXI / HORN / SWITCH sit just right of the minimap, whatever its shape and width.
+    readonly List<TapButton> besideMinimap = new List<TapButton>();
     Text actionLabel;
     OpenworldCrime.Player.PlayerInteractionController interactionFocus;
     Text enterLabel;
@@ -248,6 +251,16 @@ public class MobileGameButtons : MonoBehaviour
         var theirs = mini.GetComponentInParent<Canvas>();
         if (mine != null && theirs != null && mine.scaleFactor > 0f)
             rect.sizeDelta = mini.rect.size * theirs.scaleFactor / mine.scaleFactor;
+        if (mine == null || mine.scaleFactor <= 0f) return;
+        float rightEdge = mini.TransformPoint(new Vector3(mini.rect.xMax, 0f, 0f)).x;   // screen pixels
+        foreach (var button in besideMinimap)
+        {
+            if (button == null) continue;
+            var b = (RectTransform)button.transform;
+            Vector3 p = b.position;
+            p.x = rightEdge + (b.rect.width * 0.5f + 12f) * mine.scaleFactor;
+            b.position = p;
+        }
     }
 
     static bool SafeVisible(System.Func<bool> visible)

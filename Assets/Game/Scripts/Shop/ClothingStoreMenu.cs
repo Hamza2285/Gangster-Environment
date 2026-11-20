@@ -17,6 +17,12 @@ public class ClothingStoreMenu : MonoBehaviour
     public Color accent = new Color(1f, 0.78f, 0.24f, 1f);
     public Color highlight = new Color(0.88f, 0.25f, 0.98f, 1f);
     public Color panel = new Color(0.035f, 0.035f, 0.05f, 0.9f);
+    [Tooltip("Background of the side panel (Assets/Cloth-Panel.png, made for its 600 x 900 size). Empty: plain dark blocks.")]
+    public Sprite panelSprite;
+    [Tooltip("Titles, tabs, prices and buttons (Anton). Empty: Unity's built-in font.")]
+    public Font headingFont;
+    [Tooltip("Everything else (Bebas Kai). Empty: Unity's built-in font.")]
+    public Font textFont;
     [Header("Camera")]
     public float turnSpeed = 90f;
     public float dragTurn = 0.35f;
@@ -33,7 +39,10 @@ public class ClothingStoreMenu : MonoBehaviour
     readonly List<Canvas> hiddenCanvases = new List<Canvas>();
     readonly List<Renderer> hiddenWeapon = new List<Renderer>();
     GameObject root;
-    Font font;
+    Font font, heading;
+    // On the panel picture the blocks are only a light shade over it; without it they are the old solid dark blocks.
+    Color Block(float darkAlpha) => panelSprite != null ? new Color(0.06f, 0.02f, 0.08f, darkAlpha * 0.35f) : new Color(0.05f, 0.04f, 0.08f, darkAlpha);
+    Color ListBack => panelSprite != null ? Color.clear : panel;
 
     int categoryIndex, itemIndex;
     readonly List<Button> tabs = new List<Button>();
@@ -59,7 +68,9 @@ public class ClothingStoreMenu : MonoBehaviour
     void Awake()
     {
         Instance = this;
-        font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var builtIn = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        font = textFont != null ? textFont : builtIn;
+        heading = headingFont != null ? headingFont : font;
     }
 
     void OnDestroy()
@@ -322,7 +333,7 @@ public class ClothingStoreMenu : MonoBehaviour
         wardrobe.Preview(CurrentCategory, item);
         RefreshRows();
         countText.text = (index + 1) + " / " + CurrentCategory.items.Length;
-        itemTitle.text = item.displayName;
+        itemTitle.text = item.displayName.ToUpperInvariant();
         itemDetail.text = item.description;
         ScrollTo(index);
     }
@@ -426,6 +437,13 @@ public class ClothingStoreMenu : MonoBehaviour
         side.anchoredPosition = new Vector2(56f, 0f);
         side.offsetMin = new Vector2(56f, 120f);
         side.offsetMax = new Vector2(56f + PanelWidth, -56f);
+        if (panelSprite != null)
+        {
+            var back = side.gameObject.AddComponent<Image>();
+            back.sprite = panelSprite;
+            back.type = panelSprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
+            back.raycastTarget = false;
+        }
 
         BuildHeader(side);
         BuildTabs(side);
@@ -444,6 +462,19 @@ public class ClothingStoreMenu : MonoBehaviour
         outline.effectColor = new Color(0f, 0f, 0f, 0.8f);
         outline.effectDistance = new Vector2(2f, -2f);
         toastText.enabled = false;
+        UseFonts(root.transform);
+    }
+
+    // The heading font for titles, tabs, prices and buttons, the text font for the rest. The fonts are already heavy, so no
+    // faked bold on them.
+    void UseFonts(Transform under)
+    {
+        foreach (var text in under.GetComponentsInChildren<Text>(true))
+        {
+            bool isHeading = text.fontStyle == FontStyle.Bold;
+            text.font = isHeading ? heading : font;
+            if (text.font != Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")) text.fontStyle = FontStyle.Normal;
+        }
     }
 
     void BuildHeader(RectTransform side)
@@ -451,7 +482,7 @@ public class ClothingStoreMenu : MonoBehaviour
         var header = Rect("Header", side, new Vector2(0f, 1f), new Vector2(1f, 1f));
         header.pivot = new Vector2(0.5f, 1f);
         header.sizeDelta = new Vector2(0f, 150f);
-        header.gameObject.AddComponent<Image>().color = new Color(0.05f, 0.04f, 0.08f, 0.96f);
+        header.gameObject.AddComponent<Image>().color = Block(0.96f);
 
         var bar = Rect("Accent", header, new Vector2(0f, 0f), new Vector2(1f, 0f));
         bar.pivot = new Vector2(0.5f, 0f);
@@ -474,7 +505,7 @@ public class ClothingStoreMenu : MonoBehaviour
         tabStrip.pivot = new Vector2(0.5f, 1f);
         tabStrip.anchoredPosition = new Vector2(0f, -150f);
         tabStrip.sizeDelta = new Vector2(0f, 64f);
-        tabStrip.gameObject.AddComponent<Image>().color = panel;
+        tabStrip.gameObject.AddComponent<Image>().color = ListBack;
         var layout = tabStrip.gameObject.AddComponent<HorizontalLayoutGroup>();
         layout.padding = new RectOffset(10, 10, 10, 10);
         layout.spacing = 6f;
@@ -504,7 +535,7 @@ public class ClothingStoreMenu : MonoBehaviour
         titleBar.pivot = new Vector2(0.5f, 1f);
         titleBar.anchoredPosition = new Vector2(0f, -214f);
         titleBar.sizeDelta = new Vector2(0f, 56f);
-        titleBar.gameObject.AddComponent<Image>().color = new Color(0.02f, 0.02f, 0.03f, 0.95f);
+        titleBar.gameObject.AddComponent<Image>().color = Block(0.95f);
         categoryTitle = Label("Name", titleBar, 26, TextAnchor.MiddleLeft, Color.white);
         categoryTitle.fontStyle = FontStyle.Bold;
         Place(categoryTitle.rectTransform, 24f, 0f, 360f, 56f, true);
@@ -517,7 +548,7 @@ public class ClothingStoreMenu : MonoBehaviour
         var area = Rect("List", side, Vector2.zero, Vector2.one);
         area.offsetMin = new Vector2(0f, 230f);
         area.offsetMax = new Vector2(0f, -270f);
-        area.gameObject.AddComponent<Image>().color = panel;
+        area.gameObject.AddComponent<Image>().color = ListBack;
         area.gameObject.AddComponent<RectMask2D>();
         scroll = area.gameObject.AddComponent<ScrollRect>();
         scroll.horizontal = false;
@@ -583,6 +614,7 @@ public class ClothingStoreMenu : MonoBehaviour
             Place(row.price.rectTransform, PanelWidth - 186f, 0f, 160f, RowHeight - 4f, true);
             rows.Add(row);
         }
+        UseFonts(listContent);
     }
 
     void BuildFooter(RectTransform side)
@@ -590,7 +622,7 @@ public class ClothingStoreMenu : MonoBehaviour
         var footer = Rect("Details", side, new Vector2(0f, 0f), new Vector2(1f, 0f));
         footer.pivot = new Vector2(0.5f, 0f);
         footer.sizeDelta = new Vector2(0f, 222f);
-        footer.gameObject.AddComponent<Image>().color = new Color(0.05f, 0.04f, 0.08f, 0.96f);
+        footer.gameObject.AddComponent<Image>().color = Block(0.96f);
 
         itemTitle = Label("Item", footer, 28, TextAnchor.UpperLeft, Color.white);
         itemTitle.fontStyle = FontStyle.Bold;
@@ -615,7 +647,7 @@ public class ClothingStoreMenu : MonoBehaviour
         leave.anchoredPosition = new Vector2(-56f, 40f);
         leave.sizeDelta = new Vector2(220f, 64f);
         var leaveImage = leave.gameObject.AddComponent<Image>();
-        leaveImage.color = panel;
+        PanelLook(leaveImage);
         var leaveButton = leave.gameObject.AddComponent<Button>();
         leaveButton.targetGraphic = leaveImage;
         leaveButton.onClick.AddListener(Close);
@@ -631,7 +663,7 @@ public class ClothingStoreMenu : MonoBehaviour
         box.pivot = new Vector2(1f, 1f);
         box.anchoredPosition = new Vector2(-56f, -56f);
         box.sizeDelta = new Vector2(320f, 96f);
-        box.gameObject.AddComponent<Image>().color = panel;
+        PanelLook(box.gameObject.AddComponent<Image>());
         var label = Label("Label", box, 18, TextAnchor.UpperRight, Muted);
         label.text = "CASH";
         Place(label.rectTransform, 20f, -12f, 280f, 26f);
@@ -653,6 +685,15 @@ public class ClothingStoreMenu : MonoBehaviour
             + Key("Q E") + " / Drag  Turn    " + Key("Scroll") + " Zoom    " + Key("Esc") + " Done";
         var shadow = hintText.gameObject.AddComponent<Outline>();
         shadow.effectColor = new Color(0f, 0f, 0f, 0.7f);
+    }
+
+    // The small boxes (cash, done) in the panel's own look, or the plain dark colour without it.
+    void PanelLook(Image image)
+    {
+        image.color = panelSprite != null ? Color.white : panel;
+        if (panelSprite == null) return;
+        image.sprite = panelSprite;
+        image.type = panelSprite.border != Vector4.zero ? Image.Type.Sliced : Image.Type.Simple;
     }
 
     string Key(string key) => "<color=#" + ColorUtility.ToHtmlStringRGB(accent) + "><b>" + key + "</b></color>";
@@ -680,7 +721,8 @@ public class ClothingStoreMenu : MonoBehaviour
         text.color = color;
         text.raycastTarget = false;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
+        // Anton / Bebas sit taller than their size: never clip a line to nothing.
+        text.verticalOverflow = VerticalWrapMode.Overflow;
         return text;
     }
 

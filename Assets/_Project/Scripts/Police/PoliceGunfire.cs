@@ -62,7 +62,8 @@ namespace OpenworldCrime.Police
             }
             int damage = Mathf.RoundToInt(playerDamage);
             if (damage <= 0 || wanted.PlayerManager == null || wanted.PlayerManager.Controller == null) return;
-            wanted.PlayerManager.Controller.TakeDamage(new vDamage
+            var controller = wanted.PlayerManager.Controller;
+            controller.TakeDamage(new vDamage
             {
                 damageValue = damage,
                 sender = shooter,
@@ -71,6 +72,17 @@ namespace OpenworldCrime.Police
                 damageType = "PoliceShot",
                 hitReaction = false
             });
+            // Just the damage: Invector answers a hit without a hit reaction with its recoil (the arms-up block pose), and that
+            // pose on every police bullet looks like he is shielding himself. Its triggers were set just now, so clear them.
+            Animator animator = controller.GetComponent<Animator>();
+            if (animator != null && controller.currentHealth > 0f)
+            {
+                animator.ResetTrigger(TriggerRecoil);
+                animator.ResetTrigger(ResetState);
+            }
         }
+
+        private static readonly int TriggerRecoil = Animator.StringToHash("TriggerRecoil");
+        private static readonly int ResetState = Animator.StringToHash("ResetState");
     }
 }

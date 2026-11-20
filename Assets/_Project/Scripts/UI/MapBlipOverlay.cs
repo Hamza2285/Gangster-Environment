@@ -125,7 +125,7 @@ namespace OpenworldCrime.UI
             Place(blip, rect, parent);
             if (blip.WorldRadius > 0f) rect.SetAsFirstSibling(); // areas under the other icons
             var background = root.GetComponent<Image>();
-            background.sprite = discSprite;
+            background.sprite = blip.BackgroundSprite != null ? blip.BackgroundSprite : discSprite;
             background.color = blip.BackgroundColour;
             background.raycastTarget = false;
 

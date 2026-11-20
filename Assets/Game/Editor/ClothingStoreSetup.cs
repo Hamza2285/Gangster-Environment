@@ -382,6 +382,7 @@ public static partial class ClothingStoreSetup
 
         var menu = root.AddComponent<ClothingStoreMenu>();
         menu.catalog = catalog;
+        ClothingMenuStyle.Apply(menu);
 
         var fitting = Trigger(root.transform, "Fitting Area", new Vector3(0f, 1f, -5.1f), new Vector3(2.4f, 2f, 2.4f));
         fitting.AddComponent<ClothingStoreFittingSpot>();

@@ -16,6 +16,8 @@ namespace OpenworldCrime.UI
         [SerializeField] private Color iconColour = Color.white;
         [SerializeField] private Color backgroundColour = new Color(0.08f, 0.08f, 0.08f, 0.9f);
         [SerializeField, Min(4f)] private float size = 26f;
+        [Tooltip("Optional: drawn behind the icon instead of the overlay's disc (e.g. a soft glow). Empty = the disc.")]
+        [SerializeField] private Sprite backgroundSprite;
 
         [Header("Moving / Flashing / Area")]
         [Tooltip("The icon follows this object (units, vehicles). Off for places that never move: they cost nothing per frame.")]
@@ -37,6 +39,7 @@ namespace OpenworldCrime.UI
         public Color IconColour => iconColour;
         public Color BackgroundColour => backgroundColour;
         public float Size => size;
+        public Sprite BackgroundSprite => backgroundSprite;
         public bool TracksMovement => tracksMovement || worldRadius > 0f;
         public bool Flashes => flashes;
         public Color FlashColour => flashColour;

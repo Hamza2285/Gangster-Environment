@@ -98,7 +98,9 @@ namespace OpenworldCrime.EditorTools
                     bool man = root.name.StartsWith("Ped_Man");
                     var so = new SerializedObject(bridge);
                     SerializedProperty brawl = so.FindProperty("brawl");
-                    brawl.FindPropertyRelative("fightBackChance").floatValue = man ? MenFightBackChance : 0f;
+                    // Street police always fight back (set up by Game/Police Pedestrians Fight Back): leave them as they are.
+                    if (!root.name.StartsWith("Ped_Police"))
+                        brawl.FindPropertyRelative("fightBackChance").floatValue = man ? MenFightBackChance : 0f;
                     brawl.FindPropertyRelative("groundLayers").intValue = ground;
                     SetClips(brawl.FindPropertyRelative("hitSounds"), hits);
                     SetClips(brawl.FindPropertyRelative("blockSounds"), blocks);
@@ -210,6 +212,7 @@ namespace OpenworldCrime.EditorTools
                     for (int i = 0; i < bones.Count; i++) { bones[i].localRotation = restRot[i]; bones[i].localPosition = restPos[i]; }
                     AnimationClip baked = Bake(go, root, bip, pelvis, bones, source, job);
                     string path = $"{ClipFolder}/Ped{family}_{job.State}.anim";
+                    baked.name = Path.GetFileNameWithoutExtension(path);
                     var existing = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
                     if (existing != null) { EditorUtility.CopySerialized(baked, existing); Object.DestroyImmediate(baked); baked = existing; }
                     else AssetDatabase.CreateAsset(baked, path);
@@ -236,15 +239,45 @@ namespace OpenworldCrime.EditorTools
             foreach (Transform t in go.GetComponentsInChildren<Transform>(true)) names.Add(t.name);
             var human = new List<HumanBone>();
             foreach (HumanBone hb in reference.human) if (names.Contains(hb.boneName)) human.Add(hb);
+            // The street rigs rest with their arms ~38 degrees down. Built from that pose, the avatar reads it as the T-pose and
+            // every retargeted clip carried the arms that far off (swung behind the back while getting up, stiff once standing).
+            // So the avatar is built from a real T-pose; the rig's own pose is put back afterwards.
+            Transform[] all = go.GetComponentsInChildren<Transform>(true);
+            var savedRotations = new Quaternion[all.Length];
+            for (int i = 0; i < all.Length; i++) savedRotations[i] = all[i].localRotation;
+            ForceTPose(go.transform, all);
             var skeleton = new List<SkeletonBone>();
-            foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
+            foreach (Transform t in all)
                 skeleton.Add(new SkeletonBone { name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale });
             var description = reference;
             description.human = human.ToArray();
             description.skeleton = skeleton.ToArray();
             Avatar avatar = AvatarBuilder.BuildHumanAvatar(go, description);
+            for (int i = 0; i < all.Length; i++) all[i].localRotation = savedRotations[i];
             avatar.name = go.name + " Brawl Avatar";
             return avatar;
+        }
+
+        // Arms straight out to the sides, legs straight down (in the character's frame), as Unity's humanoid importer expects.
+        private static void ForceTPose(Transform root, Transform[] all)
+        {
+            var bones = new Dictionary<string, Transform>();
+            foreach (Transform t in all) if (!bones.ContainsKey(t.name)) bones[t.name] = t;
+            void Aim(string from, string to, Vector3 direction)
+            {
+                if (!bones.TryGetValue(from, out Transform a) || !bones.TryGetValue(to, out Transform b)) return;
+                Vector3 current = b.position - a.position;
+                if (current.sqrMagnitude > 1e-8f) a.rotation = Quaternion.FromToRotation(current, direction) * a.rotation;
+            }
+            Vector3 right = root.right, down = -root.up;
+            Aim("Bip01 L UpperArm", "Bip01 L Forearm", -right);
+            Aim("Bip01 L Forearm", "Bip01 L Hand", -right);
+            Aim("Bip01 R UpperArm", "Bip01 R Forearm", right);
+            Aim("Bip01 R Forearm", "Bip01 R Hand", right);
+            Aim("Bip01 L Thigh", "Bip01 L Calf", down);
+            Aim("Bip01 L Calf", "Bip01 L Foot", down);
+            Aim("Bip01 R Thigh", "Bip01 R Calf", down);
+            Aim("Bip01 R Calf", "Bip01 R Foot", down);
         }
 
         private static AnimationClip Bake(GameObject go, Transform root, Transform bip, Transform pelvis, List<Transform> bones, AnimationClip source, Job job)

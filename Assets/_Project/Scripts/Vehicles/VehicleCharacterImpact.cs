@@ -127,7 +127,11 @@ namespace OpenworldCrime.Vehicles
             var impact = new VehicleImpact(velocity, point, body.mass, transform, this, vehicleVelocity);
             receiver.ReceiveVehicleImpact(impact);
 
-            if ((isFirstContact || solidBody) && speed >= feedbackMinimumSpeed && Time.time - lastFeedbackTime >= feedbackCooldown)
+            // Feedback (thud, shake, blood) only when the car itself was moving: walking or running into a parked car is no accident.
+            Vector3 carFlat = vehicleVelocity;
+            carFlat.y = 0f;
+            if ((isFirstContact || solidBody) && speed >= feedbackMinimumSpeed && carFlat.sqrMagnitude >= feedbackMinimumSpeed * feedbackMinimumSpeed
+                && Time.time - lastFeedbackTime >= feedbackCooldown)
             {
                 lastFeedbackTime = Time.time;
                 PlayHitSound(speed);
