@@ -110,9 +110,11 @@ namespace OpenworldCrime.EditorTools
 
             // --- The component on every playable character in the scene.
             int added = 0;
-            const string audio = "Assets/Invector-3rdPersonController/Melee Combat/Audio/";
-            AudioClip[] hits = Sounds(audio, "PunchA.wav", "PunchB.wav", "Hit 1.wav");
-            AudioClip[] swings = Sounds(audio, "Hit 3.wav");
+            // An air whoosh on the swing (an impact sound there made every punch, even a miss, sound like a hit, and a landed one
+            // thud twice) and one heavy punch sound when the fist lands.
+            const string audio = "Assets/AudioClip 1/";
+            AudioClip[] hits = Sounds(audio, "PunchHit1.ogg", "PunchHit2.ogg", "PunchHit4.ogg");
+            AudioClip[] swings = Sounds(audio, "GroundDashWhoosh.wav");
             foreach (PlayableCharacter character in Resources.FindObjectsOfTypeAll<PlayableCharacter>())
             {
                 if (EditorUtility.IsPersistent(character)) continue;

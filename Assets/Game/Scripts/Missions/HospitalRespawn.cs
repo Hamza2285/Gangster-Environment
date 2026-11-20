@@ -21,6 +21,7 @@ public class HospitalRespawn : MonoBehaviour
     Canvas canvas;
     Image tint;
     Text wasted, bill;
+    Image billPlate; // the pink button of the UI art behind the bill (GameButtonStyle)
     Font font;
 
     void Awake()
@@ -74,6 +75,7 @@ public class HospitalRespawn : MonoBehaviour
         // WASTED: fade to a grey-red tint with the big title.
         canvas.gameObject.SetActive(true);
         bill.text = "";
+        if (billPlate != null) billPlate.gameObject.SetActive(false);
         wasted.color = new Color(0.85f, 0.12f, 0.1f, 0f);
         for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / 1.2f)
         {
@@ -106,7 +108,10 @@ public class HospitalRespawn : MonoBehaviour
         }
 
         int charged = ChargeFee();
-        bill.text = charged > 0 ? "Hospital bill  <color=#FF5A4A>-$" + charged.ToString("N0") + "</color>" : "Hospital bill waived";
+        bill.text = billPlate != null
+            ? (charged > 0 ? "Hospital bill  -$" + charged.ToString("N0") : "Hospital bill waived")
+            : (charged > 0 ? "Hospital bill  <color=#FF5A4A>-$" + charged.ToString("N0") + "</color>" : "Hospital bill waived");
+        if (billPlate != null) billPlate.gameObject.SetActive(true);
         yield return new WaitForSecondsRealtime(0.4f);
 
         for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / 0.8f)
@@ -270,7 +275,19 @@ public class HospitalRespawn : MonoBehaviour
         var outline = wasted.gameObject.AddComponent<Outline>();
         outline.effectColor = new Color(0f, 0f, 0f, 0.8f);
         outline.effectDistance = new Vector2(4f, -4f);
+        // A pink button behind the bill, like the UI art's "hospital bill -$500".
+        var plateObject = new GameObject("Bill Plate", typeof(RectTransform));
+        plateObject.transform.SetParent(canvasObject.transform, false);
+        var plateRect = (RectTransform)plateObject.transform;
+        plateRect.anchorMin = plateRect.anchorMax = new Vector2(0.5f, 0.5f);
+        plateRect.anchoredPosition = new Vector2(0f, -90f);
+        plateRect.sizeDelta = new Vector2(620f, 96f);
+        billPlate = plateObject.AddComponent<Image>();
+        billPlate.raycastTarget = false;
+        if (!GameButtonStyle.Button(billPlate)) { Destroy(plateObject); billPlate = null; }
+        else plateObject.SetActive(false);
         bill = Label("Bill", canvasObject.transform, "", 44, new Vector2(0f, -90f));
+        if (billPlate != null) GameButtonStyle.Label(bill);
         bill.gameObject.AddComponent<Shadow>().effectDistance = new Vector2(2f, -2f);
 
         canvasObject.SetActive(false);

@@ -441,20 +441,22 @@ namespace OpenworldCrime.EditorTools
             main.playOnAwake = false;
             main.loop = false;
             main.duration = 1f;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(1.8f, 2.4f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(4.5f, 5.5f);
             main.startSpeed = 0f;
             main.startSize3D = true;
             main.startSizeX = 0.17f;
             main.startSizeY = 0.08f;
             main.startSizeZ = 1f;
             main.startRotation3D = true;
-            main.gravityModifier = 0.32f;
+            main.gravityModifier = 0.22f;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 160;
+            main.maxParticles = 700;
             var emission = ps.emission;
             emission.enabled = false;
             var shape = ps.shape;
             shape.enabled = false;
+            // The notes land on the stage / floor and lie there until they fade (they used to fall through it at once).
+            CashCollision(ps);
             var rotation = ps.rotationOverLifetime;
             rotation.enabled = true;
             rotation.separateAxes = true;
@@ -464,7 +466,7 @@ namespace OpenworldCrime.EditorTools
             var drag = ps.limitVelocityOverLifetime;
             drag.enabled = true;
             drag.limit = 50f;
-            drag.drag = 1.4f;
+            drag.drag = 0.5f; // light: the notes reach the dancer on the stage before they flutter down
             var color = ps.colorOverLifetime;
             color.enabled = true;
             var fade = new Gradient();
@@ -608,6 +610,21 @@ namespace OpenworldCrime.EditorTools
                     if (muscle.StartsWith(prefix)) return side + "Hand." + finger + "." + muscle.Substring(prefix.Length);
                 }
             return muscle;
+        }
+
+        public static void CashCollision(ParticleSystem ps)
+        {
+            var collision = ps.collision;
+            collision.enabled = true;
+            collision.type = ParticleSystemCollisionType.World;
+            collision.mode = ParticleSystemCollisionMode.Collision3D;
+            collision.quality = ParticleSystemCollisionQuality.Medium;
+            collision.dampen = 0.85f;
+            collision.bounce = 0.05f;
+            collision.lifetimeLoss = 0f;
+            collision.radiusScale = 0.6f;
+            collision.collidesWith = ~(1 << 2);
+            collision.enableDynamicColliders = false;
         }
     }
 }

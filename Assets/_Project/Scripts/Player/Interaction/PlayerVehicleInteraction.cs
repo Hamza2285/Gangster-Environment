@@ -268,6 +268,11 @@ namespace OpenworldCrime.Player
         [Tooltip("Safety limit (s) for the whole bail-out; control is given back after it.")]
         [SerializeField, Min(2f)] private float bailTimeout = 15f;
 
+        [Header("Crash Scream")]
+        [Tooltip("Played when a heavy crash throws the player out (windscreen ejection, thrown off a bike). One is picked at random.")]
+        [SerializeField] private AudioClip[] crashScreams = new AudioClip[0];
+        [SerializeField, Range(0f, 1f)] private float crashScreamVolume = 1f;
+
         [Header("Windshield Ejection (hard frontal crash, GTA IV style)")]
         [Tooltip("Throw the driver out through the windscreen when the car stops hard against something head-on.")]
         [SerializeField] private bool windshieldEjection = true;
@@ -595,6 +600,7 @@ namespace OpenworldCrime.Player
                     int waypoint = 0;
                     float timer = 0f;
                     float stuckTimer = 0f;
+                    int stuckRebuilds = 0;
                     Vector3 stuckCheckPosition = transform.position;
 
                     while (true)
@@ -640,9 +646,19 @@ namespace OpenworldCrime.Player
                             moved.y = 0f;
                             if (moved.magnitude < approachStuckDistance)
                             {
+                                // Still stuck after a fresh path (another car, a pole or a wall the path around this car does
+                                // not know about): step to the door rather than stand pushing on the far side.
+                                if (++stuckRebuilds >= 2)
+                                {
+                                    Vector3 toDoor = enterPosition - position;
+                                    toDoor.y = 0f;
+                                    SnapTo(enterPosition, toDoor.sqrMagnitude > 0.01f ? Quaternion.LookRotation(toDoor.normalized) : transform.rotation);
+                                    break;
+                                }
                                 approachPath.Build(target, position, enterPosition, capsule.radius, approachBodyMargin, approachCornerClearance);
                                 waypoint = 0;
                             }
+                            else stuckRebuilds = 0;
                             stuckTimer = 0f;
                             stuckCheckPosition = position;
                         }
@@ -1027,6 +1043,7 @@ namespace OpenworldCrime.Player
             playerCameraRoot.SetActive(true);
             Rigidbody vehicleBody = ((Component)vehicle).GetComponent<Rigidbody>();
             StartCoroutine(BailRoutine(vehicle, vehicleBody, kmh, velocityBeforeCrash));
+            PlayCrashScream();
             return true;
         }
 
@@ -1045,7 +1062,32 @@ namespace OpenworldCrime.Player
             playerCameraRoot.SetActive(true);
             Rigidbody vehicleBody = ((Component)vehicle).GetComponent<Rigidbody>();
             StartCoroutine(BailRoutine(vehicle, vehicleBody, launchVelocity.magnitude * 3.6f, launchVelocity));
+            PlayCrashScream();
             return true;
+        }
+
+        private AudioSource screamSource;
+
+        // A scream as the body leaves the vehicle. Its own source on the character, so it goes with the flying body and is
+        // not cut by other one-shots; mostly 2D, since the camera follows the player anyway.
+        private void PlayCrashScream()
+        {
+            if (crashScreams == null || crashScreams.Length == 0) return;
+            AudioClip clip = crashScreams[UnityEngine.Random.Range(0, crashScreams.Length)];
+            if (clip == null) return;
+            if (screamSource == null)
+            {
+                screamSource = gameObject.AddComponent<AudioSource>();
+                screamSource.playOnAwake = false;
+                screamSource.spatialBlend = 0.4f;
+                screamSource.minDistance = 4f;
+                screamSource.maxDistance = 40f;
+            }
+            screamSource.pitch = UnityEngine.Random.Range(0.95f, 1.05f);
+            screamSource.Stop();
+            screamSource.clip = clip;
+            screamSource.volume = crashScreamVolume;
+            screamSource.Play();
         }
 
         private IEnumerator BailRoutine(IVehicleController vehicle, Rigidbody vehicleBody, float kmh, Vector3? windshieldLaunch = null)

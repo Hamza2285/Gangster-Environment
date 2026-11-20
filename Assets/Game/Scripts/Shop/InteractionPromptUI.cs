@@ -31,7 +31,9 @@ public class InteractionPromptUI : MonoBehaviour
         rect.SetParent(canvasObject.transform, false);
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = new Vector2(36f, -96f);
-        box.AddComponent<Image>().color = new Color(0.03f, 0.03f, 0.04f, 0.82f);
+        var boxImage = box.AddComponent<Image>();
+        boxImage.color = new Color(0.03f, 0.03f, 0.04f, 0.82f);
+        GameButtonStyle.Button(boxImage);
         group = box.AddComponent<CanvasGroup>();
         group.blocksRaycasts = false;
         var fit = box.AddComponent<ContentSizeFitter>();
@@ -46,6 +48,7 @@ public class InteractionPromptUI : MonoBehaviour
         text.color = Color.white;
         text.supportRichText = true;
         text.raycastTarget = false;
+        GameButtonStyle.Label(text);
         box.SetActive(false);
     }
 

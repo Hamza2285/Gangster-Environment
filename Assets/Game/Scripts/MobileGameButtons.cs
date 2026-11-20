@@ -45,18 +45,38 @@ public class MobileGameButtons : MonoBehaviour
         Build();
     }
 
-    // The round button art and font of the existing touch buttons, so these match them.
+    // A round disc with a light rim, in the look of the icon buttons (Game_Play_buttons sheet); the font of the touch buttons.
+    // (The touch buttons now carry icons, so their art can no longer be borrowed for these labelled buttons.)
     void FindStyle()
     {
-        foreach (var image in FindObjectsByType<Image>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        knob = MakeDisc();
+        foreach (var text in FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            if (image.name != "Jump" || image.sprite == null) continue;
-            knob = image.sprite;
-            var label = image.GetComponentInChildren<Text>(true);
-            if (label != null) font = label.font;
+            if (text.transform.parent == null || text.transform.parent.name != "Jump") continue;
+            font = text.font;
             break;
         }
         if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+    }
+
+    static Sprite MakeDisc()
+    {
+        const int size = 128;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        float r = size * 0.5f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                float edge = Mathf.Clamp01(r - d);                                   // soft outer edge
+                float rim = Mathf.Clamp01(1f - Mathf.Abs(d - (r - 5f)) / 2.5f);      // light ring just inside it
+                float fill = d < r - 5f ? 0.82f : 0f;
+                float a = Mathf.Max(fill, rim) * edge;
+                float v = Mathf.Lerp(0.85f, 1f, rim);
+                tex.SetPixel(x, y, new Color(v, v, v, a));
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
     }
 
     void Build()
@@ -87,7 +107,7 @@ public class MobileGameButtons : MonoBehaviour
             () => Free() && !MapOpen() && !GamePlayer.InVehicle && FocusedVehicle() != null);
         // Whatever the player can interact with right now (buy food at a beach cart, enter a shop): its own label, the interact input.
         actionButton = Add("ACTION", "M_Interact", new Vector2(0.5f, 0f), new Vector2(0f, 330f), 160f, new Color(0.85f, 0.45f, 0.1f, 0.8f), 22,
-            () => Free() && !MapOpen() && !GamePlayer.InVehicle && FocusPrompt() != null);
+            () => Free() && !MapOpen() && !GamePlayer.InVehicle && FocusPrompt() != null && !GamePromptShown());
         // On foot, beside the minimap (top left; tapping the minimap opens the full map).
         besideMinimap.Add(Add("TAXI", "M_Taxi", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20, () => Free() && !MapOpen() && !GamePlayer.InVehicle && TaxiIdle()));
         besideMinimap.Add(Add("HORN", "M_Horn", new Vector2(0f, 1f), new Vector2(395f, -170f), 100f, yellow, 20,
@@ -98,8 +118,7 @@ public class MobileGameButtons : MonoBehaviour
         switchButton.reportsPointer = true;
         besideMinimap.Add(switchButton);
 
-        // Sniper scope: while aiming a scoped gun (next to AIM).
-        scopeButton = Add("SCOPE", "M_Scope", new Vector2(1f, 0f), new Vector2(-545f, 300f), 115f, blue, 22, () => !GamePlayer.InVehicle && !MapOpen() && CanScope());
+        // (No SCOPE button: the user asked for it to go. Scoped guns still aim with AIM.)
 
         // The ambulance: start a paramedic mission (beside the vehicle EXIT button).
         Add("START\nMISSION", "M_Mission", new Vector2(1f, 1f), new Vector2(-335f, -420f), 170f, red, 24, () => GamePlayer.InVehicle && !MapOpen() && mission != null && mission.OfferingStart);
@@ -169,6 +188,7 @@ public class MobileGameButtons : MonoBehaviour
         FollowMinimap();
         UpdateEnterButton();
         UpdateActionButton();
+        UpdateOnFootControls();
         // The finger on SWITCH steers the character wheel.
         CharacterWheelUI.TouchPoint = switchButton != null && switchButton.Held ? switchButton.Pointer : (Vector2?)null;
         foreach (var b in buttons)
@@ -217,6 +237,47 @@ public class MobileGameButtons : MonoBehaviour
         bool steal = target.EntryPrompt == OpenworldCrime.Vehicles.VehicleEntryPrompt.Steal;
         string label = bike ? (steal ? "STEAL\nBIKE" : "RIDE\nBIKE") : (steal ? "STEAL\nCAR" : "ENTER\nCAR");
         if (enterLabel.text != label) enterLabel.text = label;
+
+        // Cars: the door icon of the controls sheet, where the mock puts it; bikes keep the labelled disc.
+        var image = enterButton.GetComponent<Image>();
+        var rect = (RectTransform)enterButton.transform;
+        Sprite door = GameButtonStyle.EnterCar;
+        bool icon = !bike && door != null;
+        image.sprite = icon ? door : knob;
+        image.preserveAspect = icon;
+        image.color = icon ? new Color(1f, 1f, 1f, 0.92f) : new Color(0.15f, 0.5f, 0.2f, 0.75f);
+        enterLabel.enabled = !icon;
+        rect.anchoredPosition = icon ? new Vector2(1455f - 1920f, 1080f - 460f) : new Vector2(-130f, 550f);
+        rect.sizeDelta = Vector2.one * (icon ? 132f : 135f);
+    }
+
+    // The touch combat buttons and stick mean nothing while the player has no control (seated in the club, shop screens,
+    // riding in a taxi): hidden then, so they don't sit under those screens' own buttons.
+    CanvasGroup onFootGroup;
+    OpenworldCrime.Club.ClubPlayerSeating clubSeating;
+    float nextSeatLookup;
+
+    void UpdateOnFootControls()
+    {
+        if (onFootGroup == null)
+        {
+            var touch = GameObject.Find("Touch Controls");
+            var onFoot = touch != null ? touch.transform.Find("OnFootControls") : null;
+            if (onFoot == null) return;
+            onFootGroup = onFoot.GetComponent<CanvasGroup>();
+            if (onFootGroup == null) onFootGroup = onFoot.gameObject.AddComponent<CanvasGroup>();
+        }
+        // Sitting in the club keeps the player's control on (the club's own buttons work then): asked separately.
+        if (clubSeating == null && Time.unscaledTime >= nextSeatLookup)
+        {
+            clubSeating = FindFirstObjectByType<OpenworldCrime.Club.ClubPlayerSeating>();
+            nextSeatLookup = Time.unscaledTime + 1f;
+        }
+        var player = GamePlayer.Current;
+        bool seated = clubSeating != null && clubSeating.IsSeated;
+        bool canAct = (player == null || player.ControlEnabled) && !seated;
+        onFootGroup.alpha = canAct ? 1f : 0f;
+        onFootGroup.blocksRaycasts = onFootGroup.interactable = canAct;
     }
 
     // The prompt of the interactable in focus ("Buy food ($20)"), or null.
@@ -236,9 +297,32 @@ public class MobileGameButtons : MonoBehaviour
         if (actionLabel == null) actionLabel = actionButton.GetComponentInChildren<Text>(true);
         string prompt = FocusPrompt();
         if (prompt == null || actionLabel == null) return;
-        // "Buy food ($20)" -> "BUY FOOD" over "$20"
-        string label = prompt.Replace(" ($", System.Environment.NewLine.Substring(System.Environment.NewLine.Length - 1) + "$").Replace(")", "").ToUpperInvariant();
+        // The pink button of the UI art with the whole prompt on one line ("Buy food ($20)"), or the old disc without the art.
+        var image = actionButton.GetComponent<Image>();
+        if (!actionStyled && GameButtonStyle.Button(image))
+        {
+            actionStyled = true;
+            ((RectTransform)actionButton.transform).sizeDelta = new Vector2(440f, 88f);
+            actionLabel.fontSize = 34;
+            GameButtonStyle.Label(actionLabel);
+        }
+        string label = actionStyled
+            ? GameInput.WithoutKeys(prompt)
+            // "Buy food ($20)" -> "BUY FOOD" over "$20"
+            : prompt.Replace(" ($", System.Environment.NewLine.Substring(System.Environment.NewLine.Length - 1) + "$").Replace(")", "").ToUpperInvariant();
         if (actionLabel.text != label) actionLabel.text = label;
+    }
+
+    bool actionStyled;
+
+    // The HUD's own interact prompt (UIManager) is a tap button on phones: when it shows, this one would only repeat it.
+    GameObject gamePrompt;
+    bool GamePromptShown()
+    {
+        if (gamePrompt == null)
+            foreach (var image in FindObjectsByType<Image>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (image.name == "InteractPrompt") { gamePrompt = image.gameObject; break; }
+        return gamePrompt != null && gamePrompt.activeInHierarchy;
     }
 
     void FollowMinimap()

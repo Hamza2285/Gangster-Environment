@@ -386,7 +386,12 @@ namespace OpenworldCrime.UI
             if (vehiclePromptPanel == null) return;
             bool show = vehicle != null;
             if (show && vehiclePromptText != null)
-                vehiclePromptText.text = vehicle.EntryPrompt == VehicleEntryPrompt.Steal ? stealVehiclePrompt : enterVehiclePrompt;
+            {
+                string prompt = vehicle.EntryPrompt == VehicleEntryPrompt.Steal ? stealVehiclePrompt : enterVehiclePrompt;
+                // Touch screens: no "[F]" (the get-in button is right there).
+                bool touch = vInput.instance != null && vInput.instance.inputDevice == InputDevice.Mobile;
+                vehiclePromptText.text = touch ? GameInput.WithoutKeys(prompt) : prompt;
+            }
             vehiclePromptPanel.SetActive(show);
         }
 

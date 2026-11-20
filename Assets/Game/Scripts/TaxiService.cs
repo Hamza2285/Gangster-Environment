@@ -20,8 +20,12 @@ public class TaxiService : MonoBehaviour
     public float braking = 7f;
     [Tooltip("Enter gets in the taxi when the player is this close to it.")]
     public float enterDistance = 7f;
-    [Tooltip("How far the parked taxi moves from the lane centre toward the footpath.")]
+    [Tooltip("Most the parked taxi moves from the lane centre toward the footpath. It parks this far, or less where the kerb is closer.")]
     public float curbParkOffset = 2.3f;
+    [Tooltip("Gap (m) the parked taxi's side keeps from the kerb face: the gutter and the yellow edge line run ~0.9 m inside it.")]
+    public float curbGap = 1f;
+    [Tooltip("Half the taxi's width (m), for keeping its wheels off the kerb.")]
+    public float taxiHalfWidth = 0.95f;
     [Tooltip("A taxi on its way changes course when the player's nearest curb moves this far from where it was heading.")]
     public float followThreshold = 15f;
     [Tooltip("When the drive to the player would be longer than this, a new taxi comes from nearby instead.")]
@@ -200,7 +204,7 @@ public class TaxiService : MonoBehaviour
         map.ShowMessage("Your taxi got tired of waiting");
         var departLinks = new List<RoadNetwork.Link>();
         var departure = RoadNetwork.Instance.BuildDepartPath(taxiStop, 110f, departLinks);
-        RoadNetwork.OffsetToCurb(departure, curbParkOffset, 20f, 0f);
+        RoadNetwork.OffsetToCurb(departure, ParkOffset(taxiStop), 20f, 0f);
         StartCoroutine(DriveAwayAndRemove(taxi, departure, departLinks, taxiStop.lane));
         taxi = null;
         CurrentState = State.Idle;
@@ -255,7 +259,7 @@ public class TaxiService : MonoBehaviour
     void SpawnTaxiBehind(RoadNetwork.RoadPoint stop)
     {
         followPath = RoadNetwork.Instance.BuildApproachPath(stop, approachDistance, followLinks, out followLane);
-        RoadNetwork.OffsetToCurb(followPath, curbParkOffset, 0f, 30f);
+        RoadNetwork.OffsetToCurb(followPath, ParkOffset(stop), 0f, 30f);
         if (taxi != null) Destroy(taxi);
         taxi = Instantiate(taxiPrefab, followPath[0], Quaternion.identity);
         taxi.name = "Taxi";
@@ -288,7 +292,7 @@ public class TaxiService : MonoBehaviour
             tooFar = true;
             return false;
         }
-        RoadNetwork.OffsetToCurb(route, curbParkOffset, 0f, 30f);
+        RoadNetwork.OffsetToCurb(route, ParkOffset(stop), 0f, 30f);
         route.Insert(0, car.position);
 
         followPath = route;
@@ -359,7 +363,7 @@ public class TaxiService : MonoBehaviour
                 tripPath.Add(taxiStop.position);
                 tripPath.Add(destination.position);
             }
-            RoadNetwork.OffsetToCurb(tripPath, curbParkOffset, 25f, 30f);
+            RoadNetwork.OffsetToCurb(tripPath, ParkOffset(destination), 25f, 30f);
             float length = PathLength(tripPath);
             tripFare = FareFor(length);
 
@@ -472,7 +476,7 @@ public class TaxiService : MonoBehaviour
         {
             var departLinks = new List<RoadNetwork.Link>();
             var departure = network.BuildDepartPath(destination, 110f, departLinks);
-            RoadNetwork.OffsetToCurb(departure, curbParkOffset, 20f, 0f);
+            RoadNetwork.OffsetToCurb(departure, ParkOffset(destination), 20f, 0f);
             StartCoroutine(DriveAwayAndRemove(leaving, departure, departLinks, destination.lane));
         }
         else if (leaving != null)
@@ -492,6 +496,53 @@ public class TaxiService : MonoBehaviour
     {
         yield return DriveAlong(car.transform, path, taxiSpeed, false, null, links, lane);
         if (car != null) Destroy(car);
+    }
+
+    // How far from the lane centre the taxi parks at this stop: up to the kerb (where the road colliders end, or the ground
+    // steps up) less half the car and a small gap, so its wheels stay on the road. A fixed offset put it up on the kerb on
+    // narrower roads.
+    static readonly RaycastHit[] groundHits = new RaycastHit[8];
+    Transform roadColliders;
+
+    float ParkOffset(RoadNetwork.RoadPoint stop)
+    {
+        if (roadColliders == null)
+        {
+            var go = GameObject.Find("Traffic Road Colliders");
+            if (go != null) roadColliders = go.transform;
+        }
+        Vector3 left = new Vector3(-stop.direction.z, 0f, stop.direction.x);
+        if (left.sqrMagnitude < 0.0001f) return curbParkOffset;
+        left.Normalize();
+        float limit = curbParkOffset + taxiHalfWidth + curbGap;
+        bool? byColliders = null;
+        for (float d = 0.2f; d <= limit; d += 0.1f)
+        {
+            if (!GroundAt(stop.position + left * d, stop.position.y, out Collider ground, out float height)) continue;
+            bool road = roadColliders != null && ground.transform.IsChildOf(roadColliders);
+            if (byColliders == null) byColliders = road; // lane centre on a road collider: its edge is the kerb
+            bool kerb = height - stop.position.y > 0.05f || (byColliders.Value && !road);
+            if (kerb) return Mathf.Clamp(d - taxiHalfWidth - curbGap, 0.2f, curbParkOffset);
+        }
+        return curbParkOffset;
+    }
+
+    // The static ground under a point (cars, people and the taxi itself are skipped).
+    bool GroundAt(Vector3 point, float roadY, out Collider ground, out float height)
+    {
+        ground = null;
+        height = 0f;
+        int n = Physics.RaycastNonAlloc(new Vector3(point.x, roadY + 2f, point.z), Vector3.down, groundHits, 4f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            Collider c = groundHits[i].collider;
+            if (c.attachedRigidbody != null || c is CharacterController) continue;
+            if (taxi != null && c.transform.IsChildOf(taxi.transform)) continue;
+            if (groundHits[i].point.y > roadY + 1f) continue; // awnings, bridges overhead
+            if (groundHits[i].distance < best) { best = groundHits[i].distance; ground = c; height = groundHits[i].point.y; }
+        }
+        return ground != null;
     }
 
     // A spot on the footpath beside the stop, with ground under it and room to stand.
@@ -569,6 +620,44 @@ public class TaxiService : MonoBehaviour
         }
         // Parked: other cars may pass, or use the lane again once it has gone.
         roadUser.ReleaseAll();
+        if (stopAtEnd) yield return SettleAtKerb(car);
+    }
+
+    // The planned curb offset is measured at the stop's lane point; on bends the car ends up a little off it. Measured again
+    // from where the car really stands, it eases sideways (and straightens) so its left wheels keep Curb Gap off the kerb.
+    IEnumerator SettleAtKerb(Transform car)
+    {
+        if (car == null) yield break;
+        Vector3 forward = Vector3.ProjectOnPlane(car.forward, Vector3.up).normalized;
+        Vector3 left = new Vector3(-forward.z, 0f, forward.x);
+        float kerb = -1f;
+        bool? byColliders = null;
+        if (roadColliders == null)
+        {
+            var go = GameObject.Find("Traffic Road Colliders");
+            if (go != null) roadColliders = go.transform;
+        }
+        float roadY = car.position.y;
+        for (float d = 0f; d <= 4.5f; d += 0.1f)
+        {
+            if (!GroundAt(car.position + left * d, roadY, out Collider ground, out float height)) continue;
+            bool road = roadColliders != null && ground.transform.IsChildOf(roadColliders);
+            if (byColliders == null) { byColliders = road; roadY = height; }
+            if (height - roadY > 0.05f || (byColliders.Value && !road)) { kerb = d; break; }
+        }
+        if (kerb < 0f) yield break; // no kerb in reach (open road edge): stay where it stopped
+        float shift = Mathf.Clamp(kerb - taxiHalfWidth - curbGap, -2f, 2f);
+        if (Mathf.Abs(shift) < 0.1f) yield break;
+        Vector3 from = car.position, to = car.position + left * shift;
+        Quaternion fromRotation = car.rotation;
+        for (float t = 0f; t < 1f && car != null; t += Time.deltaTime / 0.6f)
+        {
+            float k = Mathf.SmoothStep(0f, 1f, t);
+            car.position = Vector3.Lerp(from, to, k);
+            car.rotation = Quaternion.Slerp(fromRotation, Quaternion.LookRotation(forward), k);
+            yield return null;
+        }
+        if (car != null) car.SetPositionAndRotation(to, Quaternion.LookRotation(forward));
     }
 
     bool SomeoneAhead(Transform car, float range)

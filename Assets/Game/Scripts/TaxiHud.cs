@@ -20,6 +20,7 @@ public class TaxiHud : MonoBehaviour
     }
 
     static readonly Color ButtonColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+    bool styled; // buttons use the pink art (GameButtonStyle)
     static readonly Color ButtonHover = new Color(0.36f, 0.33f, 0.16f, 1f);
 
     readonly List<HudButton> optionButtons = new List<HudButton>();
@@ -94,7 +95,7 @@ public class TaxiHud : MonoBehaviour
         int seconds = Mathf.CeilToInt(Mathf.Max(secondsLeft, 0f));
         fareText.text = "Fare   " + FormatFare(fare);
         timeText.text = "Time to reach   " + (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
-        cameraButton.label.text = "Camera: " + cameraName + "  [C]";
+        cameraButton.label.text = "Camera: " + cameraName + (GameInput.MobileControls ? "" : "  [C]");
     }
 
     public static string FormatFare(float fare)
@@ -143,11 +144,14 @@ public class TaxiHud : MonoBehaviour
     {
         Vector2 pointer = GameInput.PointerPosition;
         bool click = GameInput.PrimaryClickDown;
+        bool touch = GameInput.MobileControls;
         foreach (var button in buttons)
         {
+            // Phones: "Watch the whole trip  [1]" -> "Watch the whole trip".
+            if (touch && button.label.text.IndexOf('[') >= 0) button.label.text = GameInput.WithoutKeys(button.label.text);
             bool over = RectTransformUtility.ScreenPointToLocalPointInRectangle(button.rect, pointer, null, out Vector2 local)
                 && button.rect.rect.Contains(local);
-            button.image.color = over ? ButtonHover : ButtonColor;
+            button.image.color = styled ? GameButtonStyle.Tint(over) : over ? ButtonHover : ButtonColor;
             if (over && click)
             {
                 button.onClick?.Invoke();
@@ -226,6 +230,7 @@ public class TaxiHud : MonoBehaviour
         rect.sizeDelta = size;
         var image = rect.gameObject.AddComponent<Image>();
         image.color = new Color(0.07f, 0.07f, 0.07f, 0.93f);
+        GameButtonStyle.Panel(image);
         image.raycastTarget = false;
         return rect;
     }
@@ -237,8 +242,10 @@ public class TaxiHud : MonoBehaviour
         Place(rect, position, size);
         var image = rect.gameObject.AddComponent<Image>();
         image.color = ButtonColor;
+        styled = GameButtonStyle.Button(image) || styled;
         image.raycastTarget = false;
         var label = NewText(text, rect, 24, TextAnchor.MiddleCenter, Color.white);
+        GameButtonStyle.Label(label);
         label.rectTransform.anchorMin = Vector2.zero;
         label.rectTransform.anchorMax = Vector2.one;
         label.rectTransform.offsetMin = label.rectTransform.offsetMax = Vector2.zero;

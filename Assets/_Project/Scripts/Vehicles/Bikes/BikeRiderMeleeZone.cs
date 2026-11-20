@@ -22,6 +22,9 @@ namespace OpenworldCrime.Vehicles
 
         public void Setup(TrafficBikeAdapter owner) => adapter = owner;
 
+        /// <summary>The bike this rider sits on.</summary>
+        public TrafficBikeAdapter Adapter => adapter;
+
         public void TakeDamage(vDamage damage)
         {
             if (adapter == null || damage == null) return;

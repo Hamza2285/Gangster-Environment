@@ -59,8 +59,9 @@ public class GameMapUI : MonoBehaviour
     int closedFrame = -1;
     Text fullMapHelp;
     const string MapHelp = "Left click: set destination     Drag: move map     Scroll: zoom     Right click: remove marker     M: close map";
-    const string MobileMapHelp = "Tap: set destination     Drag: move map     + / –: zoom";
+    const string MobileMapHelp = "Tap: set destination     Tap marker: remove     Drag: move map     Pinch / + –: zoom";
     const string TaxiMapHelp = "Left click: choose destination     Drag: move map     Scroll: zoom     Right click: remove marker     Esc: go";
+    const string TaxiMobileMapHelp = "Tap: choose destination     Drag: move map     Pinch / + –: zoom     MAP: go";
 
     const float MaxFullZoom = 6f, FindPlayerZoom = 3f;
     const float FindPingSeconds = 1.2f;
@@ -88,6 +89,10 @@ public class GameMapUI : MonoBehaviour
     float findPingLeft;
     bool draggingSlider, pressingMap, movedMap;
     Vector2 pressPointer, pressPan;
+    // Two-finger pinch / drag on phones; after a pinch nothing happens until every finger is off the screen.
+    bool pinching, waitForRelease;
+    float pinchDistance;
+    Vector2 pinchMiddle;
 
     Text messageText, hintText;
     float messageUntil;
@@ -283,12 +288,13 @@ public class GameMapUI : MonoBehaviour
     {
         if (IsMapOpen) return;
         chooseDestinationMode = true;
-        fullMapHelp.text = TaxiMapHelp;
+        fullMapHelp.text = MobileControls() ? TaxiMobileMapHelp : TaxiMapHelp;
         ToggleMap();
     }
 
     void HandleMapClicks()
     {
+        if (HandlePinch()) return;
         Vector2 pointer = GameInput.PointerPosition;
         if (GameInput.SecondaryClickDown && WaypointSystem.Instance != null) WaypointSystem.Instance.ClearMarker();
 
@@ -326,7 +332,11 @@ public class GameMapUI : MonoBehaviour
             if (!GameInput.PrimaryHeld)
             {
                 pressingMap = false;
-                if (!movedMap) PlaceMarker(pointer);
+                if (!movedMap)
+                {
+                    if (GameInput.TouchActive && TapOnMarker(pointer)) WaypointSystem.Instance.ClearMarker();
+                    else PlaceMarker(pointer);
+                }
             }
         }
 
@@ -339,6 +349,45 @@ public class GameMapUI : MonoBehaviour
         }
         float keys = GameInput.ZoomKeys;
         if (keys != 0f) SetFullZoom(fullZoom * Mathf.Exp(keys * 1.5f * Time.unscaledDeltaTime), Vector2.zero);
+    }
+
+    // Two fingers: spreading / pinching zooms around the point between them, moving them together drags the map.
+    // True while it owns the touch (the one-finger tap / drag below must not also act on it).
+    bool HandlePinch()
+    {
+        if (GameInput.TwoFingers(out Vector2 a, out Vector2 b))
+        {
+            float distance = Vector2.Distance(a, b);
+            Vector2 middle = (a + b) * 0.5f;
+            if (pinching && pinchDistance > 1f)
+            {
+                SetFullPan(fullPan + (middle - pinchMiddle) / canvas.scaleFactor);
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(fullViewport, middle, null, out Vector2 around);
+                SetFullZoom(fullZoom * distance / pinchDistance, around);
+            }
+            pinching = true;
+            pinchDistance = distance;
+            pinchMiddle = middle;
+            pressingMap = draggingSlider = false;
+            waitForRelease = true;
+            return true;
+        }
+        pinching = false;
+        if (waitForRelease)
+        {
+            if (GameInput.TouchCount > 0) return true;
+            waitForRelease = false;
+        }
+        return false;
+    }
+
+    // A tap on the marker that is already there takes it away (phones have no right click).
+    bool TapOnMarker(Vector2 pointer)
+    {
+        var waypoints = WaypointSystem.Instance;
+        if (waypoints == null || !waypoints.HasMarker || !fullMarker.gameObject.activeInHierarchy) return false;
+        Vector2 onScreen = RectTransformUtility.WorldToScreenPoint(null, fullMarker.position);
+        return Vector2.Distance(onScreen, pointer) <= 34f * canvas.scaleFactor;
     }
 
     static bool Over(RectTransform rect, Vector2 pointer)

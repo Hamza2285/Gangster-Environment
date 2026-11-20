@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -95,7 +96,7 @@ public static class MapIconsSetup
 
         // 3. Duplicate shop buildings: an icon where the original's entrance is, on the same spot of the copy.
         AddForCopies(root.transform, "Gangfire Weapon Shop", FindEntrance("Gun Shop Entrance - gunshop_gangfire"), "Gun Shop", gun, log);
-        AddForCopies(root.transform, "Miami Clothing Store", FindEntrance("Miami Clothing Store Entrance"), "Clothing Store", clothes, log);
+        AddEntrancesForCopies("Miami Clothing Store", FindEntrance("Miami Clothing Store Entrance"), log);
 
         // 4. Food stalls.
         int n = 0;
@@ -146,6 +147,9 @@ public static class MapIconsSetup
         }
         log.AppendLine($"  road flags: {flags}");
 
+        // 6. Race flags on the middle of the road as the map draws it.
+        SnapRaceIconsToRoads(log);
+
         EditorSceneManager.MarkSceneDirty(scene);
         return log.ToString();
     }
@@ -183,6 +187,41 @@ public static class MapIconsSetup
         }
     }
 
+    // Every copy of the building gets a working entrance: a clone of the original's (trigger, ClothingStoreEntrance, exit point and
+    // its own map icon), at the same spot of the copy as the original's door, the way out put on the ground in front.
+    static void AddEntrancesForCopies(string buildingName, Transform entrance, System.Text.StringBuilder log)
+    {
+        if (entrance == null) { log.AppendLine("  !! no entrance for " + buildingName); return; }
+        Transform original = null;
+        var copies = new List<Transform>();
+        foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (t.parent == null || t.parent.name != "env") continue;
+            if (t.name == buildingName) original = t;
+            else if (t.name.StartsWith(buildingName + " (")) copies.Add(t);
+        }
+        if (original == null) { log.AppendLine("  !! no " + buildingName); return; }
+        // Clones from an earlier run are rebuilt.
+        foreach (Transform sibling in entrance.parent.Cast<Transform>().ToArray())
+            if (sibling != entrance && sibling.name.StartsWith(entrance.name + " (")) Object.DestroyImmediate(sibling.gameObject);
+        Vector3 local = original.InverseTransformPoint(entrance.position);
+        Quaternion turn = Quaternion.Inverse(original.rotation) * entrance.rotation;
+        foreach (var copy in copies)
+        {
+            var clone = Object.Instantiate(entrance.gameObject, entrance.parent);
+            clone.name = $"{entrance.name} ({copy.name})";
+            clone.transform.SetPositionAndRotation(copy.TransformPoint(local), copy.rotation * turn);
+            var door = clone.GetComponent<ClothingStoreEntrance>();
+            if (door != null && door.exitPoint != null)
+            {
+                Vector3 exitAt = door.exitPoint.position;
+                if (Physics.Raycast(exitAt + Vector3.up * 3f, Vector3.down, out RaycastHit hit, 8f, ~(1 << 2), QueryTriggerInteraction.Ignore)) exitAt.y = hit.point.y;
+                door.exitPoint.position = exitAt;
+            }
+            log.AppendLine($"  clothing store entrance for {copy.name} at {clone.transform.position}");
+        }
+    }
+
     static void ImportIcons()
     {
         foreach (string guid in AssetDatabase.FindAssets("MapIcon_ t:Texture2D", new[] { IconFolder }))
@@ -199,6 +238,80 @@ public static class MapIconsSetup
             importer.maxTextureSize = 128;
             importer.SaveAndReimport();
         }
+    }
+
+    // A race start sits on its route's first point, often near the kerb of a wide road, so its flag looked off the road on the
+    // map. Its map icon moves to a "Map Icon" child at the centre of the road in the baked road map (the race start stays).
+    const string RaceIconName = "Map Icon";
+
+    static void SnapRaceIconsToRoads(System.Text.StringBuilder log)
+    {
+        var ui = Object.FindFirstObjectByType<GameMapUI>(FindObjectsInactive.Include);
+        var data = ui != null ? ui.mapData : null;
+        if (data == null || data.roadMap == null) { log.AppendLine("  race icons: no road map"); return; }
+        var roads = new Texture2D(2, 2);
+        roads.LoadImage(System.IO.File.ReadAllBytes(AssetDatabase.GetAssetPath(data.roadMap)));
+        foreach (var start in Object.FindObjectsByType<OpenworldCrime.Racing.RaceStartPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            var startSo = new SerializedObject(start);
+            var blipProp = startSo.FindProperty("blip");
+            var blip = blipProp.objectReferenceValue as OpenworldCrime.UI.MapBlip;
+            if (blip == null) continue;
+            Transform holder = start.transform.Find(RaceIconName);
+            if (holder == null)
+            {
+                holder = new GameObject(RaceIconName).transform;
+                holder.SetParent(start.transform, false);
+            }
+            if (blip.gameObject != holder.gameObject)
+            {
+                var moved = holder.gameObject.GetComponent<OpenworldCrime.UI.MapBlip>();
+                if (moved == null) moved = holder.gameObject.AddComponent<OpenworldCrime.UI.MapBlip>();
+                EditorUtility.CopySerialized(blip, moved);
+                Object.DestroyImmediate(blip);
+                blipProp.objectReferenceValue = moved;
+                startSo.ApplyModifiedPropertiesWithoutUndo();
+            }
+            Vector2 uv = data.WorldToUV(start.transform.position);
+            Vector2 centre = RoadCentre(roads, new Vector2(uv.x * roads.width, uv.y * roads.height));
+            Vector3 world = data.UVToWorld(new Vector2(centre.x / roads.width, centre.y / roads.height), start.transform.position.y);
+            holder.position = world;
+            log.AppendLine($"  race icon {start.name}: moved {Vector3.Distance(world, start.transform.position):F1} m to the road centre");
+        }
+        Object.DestroyImmediate(roads);
+    }
+
+    // Nearest road pixel, then a few mean-shift steps over the road pixels around it: on a straight road that settles on the
+    // centre line, at a junction on its middle.
+    static Vector2 RoadCentre(Texture2D roads, Vector2 pixel)
+    {
+        System.Func<int, int, bool> isRoad = (x, y) => x >= 0 && y >= 0 && x < roads.width && y < roads.height && roads.GetPixel(x, y).r > 0.5f;
+        Vector2 c = pixel;
+        if (!isRoad((int)c.x, (int)c.y))
+        {
+            float best = float.MaxValue;
+            for (int dy = -30; dy <= 30; dy++)
+                for (int dx = -30; dx <= 30; dx++)
+                    if (isRoad((int)pixel.x + dx, (int)pixel.y + dy) && dx * dx + dy * dy < best) { best = dx * dx + dy * dy; c = pixel + new Vector2(dx, dy); }
+        }
+        const int radius = 26; // px (~22 m): wide enough to reach both edges of the widest avenues
+        for (int step = 0; step < 14; step++)
+        {
+            Vector2 sum = Vector2.zero;
+            int n = 0;
+            for (int dy = -radius; dy <= radius; dy++)
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    if (dx * dx + dy * dy > radius * radius) continue;
+                    int x = (int)c.x + dx, y = (int)c.y + dy;
+                    if (!isRoad(x, y)) continue;
+                    sum += new Vector2(x + 0.5f, y + 0.5f);
+                    n++;
+                }
+            if (n == 0) break;
+            c = sum / n;
+        }
+        return c;
     }
 
     static Material FlagMaterial(Texture texture)

@@ -58,8 +58,13 @@ namespace OpenworldCrime.Controls
 
         // Invector only starts a sprint once the character is already moving forward, so a push from standstill can miss the
         // first tap. While the finger stays in the sprint zone, retry a few times a second until the controller is sprinting.
+        /// <summary>Held by the SPRINT button (SprintHoldButton): sprints like pushing the stick into the sprint zone.</summary>
+        public static bool SprintButtonHeld { get; set; }
+        private bool zoneSprint;
+
         private void Update()
         {
+            if (SprintButtonHeld != sprinting && (SprintButtonHeld || !zoneSprint)) SetSprint(zoneSprint || SprintButtonHeld);
             if (!sprinting || controller == null || !controller.useContinuousSprint || controller.isSprinting) return;
             if (Time.unscaledTime < nextSprintTry) return;
             nextSprintTry = Time.unscaledTime + SprintRetryInterval;
@@ -86,8 +91,8 @@ namespace OpenworldCrime.Controls
             CrossPlatformInputManager.SetAxis(horizontalAxis, value.x);
             CrossPlatformInputManager.SetAxis(verticalAxis, value.y);
 
-            bool wantSprint = local.magnitude > radius * sprintPull && local.normalized.y > sprintForward;
-            SetSprint(wantSprint);
+            zoneSprint = local.magnitude > radius * sprintPull && local.normalized.y > sprintForward;
+            SetSprint(zoneSprint || SprintButtonHeld);
         }
 
         public void OnPointerUp(PointerEventData eventData) => ResetStick();

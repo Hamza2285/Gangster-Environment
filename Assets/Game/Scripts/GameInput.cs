@@ -48,11 +48,96 @@ public static class GameInput
         }
     }
 
+    // A finger on the screen wins over the mouse: on phones (and the Device Simulator) a mouse device may still exist but
+    // never moves, so the map read every tap at a stale spot.
+    public static bool TouchActive
+    {
+        get
+        {
+#if ENABLE_INPUT_SYSTEM
+            var touch = Touchscreen.current;
+            if (touch != null && (touch.primaryTouch.press.isPressed || touch.primaryTouch.press.wasReleasedThisFrame)) return true;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.touchCount > 0) return true;
+#endif
+            return false;
+        }
+    }
+
+    // Fingers on the screen right now (0 with a mouse).
+    public static int TouchCount
+    {
+        get
+        {
+#if ENABLE_INPUT_SYSTEM
+            var touch = Touchscreen.current;
+            if (touch != null)
+            {
+                int n = 0;
+                foreach (var t in touch.touches) if (t.press.isPressed) n++;
+                if (n > 0) return n;
+            }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+            return Input.touchCount;
+#else
+            return 0;
+#endif
+        }
+    }
+
+    // Screen position of the first two fingers (only meaningful while TouchCount >= 2).
+    public static bool TwoFingers(out Vector2 a, out Vector2 b)
+    {
+        a = b = Vector2.zero;
+        int found = 0;
+#if ENABLE_INPUT_SYSTEM
+        var touch = Touchscreen.current;
+        if (touch != null)
+        {
+            foreach (var t in touch.touches)
+            {
+                if (!t.press.isPressed) continue;
+                if (found == 0) a = t.position.ReadValue(); else b = t.position.ReadValue();
+                if (++found == 2) return true;
+            }
+        }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.touchCount >= 2)
+        {
+            a = Input.GetTouch(0).position;
+            b = Input.GetTouch(1).position;
+            return true;
+        }
+#endif
+        return false;
+    }
+
+    /// <summary>"Enter Vehicle  [F]" -> "Enter Vehicle": key hints mean nothing on a touch screen.</summary>
+    public static string WithoutKeys(string text) =>
+        string.IsNullOrEmpty(text) ? text : System.Text.RegularExpressions.Regex.Replace(text, @"\s*\[[^\]]*\]", "").Trim();
+
+    /// <summary>True while the on-screen phone controls are in use.</summary>
+    public static bool MobileControls
+    {
+        get
+        {
+            if (controlsMode == null) controlsMode = Object.FindFirstObjectByType<OpenworldCrime.Controls.ControlsModeManager>(FindObjectsInactive.Include);
+            return controlsMode != null && controlsMode.IsMobile;
+        }
+    }
+    static OpenworldCrime.Controls.ControlsModeManager controlsMode;
+
     public static Vector2 PointerPosition
     {
         get
         {
 #if ENABLE_INPUT_SYSTEM
+            var touch = Touchscreen.current;
+            if (touch != null && (touch.primaryTouch.press.isPressed || touch.primaryTouch.press.wasReleasedThisFrame))
+                return touch.primaryTouch.position.ReadValue();
             if (Mouse.current != null) return Mouse.current.position.ReadValue();
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER

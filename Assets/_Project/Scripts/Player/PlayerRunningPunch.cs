@@ -183,7 +183,7 @@ namespace OpenworldCrime.Player
             target = FindTarget(range + Speed() * Punches[current].Impact);
             animator.CrossFadeInFixedTime(Punches[current].State, 0.04f, layer, 0f);
             if (target != null) controller.lockRotation = true;
-            PlaySound(swingSounds, 0.6f);
+            PlaySound(swingSounds, 0.85f);
         }
 
         private void TickPunch()
@@ -253,7 +253,30 @@ namespace OpenworldCrime.Player
                 target.ReceiveMeleeStrike(transform, damage, point);
                 PlaySound(hitSounds, 1f);
             }
+            else if (KnockBikerOff(reach))
+            {
+                hit = true;
+                PlaySound(hitSounds, 1f);
+            }
             OnRunningPunch?.Invoke(hit);
+        }
+
+        private static readonly Collider[] riderZones = new Collider[8];
+
+        // A traffic biker in reach and in front (his melee zone, a trigger on Ignore Raycast) is punched off his bike.
+        private bool KnockBikerOff(float reach)
+        {
+            int n = Physics.OverlapSphereNonAlloc(transform.position + Vector3.up * 1f, reach + 0.6f, riderZones, 1 << 2, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < n; i++)
+            {
+                var zone = riderZones[i].GetComponent<OpenworldCrime.Vehicles.BikeRiderMeleeZone>();
+                if (zone == null || zone.Adapter == null || !zone.Adapter.HasRider) continue;
+                Vector3 to = zone.transform.position - transform.position;
+                to.y = 0f;
+                if (to.magnitude > 0.6f && Vector3.Angle(transform.forward, to) > coneAngle + 20f) continue;
+                if (zone.Adapter.KnockRiderOff(transform)) return true;
+            }
+            return false;
         }
 
         private PedestrianDamage FindTarget(float reach)
@@ -304,6 +327,7 @@ namespace OpenworldCrime.Player
                 audioSource.minDistance = 2f;
                 audioSource.maxDistance = 25f;
             }
+            audioSource.pitch = Random.Range(0.93f, 1.07f); // the same few clips, never twice exactly alike
             audioSource.PlayOneShot(clip, volume);
         }
     }

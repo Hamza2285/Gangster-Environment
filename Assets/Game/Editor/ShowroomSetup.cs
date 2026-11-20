@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 // Game/Set Up Car Showroom: builds the car showroom's own scene from the Show Room package (with display cars on its
-// bays), and the way in from the city: a door at the Parking Plaza with a map icon. Safe to run again.
+// bays), and the way in from the city: a garage door south of the Parking Plaza with a map icon. Safe to run again.
 public static class ShowroomSetup
 {
     const string ScenePath = "Assets/Scenes/Car Showroom Interior.unity";
@@ -38,9 +38,10 @@ public static class ShowroomSetup
         Debug.Log(SetUp(DefaultDoor, DefaultFacing));
     }
 
-    // In front of the Parking Plaza, on its pavement.
-    public static Vector3 DefaultDoor = new Vector3(838f, 27.7f, -317f);
-    public static Vector3 DefaultFacing = Vector3.left;
+    // The garage door of the tall cream building on the south side of the Parking Plaza block (its "PARKING residents only"
+    // sign is covered by the Car Showroom logo), on its pavement, facing the street (south).
+    public static Vector3 DefaultDoor = new Vector3(745f, 27.74f, -423f);
+    public static Vector3 DefaultFacing = Vector3.back;
 
     public static string SetUp(Vector3 door, Vector3 facing)
     {
