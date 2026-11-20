@@ -78,11 +78,11 @@ namespace OpenworldCrime.Player
             if (!valid || !isActiveAndEnabled || controller.isDead || Time.time - lastHitTime < hitCooldown) return;
             if (playerManager != null && playerManager.IsInVehicle) return;
 
-            // The car's own speed: he is a light dynamic body the solver has already carried along, and him running into a
-            // parked car must not count.
+            // How fast the car itself drove into him: he is a light dynamic body the solver has already carried along, and him
+            // walking / running into a parked or slow car (or the car rocking when he bumps it) must not count.
             Vector3 flat = impact.VehicleVelocity;
             flat.y = 0f;
-            float speed = flat.magnitude;
+            float speed = impact.ClosingSpeed;
             if (speed < minimumImpactSpeed) return;
             lastHitTime = Time.time;
 

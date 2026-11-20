@@ -210,10 +210,8 @@ namespace OpenworldCrime.Combat
 
         private void HandleVehicleHit(VehicleImpact impact)
         {
-            // The car's own speed, not the closing speed: somebody running into a parked or slow car is no accident.
-            Vector3 carVelocity = impact.VehicleVelocity;
-            carVelocity.y = 0f;
-            if (carVelocity.magnitude < minVehicleHitSpeed || impact.Speed < minVehicleHitSpeed || Time.time - lastVehicleBlood < 0.25f) return;
+            // The car driving into the person, not the person running into a standing car.
+            if (impact.ClosingSpeed < minVehicleHitSpeed || Time.time - lastVehicleBlood < 0.25f) return;
             lastVehicleBlood = Time.time;
             Splash(impact.Point, impact.VehicleVelocity + Vector3.up * 2f);
             StartCoroutine(MarkLater(impact.Point + impact.VehicleVelocity * 0.15f, 1f, Random.Range(markSize.x, markSize.y)));

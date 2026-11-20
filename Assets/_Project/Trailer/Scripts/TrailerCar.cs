@@ -36,7 +36,8 @@ namespace OpenworldCrime.Trailer
             "SeatedDriverHealth", "VehicleImpactCameraShake"
         };
 
-        public static TrailerCar Spawn(GameObject prefab, Vector3 pos, float yaw, int paintIndex, Transform holder, GameObject smokePrefab, bool police = false)
+        public static TrailerCar Spawn(GameObject prefab, Vector3 pos, float yaw, int paintIndex, Transform holder, GameObject smokePrefab, bool police = false,
+            OpenworldCrime.Vehicles.PedDriverRoster roster = null, int driverIndex = -1)
         {
             var car = new TrailerCar();
             // Spawn under an inactive holder so no Awake / OnEnable of the driving components runs before they are switched off.
@@ -96,8 +97,6 @@ namespace OpenworldCrime.Trailer
 
             if (police)
             {
-                var seat = go.transform.Find("DriverSeat/DriverVisual");
-                if (seat != null) seat.gameObject.SetActive(true);
                 foreach (var bar in go.GetComponentsInChildren<PoliceLightBar>(true)) bar.enabled = true;
             }
 
@@ -114,6 +113,7 @@ namespace OpenworldCrime.Trailer
                         var main = ps.main;
                         main.simulationSpace = ParticleSystemSimulationSpace.World;
                         main.playOnAwake = false;
+                        main.startColor = new Color(0.45f, 0.45f, 0.5f, 0.22f); // grey smoke, no blown-out white blob
                         var em = ps.emission;
                         em.rateOverTime = 0f;
                         em.rateOverDistance = 0f;
@@ -124,6 +124,16 @@ namespace OpenworldCrime.Trailer
 
             go.transform.SetParent(holder, true);
             Object.Destroy(parking);
+            // Seat the driver (and the second officer in a cruiser) with the project's own seated driver visuals.
+            var crew = go.GetComponent<OpenworldCrime.Police.PoliceCarCrew>();
+            if (police && crew != null) crew.Board(1); // driver only: the passenger officer's seated pose clips the dash
+            else if (roster != null && driverIndex >= 0)
+            {
+                var driver = go.GetComponent<OpenworldCrime.Vehicles.TrafficVehicleDriver>();
+                if (driver != null) driver.SetSeatedPedestrian(true, roster, driverIndex);
+            }
+            car.DisableHitZones();
+            car.AddCabinLight();
             foreach (var ps in car.smoke) ps.Play(true);
             return car;
         }
@@ -134,6 +144,69 @@ namespace OpenworldCrime.Trailer
             car.wheels.Add(w);
             car.wheelRest.Add(w.localRotation);
             car.wheelFront.Add(front);
+        }
+
+        // A soft dashboard glow so the people inside read through the glass at night (trailer only).
+        private void AddCabinLight()
+        {
+            var seat = Go.transform.Find("DriverSeat");
+            if (seat == null) return;
+            var go = new GameObject("Trailer Cabin Light");
+            go.transform.SetParent(Go.transform, false);
+            Vector3 local = Go.transform.InverseTransformPoint(seat.position);
+            // A soft dash glow: a wide spot from the dashboard aimed back at the driver's face (level, so it never lights
+            // the road under the car).
+            go.transform.localPosition = new Vector3(local.x, local.y + 1.2f, local.z + 0.75f);
+            go.transform.localRotation = Quaternion.LookRotation(new Vector3(0f, 0.05f, -1f));
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Spot;
+            l.spotAngle = 75f;
+            l.innerSpotAngle = 30f;
+            l.range = 1.5f;
+            l.intensity = 4.5f;
+            l.color = new Color(0.65f, 0.8f, 1f);
+            l.shadows = LightShadows.None;
+            l.renderMode = LightRenderMode.ForcePixel;
+        }
+
+        /// <summary>
+        /// Trailer "car lighting": a soft key above the bonnet and two coloured rims (neon magenta / cyan) that follow the
+        /// car, so a black car reads at night with highlights along its body lines.
+        /// </summary>
+        public void AddHeroLights()
+        {
+            // Ranges kept short so the lights catch the body, not the road around it.
+            AddLight("Trailer Key", new Vector3(0.4f, 2.1f, 0.8f), new Color(0.85f, 0.9f, 1f), 5f, 2.15f);
+            AddLight("Trailer Rim L", new Vector3(-1.7f, 1.6f, -1.3f), new Color(1f, 0.35f, 0.85f), 5f, 1.95f);
+            AddLight("Trailer Rim R", new Vector3(1.7f, 1.6f, -0.9f), new Color(0.3f, 0.85f, 1f), 5f, 1.95f);
+            // The car's own real-time headlight lights are tuned for the LDR game look; in the HDR grade they blow the
+            // road out to white, so they are dimmed on this car.
+            foreach (var l in Go.GetComponentsInChildren<Light>(true))
+                if (!l.name.StartsWith("Trailer ")) l.intensity *= 0.15f;
+        }
+
+        private void AddLight(string name, Vector3 local, Color colour, float intensity, float range)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(Go.transform, false);
+            go.transform.localPosition = local;
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = colour;
+            l.intensity = intensity;
+            l.range = range;
+            l.shadows = LightShadows.None;
+            l.renderMode = LightRenderMode.ForcePixel;
+        }
+
+        // Seated-driver hit zones are not needed (and must not catch the road raycasts or the crash).
+        private void DisableHitZones()
+        {
+            foreach (var mb in Go.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                string n = mb.GetType().Name;
+                if (n == "SeatedDriverHitZone") foreach (var c in mb.GetComponents<Collider>()) c.enabled = false;
+            }
         }
 
         public void SetColliders(bool on)

@@ -15,6 +15,7 @@ namespace OpenworldCrime.Trailer
         private void BuildShots()
         {
             shots.Clear();
+            if (settings.Version >= 2) { BuildShotsV2(); return; }
             ShotOpening();          // 1  ocean -> bridge, sunset -> night
             ShotSearchlights();     // 2  aerial, rooftop searchlights
             ShotNeonBoulevard();    // 3  street level, neon + traffic
@@ -314,6 +315,7 @@ namespace OpenworldCrime.Trailer
             if (cityMainLight == null && dayNight != null) cityMainLight = dayNight.sun;
             if (cityMainLight != null) cityMainLight.enabled = false;
             foreach (var v in clubVolumes) if (v != null) v.enabled = true;
+            if (quality != null) quality.SetExposure(ClubExposure);
         }
 
         private void ExitClub()
@@ -367,6 +369,38 @@ namespace OpenworldCrime.Trailer
 #endif
         }
 
+        private OpenworldCrime.Vehicles.PedDriverRoster driverRoster;
+        private int driverCounter;
+
+        private OpenworldCrime.Vehicles.PedDriverRoster DriverRoster
+        {
+            get
+            {
+#if UNITY_EDITOR
+                if (driverRoster == null) driverRoster = UnityEditor.AssetDatabase.LoadAssetAtPath<OpenworldCrime.Vehicles.PedDriverRoster>("Assets/_Project/Data/Vehicles/PedDriverRoster.asset");
+#endif
+                return driverRoster;
+            }
+        }
+
+        /// <summary>A civilian roster entry for the next car's driver (the hero gets the same man every time).</summary>
+        private int NextDriver(bool hero)
+        {
+            var r = DriverRoster;
+            if (r == null || r.Count == 0) return -1;
+            var civilians = new List<int>();
+            for (int i = 0; i < r.Count; i++) { var e = r.Get(i); if (e != null && !e.police && e.seatedMesh != null) civilians.Add(i); }
+            if (civilians.Count == 0) return -1;
+            if (hero)
+            {
+                foreach (int i in civilians) if (r.Get(i).pedName != null && r.Get(i).pedName.Contains(HeroDriverName)) return i;
+                return civilians[0];
+            }
+            return civilians[(driverCounter++ * 7 + 3) % civilians.Count];
+        }
+
+        private const string HeroDriverName = "Man_11";
+
         private static int PaintIndex(GameObject prefab, string colour)
         {
             var pv = prefab != null ? prefab.GetComponent<OpenworldCrime.Vehicles.VehiclePaintVariants>() : null;
@@ -383,7 +417,9 @@ namespace OpenworldCrime.Trailer
             var prefab = LoadPrefab(prefabName.StartsWith("Assets/") ? prefabName : DrivablePath + prefabName + ".prefab");
             if (prefab == null) return null;
             if (smoke && smokePrefab == null) smokePrefab = LoadPrefab("Assets/RealisticCarControllerV3/Prefabs/Particles/RCCWheelSlipAsphalt.prefab");
-            var car = TrailerCar.Spawn(prefab, pos, yaw, PaintIndex(prefab, colour), Stage, smoke ? smokePrefab : null, police);
+            bool hero = prefabName == "Drivable_Car2" && colour == "Black";
+            var car = TrailerCar.Spawn(prefab, pos, yaw, PaintIndex(prefab, colour), Stage, smoke ? smokePrefab : null, police, DriverRoster, NextDriver(hero));
+            if (hero && settings.Version >= 2) car.AddHeroLights();
             car.Pose(pos, yaw, 0f, 0f, 0f, FrameDt, true);
             cars.Add(car);
             return car;

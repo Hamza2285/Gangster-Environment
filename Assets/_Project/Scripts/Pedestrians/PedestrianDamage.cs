@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections;
 using Invector;
 using Invector.vCharacterController;
@@ -106,6 +107,10 @@ namespace OpenworldCrime.Pedestrians
         [SerializeField, Min(0f)] private float heavyMeleeDamage = 18f;
         [Tooltip("A punch also knocks down once health is at or below this share of the maximum.")]
         [SerializeField, Range(0f, 1f)] private float meleeKnockDownHealth = 0.35f;
+        [Tooltip("A melee hit at least this strong (the player's running punch) knocks the person down at once.")]
+        [SerializeField, Min(0f)] private float knockDownMeleeDamage = 24f;
+        [Tooltip("Speed (m/s) the body is thrown along such a strong hit (more than a combo knock-down).")]
+        [SerializeField, Min(0f)] private float strongMeleePushSpeed = 3.2f;
         [Tooltip("Seconds without a punch after which the count starts again.")]
         [SerializeField, Min(0.1f)] private float meleeComboResetTime = 6f;
         [Tooltip("One swing touching several hitboxes of the same person within this time counts (and hurts) once.")]
@@ -145,6 +150,10 @@ namespace OpenworldCrime.Pedestrians
         public event Action<Vector3> OnDied;
         /// <summary>Any pedestrian (street people, police officers, riders and drivers who came out) died. Arg: who died.</summary>
         public static event Action<PedestrianDamage> OnAnyDied;
+
+        private static readonly List<PedestrianDamage> active = new List<PedestrianDamage>();
+        /// <summary>Pedestrians in the street right now (enabled; alive, down or dead), e.g. for the voice barks.</summary>
+        public static IReadOnlyList<PedestrianDamage> Active => active;
         /// <summary>Raised when the pedestrian takes damage and survives (e.g. shot or bumped). Arg: damage source position.</summary>
         public event Action<Vector3> OnHurt;
         /// <summary>A punch that does not knock down: the person staggers. Arg: push (world, horizontal, metres).</summary>
@@ -220,12 +229,14 @@ namespace OpenworldCrime.Pedestrians
 
         private void OnEnable()
         {
+            active.Add(this);
             if (!valid) return;
             IgnoreOwnBones();
         }
 
         private void OnDisable()
         {
+            active.Remove(this);
             if (!valid) return;
             recoverRoutine = null; // coroutines stop with the GameObject
             if (dampingRoutine != null)
@@ -368,6 +379,28 @@ namespace OpenworldCrime.Pedestrians
             });
         }
 
+        /// <summary>
+        /// A melee strike resolved by the attacker (the player's running punch: by distance / angle, not by a fist hitbox). Goes
+        /// through Invector's damage like any punch (crime reports, health, block check); strong enough, it knocks down.
+        /// </summary>
+        public void ReceiveMeleeStrike(Transform sender, float damageValue, Vector3 hitPoint)
+        {
+            if (!valid || !isActiveAndEnabled || IsDead) return;
+            Vector3 direction = sender != null ? transform.position - sender.position : -transform.forward;
+            direction.y = 0f;
+            character.TakeDamage(new vDamage
+            {
+                damageValue = damageValue,
+                sender = sender,
+                receiver = transform,
+                hitPosition = hitPoint,
+                force = direction.normalized * damageValue * 0.5f,
+                damageType = "MeleeStrike",
+                activeRagdoll = false, // the knock-down is driven here
+                hitReaction = false
+            });
+        }
+
         /// <summary>Kills the pedestrian at once (e.g. a traffic driver shot at the wheel falling out of the car).</summary>
         public void Kill(Transform sender, Vector3 hitPosition)
         {
@@ -505,6 +538,13 @@ namespace OpenworldCrime.Pedestrians
             direction.y = 0f;
             direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : -transform.forward;
             meleeHits++;
+            if (damage.damageValue >= knockDownMeleeDamage)
+            {
+                // A running punch: down at once, thrown along the punch with a little lift.
+                meleeHits = 0;
+                KnockDown(direction * strongMeleePushSpeed + Vector3.up * 1.1f, Vector3.Cross(Vector3.up, direction) * meleeTopple * 1.3f, meleeGroundTime);
+                return;
+            }
             bool heavy = damage.damageValue >= heavyMeleeDamage;
             if (meleeHits >= meleeHitsToKnockDown || (heavy && meleeHits > 1) || character.currentHealth <= character.MaxHealth * meleeKnockDownHealth)
             {
@@ -662,6 +702,7 @@ namespace OpenworldCrime.Pedestrians
         {
             OnAnyDamaged = null;
             OnAnyDied = null;
+            active.Clear();
         }
     }
 }

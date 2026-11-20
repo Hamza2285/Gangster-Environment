@@ -124,7 +124,12 @@ namespace OpenworldCrime.Vehicles
                 body.angularVelocity = Vector3.Lerp(body.angularVelocity, previousAngularVelocity, characterHitSpeedRetention);
             }
 
-            var impact = new VehicleImpact(velocity, point, body.mass, transform, this, vehicleVelocity);
+            // The car's own drive into the person (not the person's run into the car, not the body rocking on its springs).
+            Vector3 toPerson = collision.collider.bounds.center - previousCenterOfMass;
+            toPerson.y = 0f;
+            Vector3 drive = new Vector3(previousVelocity.x, 0f, previousVelocity.z);
+            float closing = toPerson.sqrMagnitude > 0.0001f ? Mathf.Max(0f, Vector3.Dot(drive, toPerson.normalized)) : drive.magnitude;
+            var impact = new VehicleImpact(velocity, point, body.mass, transform, this, vehicleVelocity, closing);
             receiver.ReceiveVehicleImpact(impact);
 
             // Feedback (thud, shake, blood) only when the car itself was moving: walking or running into a parked car is no accident.
