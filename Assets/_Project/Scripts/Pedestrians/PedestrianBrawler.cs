@@ -27,10 +27,25 @@ namespace OpenworldCrime.Pedestrians
         private static readonly List<PedestrianBrawler> fighters = new List<PedestrianBrawler>();
 
         private static readonly int HitFront = Animator.StringToHash("hit_front");
-        private static readonly int HitLeft = Animator.StringToHash("hit_left");
-        private static readonly int HitRight = Animator.StringToHash("hit_right");
         private static readonly int HitBack = Animator.StringToHash("hit_back");
-        private static readonly int HitBig = Animator.StringToHash("hit_big");
+        // Reactions by where the blow comes from (front / left / right / back), light and heavy, with variants (Invector's
+        // Hit Small / Hit Big and Moto's Get_Hit head snaps, baked by PedestrianBrawlAnimBuilder). Missing states are skipped.
+        private static readonly string[][] LightHits =
+        {
+            new[] { "hit_front", "hit_front_b" }, new[] { "hit_left", "hit_left_b" },
+            new[] { "hit_right", "hit_right_b" }, new[] { "hit_back", "hit_back_b" },
+        };
+        private static readonly string[][] HeavyHits =
+        {
+            new[] { "hit_big", "hit_front_b" }, new[] { "hit_big_left", "hit_left_b" },
+            new[] { "hit_big_right", "hit_right_b" }, new[] { "hit_big_back", "hit_back_b" },
+        };
+        // The player's reaction to each punch (Invector ReactionID on our player controller): small upper-body flinch,
+        // big full-body stagger, medium full-body head snap (Moto).
+        private const int PlayerSmallReaction = 0, PlayerBigReaction = 1, PlayerMediumReaction = 2;
+        private static readonly int[] PunchReaction = { PlayerSmallReaction, PlayerMediumReaction, PlayerBigReaction };
+        private static int lastPlayerReaction = -1;
+        private static float lastPlayerReactionTime = -100f;
         private static readonly int Guard = Animator.StringToHash("brawl_guard");
         private static readonly int Block = Animator.StringToHash("brawl_block");
         private static readonly int Walk = Animator.StringToHash("walk");
@@ -106,8 +121,7 @@ namespace OpenworldCrime.Pedestrians
             Vector3 toAttacker = attacker - transform.position;
             toAttacker.y = 0f;
             bool big = heavy || hitNumber >= 2;
-            int state = big ? HitBig : HitStateFor(toAttacker);
-            if (big && toAttacker.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(toAttacker);
+            int state = PickReaction(big ? HeavyHits : LightHits, SideOf(toAttacker));
             animator.speed = 1f;
             animator.CrossFadeInFixedTime(state, 0.05f, 0, 0f);
             shove = direction * (big ? settings.bigShove : settings.smallShove);
@@ -150,13 +164,37 @@ namespace OpenworldCrime.Pedestrians
             return true;
         }
 
-        private int HitStateFor(Vector3 toAttacker)
+        // 0 front, 1 left, 2 right, 3 back: where the blow comes from.
+        private int SideOf(Vector3 toAttacker)
         {
-            if (toAttacker.sqrMagnitude < 0.01f) return HitFront;
+            if (toAttacker.sqrMagnitude < 0.01f) return 0;
             float angle = Vector3.SignedAngle(transform.forward, toAttacker, Vector3.up);
-            if (Mathf.Abs(angle) < 50f) return HitFront;
-            if (Mathf.Abs(angle) > 130f) return HitBack;
-            return angle > 0f ? HitRight : HitLeft;
+            if (Mathf.Abs(angle) < 50f) return 0;
+            if (Mathf.Abs(angle) > 130f) return 3;
+            return angle > 0f ? 2 : 1;
+        }
+
+        private int lastReaction;
+        private readonly List<int> choices = new List<int>(4);
+
+        // A reaction for that side, never the same clip twice in a row (falls back to the light front flinch).
+        private int PickReaction(string[][] table, int side)
+        {
+            choices.Clear();
+            foreach (string name in table[side])
+            {
+                int hash = Animator.StringToHash(name);
+                if (hash != lastReaction && animator.HasState(0, hash)) choices.Add(hash);
+            }
+            if (choices.Count == 0)
+                foreach (string name in LightHits[side])
+                {
+                    int hash = Animator.StringToHash(name);
+                    if (animator.HasState(0, hash)) choices.Add(hash);
+                }
+            int state = choices.Count > 0 ? choices[Random.Range(0, choices.Count)] : HitFront;
+            lastReaction = state;
+            return state;
         }
 
         // ------------------------------------------------------------------------------------------- per frame
@@ -311,12 +349,24 @@ namespace OpenworldCrime.Pedestrians
                 receiver = player,
                 hitPosition = player.position + Vector3.up * 1.4f,
                 hitReaction = true,
-                reaction_id = 0,
+                reaction_id = PlayerReactionFor(punch),
                 damageType = "PedPunch",
             };
             hit.damageValue = PunchDamage[punch] * settings.damageScale;
             health.TakeDamage(hit);
             PlaySound(settings.hitSounds, 1f);
+        }
+
+        // Jab: small flinch, cross: medium head snap, hook: big stagger; the same reaction twice in a row becomes the other
+        // light / medium one, so a flurry of blows never loops one clip.
+        private static int PlayerReactionFor(int punchIndex)
+        {
+            int reaction = PunchReaction[punchIndex];
+            if (reaction == lastPlayerReaction && Time.time - lastPlayerReactionTime < 2.5f)
+                reaction = reaction == PlayerMediumReaction ? PlayerSmallReaction : PlayerMediumReaction;
+            lastPlayerReaction = reaction;
+            lastPlayerReactionTime = Time.time;
+            return reaction;
         }
 
         private void BeginBlock()
@@ -401,6 +451,11 @@ namespace OpenworldCrime.Pedestrians
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics() => fighters.Clear();
+        private static void ResetStatics()
+        {
+            fighters.Clear();
+            lastPlayerReaction = -1;
+            lastPlayerReactionTime = -100f;
+        }
     }
 }

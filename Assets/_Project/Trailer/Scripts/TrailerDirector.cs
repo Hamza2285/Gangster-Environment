@@ -40,6 +40,12 @@ namespace OpenworldCrime.Trailer
             public bool ExitPlayModeWhenDone = true;
             public float FadeIn = 0.6f;
             public float FadeOut = 2.0f;
+            /// <summary>1 = first cut (87 s), 2 = 45 s high-end cut (max quality, letterbox, ocean to the horizon).</summary>
+            public int Version = 2;
+            /// <summary>Encoded size (the render size above is downscaled to this; 0 = same).</summary>
+            public int OutWidth = 1920, OutHeight = 1080;
+            /// <summary>Cinemascope bars (2.39:1) burned in at encode time.</summary>
+            public bool Letterbox = true;
         }
 
         public class Shot
@@ -71,6 +77,9 @@ namespace OpenworldCrime.Trailer
         private int framesWritten;
         private byte[] frameBytes;
         private Transform stage;
+        private TrailerQuality quality;
+        private const float DayExposure = 0.35f, NightExposure = 1.6f, ClubExposure = 1.4f;
+        protected TrailerQuality Quality => quality;
         private float dt;
 
         // World references
@@ -102,6 +111,7 @@ namespace OpenworldCrime.Trailer
             CloseFfmpeg();
             Time.captureFramerate = 0;
             Time.timeScale = 1f;
+            if (quality != null) { quality.Restore(); quality = null; }
             if (RenderTexture.active == rt) RenderTexture.active = null;
             if (cam != null) cam.targetTexture = null;
             if (rt != null) { rt.Release(); Destroy(rt); }
@@ -125,6 +135,13 @@ namespace OpenworldCrime.Trailer
             Time.captureFramerate = settings.Fps;
             SetupWorld();
             yield return LoadClub();
+            if (settings.Version >= 2)
+            {
+                quality = new TrailerQuality();
+                quality.Apply();
+                var ocean = new GameObject("Trailer Ocean Horizon");
+                ocean.AddComponent<OpenworldCrime.Environment.OceanHorizon>();
+            }
             SetupCamera();
             HookVisibility();
             BuildShots();
@@ -212,6 +229,7 @@ namespace OpenworldCrime.Trailer
             Done = true;
             Time.captureFramerate = 0;
             Time.timeScale = 1f;
+            if (quality != null) { quality.Restore(); quality = null; }
             foreach (var c in disabledCameras) if (c != null) c.enabled = true;
 #if UNITY_EDITOR
             if (settings.ExitPlayModeWhenDone) UnityEditor.EditorApplication.isPlaying = false;
@@ -314,9 +332,11 @@ namespace OpenworldCrime.Trailer
             go.tag = "MainCamera";
             cam = go.AddComponent<Camera>();
             cam.nearClipPlane = 0.15f;
-            cam.farClipPlane = 1600f;
+            // 1500 m: past ~1.5 km the water shader's depth-based colour turns the far ocean into a dark band.
+            cam.farClipPlane = 1500f;
             cam.fieldOfView = 50f;
-            cam.allowHDR = false;
+            cam.allowHDR = settings.Version >= 2;
+            cam.allowMSAA = true;
             var data = go.AddComponent<UniversalAdditionalCameraData>();
             var src = source != null ? source.GetComponent<UniversalAdditionalCameraData>() : null;
             data.renderPostProcessing = true;
@@ -327,6 +347,12 @@ namespace OpenworldCrime.Trailer
                 data.volumeLayerMask = src.volumeLayerMask;
                 data.renderShadows = src.renderShadows;
                 data.requiresDepthOption = src.requiresDepthOption;
+            }
+            if (settings.Version >= 2)
+            {
+                // The water shader shades from the depth / opaque textures: always provide them, as the pipeline does.
+                data.requiresDepthOption = CameraOverrideOption.On;
+                data.requiresColorOption = CameraOverrideOption.On;
             }
             if (source != null) cam.cullingMask = source.cullingMask;
             go.AddComponent<AudioListener>().enabled = false;
@@ -354,6 +380,7 @@ namespace OpenworldCrime.Trailer
         protected void SetTimeOfDay(float hour, float nightBlend)
         {
             if (dayNight != null) dayNight.SetManualBlend(Mathf.Clamp01(nightBlend));
+            if (quality != null) quality.SetExposure(Mathf.Lerp(DayExposure, NightExposure, Mathf.Clamp01(nightBlend)));
             if (skyMaterial != null && phaseWeights != null)
             {
                 skyMaterial.SetVector(CycleWeightsId, (Vector4)phaseWeights.Invoke(skyCycle, new object[] { hour }));
@@ -405,6 +432,15 @@ namespace OpenworldCrime.Trailer
             if (string.IsNullOrEmpty(exe) || !File.Exists(exe)) { Debug.LogError("[Trailer] ffmpeg not found: " + exe); return false; }
             Directory.CreateDirectory(Path.GetDirectoryName(settings.OutputPath));
             string vf = "vflip";
+            if (settings.OutWidth > 0 && (settings.OutWidth != settings.Width || settings.OutHeight != settings.Height))
+                vf += $",scale={settings.OutWidth}:{settings.OutHeight}:flags=lanczos";
+            if (settings.Letterbox)
+            {
+                int h = settings.OutHeight > 0 ? settings.OutHeight : settings.Height;
+                int w = settings.OutWidth > 0 ? settings.OutWidth : settings.Width;
+                int bar = Mathf.RoundToInt((h - w / 2.39f) * 0.5f);
+                vf += $",drawbox=x=0:y=0:w=iw:h={bar}:color=black:t=fill,drawbox=x=0:y=ih-{bar}:w=iw:h={bar}:color=black:t=fill";
+            }
             if (settings.FadeIn > 0f) vf += $",fade=t=in:st=0:d={settings.FadeIn:0.###}";
             if (settings.FadeOut > 0f) vf += $",fade=t=out:st={Mathf.Max(0f, seconds - settings.FadeOut):0.###}:d={settings.FadeOut:0.###}";
             string args = $"-y -loglevel error -f rawvideo -pix_fmt rgba -s {settings.Width}x{settings.Height} -r {settings.Fps} -i - " +

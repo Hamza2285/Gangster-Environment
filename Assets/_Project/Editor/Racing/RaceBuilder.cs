@@ -493,6 +493,37 @@ namespace OpenworldCrime.EditorTools
             return m;
         }
 
+        // Glowing chevron (pointing up the texture) for the road guide, additive so it reads day and night.
+        private static Material EnsureChevronMaterial()
+        {
+            string texPath = ArtFolder + "/RaceChevron.png";
+            if (!File.Exists(texPath))
+            {
+                const int s = 64;
+                var t = new Texture2D(s, s, TextureFormat.RGBA32, false);
+                for (int y = 0; y < s; y++)
+                    for (int x = 0; x < s; x++)
+                    {
+                        // A ">"-shape turned to point up: two thick strokes meeting at the top centre.
+                        float u = Mathf.Abs(x - (s - 1) * 0.5f) / (s * 0.5f), v = y / (float)(s - 1);
+                        float d = Mathf.Abs((1f - v) - u * 0.9f - 0.08f);
+                        float a = Mathf.Clamp01(1f - d / 0.17f) * Mathf.Clamp01((0.95f - u) * 8f);
+                        t.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
+                    }
+                File.WriteAllBytes(texPath, t.EncodeToPNG());
+                Object.DestroyImmediate(t);
+                AssetDatabase.ImportAsset(texPath);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(texPath);
+                importer.alphaIsTransparency = true;
+                importer.wrapMode = TextureWrapMode.Clamp;
+                importer.SaveAndReimport();
+            }
+            Material m = EnsureAdditiveMaterial(ArtFolder + "/RaceChevron.mat", new Color(1f, 0.55f, 1f, 0.9f));
+            m.SetTexture("_BaseMap", AssetDatabase.LoadAssetAtPath<Texture2D>(texPath));
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
         private static Material EnsureFlagMaterial(string path, Texture2D tex)
         {
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -718,6 +749,17 @@ namespace OpenworldCrime.EditorTools
             mso.ApplyModifiedPropertiesWithoutUndo();
 
             BuildHud(ui.transform, manager);
+
+            // GPS route: chevrons on the road ahead, and the route line on the minimap / full map.
+            var guide = new GameObject("Race Route Guide");
+            guide.transform.SetParent(root.transform, false);
+            Assign(guide.AddComponent<RaceRouteGuide>(), ("manager", manager),
+                ("arrowMesh", Resources.GetBuiltinResource<Mesh>("Quad.fbx")), ("arrowMaterial", EnsureChevronMaterial()));
+            Transform oldMapView = ui.transform.Find("Race Route Map");
+            if (oldMapView != null) Object.DestroyImmediate(oldMapView.gameObject);
+            var mapView = new GameObject("Race Route Map");
+            mapView.transform.SetParent(ui.transform, false);
+            Assign(mapView.AddComponent<RaceRouteMapView>(), ("manager", manager));
             EditorSceneManager.MarkSceneDirty(scene);
             log.AppendLine($"- scene: 'Street Races' ({points.Count} starts, 2 gates, checkpoint blip), RaceManager under ///Manager///, " +
                            $"Race HUD; {opponentList.Count} opponent cars; player refs {(vehicleInteraction != null ? vehicleInteraction.name : "MISSING")}");
@@ -758,8 +800,12 @@ namespace OpenworldCrime.EditorTools
             Text time = NewText("Time", info, 26, TextAnchor.UpperLeft, Color.white, new Vector2(16f, -90f), new Vector2(280f, 32f), new Vector2(0f, 1f));
             Button respawn = NewButton("Respawn Button", race, "RESET [BKSP]", purple, new Vector2(20f, -160f), new Vector2(170f, 46f), new Vector2(0f, 1f), out _);
             Button quit = NewButton("Quit Button", race, "QUIT [X]", new Color(0.6f, 0.15f, 0.25f, 1f), new Vector2(200f, -160f), new Vector2(120f, 46f), new Vector2(0f, 1f), out _);
-            RectTransform wrong = Panel("Wrong Way", race, new Vector2(0.5f, 0.5f), new Vector2(0f, 140f), new Vector2(360f, 70f), new Color(0.75f, 0.1f, 0.15f, 0.85f));
-            NewText("Text", wrong, 40, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(360f, 70f), new Vector2(0.5f, 0.5f)).text = "WRONG WAY";
+            RectTransform wrong = Panel("Wrong Way", race, new Vector2(0.5f, 0.5f), new Vector2(0f, 150f), new Vector2(560f, 110f), new Color(0.78f, 0.08f, 0.14f, 0.9f));
+            Text wrongText = NewText("Text", wrong, 64, TextAnchor.MiddleCenter, Color.white, Vector2.zero, new Vector2(560f, 110f), new Vector2(0.5f, 0.5f));
+            wrongText.text = "WRONG WAY";
+            wrongText.gameObject.AddComponent<Outline>().effectDistance = new Vector2(3f, -3f);
+            RectTransform leave = Panel("Return", race, new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(560f, 70f), new Color(0.1f, 0.06f, 0.16f, 0.88f));
+            Text leaveText = NewText("Text", leave, 34, TextAnchor.MiddleCenter, accent, Vector2.zero, new Vector2(560f, 70f), new Vector2(0.5f, 0.5f));
             Text countdown = NewText("Countdown", hud, 140, TextAnchor.MiddleCenter, Color.white, new Vector2(0f, 60f), new Vector2(500f, 200f), new Vector2(0.5f, 0.5f));
             countdown.gameObject.AddComponent<Outline>().effectDistance = new Vector2(4f, -4f);
 
@@ -775,7 +821,7 @@ namespace OpenworldCrime.EditorTools
             Assign(view, ("manager", manager), ("promptPanel", prompt.gameObject), ("promptTitle", promptTitle), ("promptInfo", promptInfo),
                 ("startButton", start), ("startLabel", startLabel), ("racePanel", race.gameObject), ("positionText", position),
                 ("progressText", progress), ("timeText", time), ("respawnButton", respawn), ("quitButton", quit),
-                ("wrongWayPanel", wrong.gameObject), ("countdownText", countdown), ("messagePanel", message.gameObject),
+                ("wrongWayPanel", wrong.gameObject), ("returnPanel", leave.gameObject), ("returnText", leaveText), ("countdownText", countdown), ("messagePanel", message.gameObject),
                 ("messageText", messageText), ("resultsPanel", results.gameObject), ("resultsTitle", resultsTitle),
                 ("resultsBody", resultsBody), ("continueButton", cont));
             prompt.gameObject.SetActive(false);
@@ -783,6 +829,7 @@ namespace OpenworldCrime.EditorTools
             message.gameObject.SetActive(false);
             results.gameObject.SetActive(false);
             wrong.gameObject.SetActive(false);
+            leave.gameObject.SetActive(false);
             countdown.gameObject.SetActive(false);
         }
 

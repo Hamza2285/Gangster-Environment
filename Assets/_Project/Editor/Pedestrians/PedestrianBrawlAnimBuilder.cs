@@ -24,6 +24,7 @@ namespace OpenworldCrime.EditorTools
         private const string GirlModel = "Assets/PopulationSystem/Models/girl/Girl_44.FBX";
         private const string MappingModel = "Assets/Player/Models/Female/casual07_f/casual07_f.FBX"; // Humanoid, same Bip01 names
         private const string MeleeSet = "Assets/Invector-3rdPersonController/Melee Combat/3DModels/Animations/Melee_CombatSet.fbx";
+        private const string MotoHit = "Assets/_Project/Animations/Combat/Moto/AS_Get_Hit_";
         private const string ActionsSet = "Assets/Invector-3rdPersonController/Basic Locomotion/3D Models/Animations/Basic_Actions.fbx";
         // Ragdoll get-up states (PedestrianRagdoll plays one by how the body lies) and the seconds they take at their speed.
         private const string GetUpBackState = "getup_back";
@@ -47,6 +48,15 @@ namespace OpenworldCrime.EditorTools
             new Job { State = "hit_right", Clip = "Hit Small Right", HoldAt = -1f, Speed = 1.3f },
             new Job { State = "hit_back", Clip = "Hit Small Back", HoldAt = -1f, Speed = 1.3f },
             new Job { State = "hit_big", Clip = "Hit Big Front", HoldAt = -1f, Speed = 1.15f },
+            // Heavy blows from the side / behind (Invector Hit Big) and a second, head-snapping variant per side (Moto Get_Hit),
+            // so a beating is directional and never loops one clip (PedestrianBrawler picks, never the same twice in a row).
+            new Job { State = "hit_big_left", Clip = "Hit Big Left", HoldAt = -1f, Speed = 1.15f },
+            new Job { State = "hit_big_right", Clip = "Hit Big Right", HoldAt = -1f, Speed = 1.15f },
+            new Job { State = "hit_big_back", Clip = "Hit Big Back", HoldAt = -1f, Speed = 1.15f },
+            new Job { State = "hit_front_b", Clip = "AS_Get_Hit_Front", HoldAt = -1f, Speed = 1.1f },
+            new Job { State = "hit_left_b", Clip = "AS_Get_Hit_Left", HoldAt = -1f, Speed = 1.1f },
+            new Job { State = "hit_right_b", Clip = "AS_Get_Hit_Right", HoldAt = -1f, Speed = 1.1f },
+            new Job { State = "hit_back_b", Clip = "AS_Get_Hit_Back", HoldAt = -1f, Speed = 1.1f },
         };
 
         private static readonly Job[] FightJobs =
@@ -70,6 +80,65 @@ namespace OpenworldCrime.EditorTools
 
         [MenuItem("Tools/OpenworldCrime/Population/Configure Punch Reactions On People Prefabs")]
         public static void ConfigureMenu() => Debug.Log(ConfigurePrefabs());
+
+        [MenuItem("Tools/OpenworldCrime/Population/Configure Police Punch Reactions")]
+        public static void PoliceMenu() => Debug.Log(ConfigurePolice());
+
+        private static readonly string[] PolicePrefabs =
+        {
+            "Assets/_Project/Prefabs/Pedestrians/Ped_Police_2.prefab", "Assets/_Project/Prefabs/Pedestrians/Ped_Police_3.prefab",
+            "Assets/_Project/Prefabs/Police/PoliceOfficer_2.prefab", "Assets/_Project/Prefabs/Police/PoliceOfficer_3.prefab",
+        };
+
+        /// <summary>
+        /// The police (humanoid, controllers without hit states) react to punches with <see cref="OpenworldCrime.Pedestrians.HumanoidHitReaction"/>:
+        /// per side Invector's Hit Small and Moto's Get_Hit head snap, played over their controller.
+        /// </summary>
+        public static string ConfigurePolice()
+        {
+            var log = new StringBuilder("[PedestrianBrawlAnimBuilder] police").AppendLine();
+            var sources = new Dictionary<string, AnimationClip>();
+            foreach (string set in new[] { MeleeSet, MotoHit + "Front.fbx", MotoHit + "Back.fbx", MotoHit + "Left.fbx", MotoHit + "Right.fbx" })
+                foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(set))
+                    if (o is AnimationClip c && !c.name.StartsWith("__")) sources[c.name] = c;
+            foreach (string path in PolicePrefabs)
+            {
+                GameObject root = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    var damage = root.GetComponent<OpenworldCrime.Pedestrians.PedestrianDamage>();
+                    var animator = root.GetComponentInChildren<Animator>(true);
+                    if (damage == null || animator == null) { log.AppendLine("  skipped " + path); continue; }
+                    var reaction = root.GetComponent<OpenworldCrime.Pedestrians.HumanoidHitReaction>();
+                    if (reaction == null) reaction = root.AddComponent<OpenworldCrime.Pedestrians.HumanoidHitReaction>();
+                    var so = new SerializedObject(reaction);
+                    so.FindProperty("damage").objectReferenceValue = damage;
+                    so.FindProperty("animator").objectReferenceValue = animator;
+                    SetClips(so.FindProperty("front"), Pick(sources, "Hit Small Front", "AS_Get_Hit_Front"));
+                    SetClips(so.FindProperty("left"), Pick(sources, "Hit Small Left", "AS_Get_Hit_Left"));
+                    SetClips(so.FindProperty("right"), Pick(sources, "Hit Small Right", "AS_Get_Hit_Right"));
+                    SetClips(so.FindProperty("back"), Pick(sources, "Hit Small Back", "AS_Get_Hit_Back"));
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                    log.AppendLine("  " + root.name + ": HumanoidHitReaction");
+                }
+                finally { PrefabUtility.UnloadPrefabContents(root); }
+            }
+            return log.ToString();
+        }
+
+        private static AnimationClip[] Pick(Dictionary<string, AnimationClip> sources, params string[] names)
+        {
+            var list = new List<AnimationClip>();
+            foreach (string n in names) if (sources.TryGetValue(n, out AnimationClip c)) list.Add(c);
+            return list.ToArray();
+        }
+
+        private static void SetClips(SerializedProperty array, AnimationClip[] clips)
+        {
+            array.arraySize = clips.Length;
+            for (int i = 0; i < clips.Length; i++) array.GetArrayElementAtIndex(i).objectReferenceValue = clips[i];
+        }
 
         private const string PrefabFolder = "Assets/_Project/Prefabs/Pedestrians";
         private const string AudioFolder = "Assets/Invector-3rdPersonController/Melee Combat/Audio/";
@@ -159,7 +228,7 @@ namespace OpenworldCrime.EditorTools
             EnsureFolder(ClipFolder);
             var mapping = AssetDatabase.LoadAssetAtPath<GameObject>(MappingModel).GetComponent<Animator>().avatar;
             var sources = new Dictionary<string, AnimationClip>();
-            foreach (string set in new[] { MeleeSet, ActionsSet })
+            foreach (string set in new[] { MeleeSet, ActionsSet, MotoHit + "Front.fbx", MotoHit + "Back.fbx", MotoHit + "Left.fbx", MotoHit + "Right.fbx" })
                 foreach (Object o in AssetDatabase.LoadAllAssetsAtPath(set))
                     if (o is AnimationClip c && !c.name.StartsWith("__")) sources[c.name] = c;
 

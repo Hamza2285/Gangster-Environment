@@ -66,6 +66,13 @@ namespace OpenworldCrime.Racing
         [SerializeField, Min(3f)] private float checkpointRadius = 13f;
         [Tooltip("Metres past a checkpoint before 'missed checkpoint' is shown.")]
         [SerializeField, Min(10f)] private float missedDistance = 70f;
+        [Header("Leaving the race")]
+        [Tooltip("Farther than this (m) from the route starts the 'return to the race' countdown.")]
+        [SerializeField, Min(10f)] private float leaveRouteDistance = 70f;
+        [Tooltip("Driving the wrong way this long (s) also starts it.")]
+        [SerializeField, Min(1f)] private float wrongWayLeaveSeconds = 4f;
+        [Tooltip("Seconds to get back before the race is lost.")]
+        [SerializeField, Min(3f)] private float returnSeconds = 10f;
         [SerializeField, Range(0.5f, 1.2f)] private Vector2 opponentSkill = new Vector2(0.9f, 1f);
         [Tooltip("Opponents this far behind the player drive faster, this far ahead slower (light rubber-banding).")]
         [SerializeField] private float catchUpGap = 60f;
@@ -90,6 +97,10 @@ namespace OpenworldCrime.Racing
         public int CheckpointsPassed { get; private set; }
         public int CurrentLap => CurrentRace == null ? 0 : Mathf.Min(CheckpointsPassed / Mathf.Max(1, CurrentRace.Checkpoints.Length), CurrentRace.Laps - 1) + 1;
         public bool WrongWay { get; private set; }
+        /// <summary>Seconds left to get back to the route, or below 0 while the player is on it.</summary>
+        public float ReturnTimeLeft { get; private set; } = -1f;
+        /// <summary>The player's place along the route (index into the route points), for the route guides.</summary>
+        public int PlayerRouteIndex => playerIndex;
         public RaceStartPoint PromptPoint { get; private set; }
         public string PromptBlockedReason { get; private set; }
 
@@ -240,6 +251,8 @@ namespace OpenworldCrime.Racing
         {
             if (State != RaceState.Racing || Time.time - lastRespawn < respawnCooldown || playerBody == null) return;
             lastRespawn = Time.time;
+            ReturnTimeLeft = -1f;
+            wrongWayTimer = 0f;
             int ordinal = CheckpointsPassed - 1;
             if (ordinal < 0) PlaceOnGrid(playerBody, 0);
             else
@@ -285,6 +298,8 @@ namespace OpenworldCrime.Racing
             playerLap = 0;
             CheckpointsPassed = 0;
             WrongWay = false;
+            wrongWayTimer = 0f;
+            ReturnTimeLeft = -1f;
             PlayerPosition = race.Opponents + 1;
 
             int count = Mathf.Min(race.Opponents, race.GridPositions.Length - 1);
@@ -395,12 +410,25 @@ namespace OpenworldCrime.Racing
                 OnMessage?.Invoke("Missed a checkpoint - go back");
             }
 
-            // Wrong way.
+            // Wrong way: against the route at the nearest route segment (wherever the player is, ahead or behind his progress).
+            int nearestIndex = NearestRouteIndex(p, out float routeDistance);
             Vector3 velocity = playerBody.linearVelocity;
             velocity.y = 0f;
-            bool backwards = velocity.sqrMagnitude > 16f && Vector3.Dot(velocity.normalized, Direction(playerIndex)) < -0.3f;
-            wrongWayTimer = backwards ? wrongWayTimer + Time.deltaTime : 0f;
+            float speed = velocity.magnitude;
+            float along = speed > 0.1f ? Vector3.Dot(velocity / speed, Direction(nearestIndex)) : 0f;
+            if (speed > 3f && along < -0.3f) wrongWayTimer += Time.deltaTime;
+            else if (speed > 3f && along > 0.2f) wrongWayTimer = 0f; // back on course (standing still keeps the state)
             WrongWay = wrongWayTimer > 1f;
+
+            // Off the route (too far, or the wrong way for long): a countdown to get back, then the race is lost.
+            bool off = routeDistance > leaveRouteDistance || wrongWayTimer > wrongWayLeaveSeconds;
+            bool back = routeDistance < leaveRouteDistance * 0.85f && wrongWayTimer <= 0f;
+            if (off)
+            {
+                ReturnTimeLeft = ReturnTimeLeft < 0f ? returnSeconds : ReturnTimeLeft - Time.deltaTime;
+                if (ReturnTimeLeft <= 0f) { Fail("You left the race"); return; }
+            }
+            else if (back) ReturnTimeLeft = -1f;
 
             // Opponents: finish, rubber-banding, positions.
             float playerProgress = PlayerProgress();
@@ -434,7 +462,9 @@ namespace OpenworldCrime.Racing
                 int i = playerIndex + k;
                 int lapShift = 0;
                 if (i >= route.Length) { if (!CurrentRace.IsCircuit) break; i -= route.Length; lapShift = 1; }
-                if (i < 0) { if (!CurrentRace.IsCircuit) continue; i += route.Length; lapShift = -1; }
+                // Never back over the start line: on a circuit the grid sits just behind point 0, and wrapping to the end of
+                // the loop there counted the player a lap behind (wrong positions on later laps, the route map hidden).
+                if (i < 0) continue;
                 float d = (route[i] - p).sqrMagnitude;
                 if (d < bestD) { bestD = d; best = i; playerLapShift = lapShift; }
             }
@@ -447,6 +477,26 @@ namespace OpenworldCrime.Racing
         }
 
         private int playerLapShift;
+
+        // Nearest route point within 60 points either side of the player's progress (wraps on circuits), and its distance.
+        private int NearestRouteIndex(Vector3 p, out float distance)
+        {
+            Vector3[] route = CurrentRace.RoutePoints;
+            int best = playerIndex;
+            float bestD = float.MaxValue;
+            for (int k = -60; k <= 60; k++)
+            {
+                int i = playerIndex + k;
+                if (CurrentRace.IsCircuit) i = (i % route.Length + route.Length) % route.Length;
+                else if (i < 0 || i >= route.Length) continue;
+                Vector3 d = route[i] - p;
+                d.y *= 0.3f; // bridges / ramps: height counts less
+                float sq = d.sqrMagnitude;
+                if (sq < bestD) { bestD = sq; best = i; }
+            }
+            distance = Mathf.Sqrt(bestD);
+            return best;
+        }
 
         private float PlayerProgress()
         {
@@ -563,6 +613,7 @@ namespace OpenworldCrime.Racing
             playerController = null;
             playerBody = null;
             WrongWay = false;
+            ReturnTimeLeft = -1f;
             if (fader != null && fader.IsBlack) StartCoroutine(fader.FadeTo(0f, 0.4f));
             SetState(RaceState.Idle);
         }

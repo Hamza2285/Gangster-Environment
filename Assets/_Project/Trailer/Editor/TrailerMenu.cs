@@ -27,8 +27,11 @@ namespace OpenworldCrime.Trailer.EditorTools
             EditorApplication.playModeStateChanged += OnPlayMode;
         }
 
-        [MenuItem("Tools/OpenworldCrime/Trailer/Render Trailer MP4")]
+        [MenuItem("Tools/OpenworldCrime/Trailer/Render Trailer v2 (45 s) MP4")]
         public static void RenderVideo() => Launch("video", "");
+
+        [MenuItem("Tools/OpenworldCrime/Trailer/Render Trailer v1 (87 s) MP4")]
+        public static void RenderVideoV1() => Launch("video-v1", "");
 
         [MenuItem("Tools/OpenworldCrime/Trailer/Render Stills (every shot)")]
         public static void RenderStills() => Launch("stills", "");
@@ -62,16 +65,22 @@ namespace OpenworldCrime.Trailer.EditorTools
         /// <summary>Settings for a render; also used from scripts (stills of selected shots while iterating).</summary>
         public static TrailerDirector.Settings MakeSettings(string mode, string filter, bool exitWhenDone)
         {
+            bool v1 = mode.EndsWith("-v1");
             var s = new TrailerDirector.Settings
             {
-                OutputPath = Path.Combine(OutputDir, "GangsterTrailer.mp4"),
+                Version = v1 ? 1 : 2,
+                Width = v1 ? 1920 : 2880,
+                Height = v1 ? 1080 : 1620,
+                Letterbox = !v1,
+                Crf = v1 ? 18 : 16,
+                OutputPath = Path.Combine(OutputDir, v1 ? "GangsterTrailer.mp4" : "GangsterTrailer_v2_45s.mp4"),
                 FfmpegPath = FindFfmpeg(),
                 ShotFilter = filter ?? "",
-                StillsDir = Path.Combine(OutputDir, "Stills"),
+                StillsDir = Path.Combine(OutputDir, v1 ? "Stills" : "Stills_v2"),
                 ExitPlayModeWhenDone = exitWhenDone
             };
-            if (mode == "stills") s.StillFractions = new List<float> { 0.05f, 0.5f, 0.95f };
-            if (mode == "dense") s.StillFractions = new List<float> { 0.02f, 0.18f, 0.34f, 0.5f, 0.66f, 0.82f, 0.98f };
+            if (mode.StartsWith("stills")) s.StillFractions = new List<float> { 0.05f, 0.5f, 0.95f };
+            if (mode.StartsWith("dense")) s.StillFractions = new List<float> { 0.02f, 0.18f, 0.34f, 0.5f, 0.66f, 0.82f, 0.98f };
             return s;
         }
 

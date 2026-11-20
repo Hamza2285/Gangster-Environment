@@ -29,6 +29,9 @@ namespace OpenworldCrime.Racing
         [SerializeField] private Button respawnButton;
         [SerializeField] private Button quitButton;
         [SerializeField] private GameObject wrongWayPanel;
+        [Tooltip("'Return to the race' countdown (off the route / wrong way for long).")]
+        [SerializeField] private GameObject returnPanel;
+        [SerializeField] private Text returnText;
         [SerializeField] private Text countdownText;
 
         [Header("Messages / results")]
@@ -61,6 +64,7 @@ namespace OpenworldCrime.Racing
             SetActive(resultsPanel, false);
             SetActive(messagePanel, false);
             SetActive(wrongWayPanel, false);
+            SetActive(returnPanel, false);
             if (countdownText != null) countdownText.gameObject.SetActive(false);
         }
 
@@ -129,7 +133,21 @@ namespace OpenworldCrime.Racing
                 timeText.text = FormatTime(manager.Elapsed);
             }
             SetActive(wrongWayPanel, manager.WrongWay);
+            bool leaving = manager.ReturnTimeLeft >= 0f;
+            SetActive(returnPanel, leaving);
+            if (leaving && returnText != null)
+            {
+                int seconds = Mathf.CeilToInt(manager.ReturnTimeLeft);
+                if (seconds != lastReturnSeconds)
+                {
+                    lastReturnSeconds = seconds;
+                    returnText.text = "RETURN TO THE RACE  " + seconds;
+                }
+            }
+            else lastReturnSeconds = -1;
         }
+
+        private int lastReturnSeconds = -1;
 
         private void HandlePrompt(RaceStartPoint point, string blocked)
         {
@@ -154,7 +172,7 @@ namespace OpenworldCrime.Racing
             SetActive(promptPanel, false);
             SetActive(racePanel, state == RaceState.Racing || state == RaceState.Countdown);
             SetActive(resultsPanel, state == RaceState.Results);
-            if (state != RaceState.Racing) SetActive(wrongWayPanel, false);
+            if (state != RaceState.Racing) { SetActive(wrongWayPanel, false); SetActive(returnPanel, false); }
             if ((state == RaceState.Idle || state == RaceState.Results) && countdownText != null) countdownText.gameObject.SetActive(false);
             if (respawnButton != null) respawnButton.gameObject.SetActive(state == RaceState.Racing);
             lastSecond = -1;

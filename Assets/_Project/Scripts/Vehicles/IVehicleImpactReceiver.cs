@@ -23,10 +23,20 @@ namespace OpenworldCrime.Vehicles
         /// </summary>
         public readonly Vector3 VehicleVelocity;
 
+        /// <summary>
+        /// How fast (m/s) the vehicle itself was driving into the person going into the contact: its own (centre of mass,
+        /// horizontal) velocity along the line from the vehicle to the person, never negative. A person walking or running
+        /// into a parked or slow car gives ~0 (their own speed and the car's rocking are not in it).
+        /// </summary>
+        public readonly float ClosingSpeed;
+
         public float Speed => Velocity.magnitude;
 
-        public VehicleImpact(Vector3 velocity, Vector3 point, float vehicleMass, Transform vehicle, VehicleCharacterImpact source = null, Vector3 vehicleVelocity = default)
+        public VehicleImpact(Vector3 velocity, Vector3 point, float vehicleMass, Transform vehicle, VehicleCharacterImpact source = null,
+            Vector3 vehicleVelocity = default, float closingSpeed = -1f)
         {
+            // Senders that do not measure it (scripted pushes): the vehicle velocity's magnitude, as before.
+            ClosingSpeed = closingSpeed >= 0f ? closingSpeed : new Vector3(vehicleVelocity.x, 0f, vehicleVelocity.z).magnitude;
             Velocity = velocity;
             Point = point;
             VehicleMass = vehicleMass;

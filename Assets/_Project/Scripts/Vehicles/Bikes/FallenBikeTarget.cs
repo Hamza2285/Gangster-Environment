@@ -42,6 +42,7 @@ namespace OpenworldCrime.Vehicles
             drivablePrefab = drivable;
             paint = bikePaint;
             body = GetComponent<Rigidbody>();
+            FitWreckCollider();
             foreach (Collider c in GetComponentsInChildren<Collider>(true)) if (!c.isTrigger) colliders.Add(c);
 
             // The player's interaction trigger finds vehicles through a trigger on the Triggers layer; it follows the wreck.
@@ -55,6 +56,41 @@ namespace OpenworldCrime.Vehicles
             leftPoint.SetParent(transform, false);
             rightPoint.SetParent(transform, false);
             UpdatePoints();
+        }
+
+        // Hamza's wreck copies the traffic bike's crash box, which starts 0.45 m above the wheels' contact (it is only meant for
+        // cars to hit): the loose wreck had nothing under its wheels and lower frame, so it sank into the road until the box
+        // touched it (most visible when the bike just tips over, e.g. a punched rider). The box is fitted here to the whole bike
+        // model, before the first physics step, with the weight in its middle so it still falls onto its side and stays there.
+        private void FitWreckCollider()
+        {
+            var box = GetComponent<BoxCollider>();
+            if (box == null) return;
+            bool any = false;
+            Bounds local = default;
+            foreach (MeshFilter filter in GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (filter.sharedMesh == null) continue;
+                Bounds mb = filter.sharedMesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = mb.center + Vector3.Scale(mb.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    Vector3 p = transform.InverseTransformPoint(filter.transform.TransformPoint(corner));
+                    if (!any) { local = new Bounds(p, Vector3.zero); any = true; }
+                    else local.Encapsulate(p);
+                }
+            }
+            if (!any) return;
+            // The wreck's origin is the wheels' contact with the road. Mesh bounds reach a little below it, and a box starting
+            // inside the (one-sided) road collider is pushed down through it, so the bottom stays just above the origin.
+            Vector3 min = local.min, max = local.max;
+            min.y = Mathf.Max(min.y, 0.03f);
+            local.SetMinMax(min, max);
+            Vector3 size = local.size;
+            size.x = Mathf.Max(size.x, 0.5f); // a bike is thin: give it enough width to lie on its side
+            box.center = local.center;
+            box.size = size;
+            if (body != null) body.centerOfMass = local.center;
         }
 
         // Beside the bike on the ground, whichever way it lies, facing it.
