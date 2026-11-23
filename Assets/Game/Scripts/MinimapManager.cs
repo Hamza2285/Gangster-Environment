@@ -10,7 +10,15 @@ public class MinimapManager : MonoBehaviour
     public GameMapUI.MinimapShape shape = GameMapUI.MinimapShape.Rectangle;
     [SerializeField] GameMapUI map;
 
-    void Awake() => Apply();
+    // The player's choice on the menu's Navigation Experience screen (PlayerPrefs "MinimapShape": "Square" or "Circle")
+    // wins over the scene's default once it has been made.
+    void Awake()
+    {
+        if (PlayerPrefs.HasKey(OpenworldCrime.UI.Menu.NavigationScreen.PrefKey))
+            shape = PlayerPrefs.GetString(OpenworldCrime.UI.Menu.NavigationScreen.PrefKey) == OpenworldCrime.UI.Menu.NavigationScreen.Circle
+                ? GameMapUI.MinimapShape.Circle : GameMapUI.MinimapShape.Square;
+        Apply();
+    }
 
     void OnValidate() => Apply();
 

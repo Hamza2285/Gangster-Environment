@@ -142,6 +142,9 @@ namespace OpenworldCrime.Vehicles
         private void Start()
         {
             if (!isValid) return;
+            // Already taken over on the frame it was spawned (a mission seats the player straight away): parking it here
+            // would switch his input and engine off under him.
+            if (IsControlled || IsOccupied) return;
             carController.SetCanControl(false);
             if (engineOffWhenParked) carController.KillEngine();
         }

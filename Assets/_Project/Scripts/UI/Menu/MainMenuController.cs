@@ -48,6 +48,8 @@ namespace OpenworldCrime.UI.Menu
 
         [Header("Loading")]
         [SerializeField] private LoadingScreen loadingScreen;
+        [Tooltip("Minimap style screen shown after ENTER GAME, before loading (optional).")]
+        [SerializeField] private NavigationScreen navigationScreen;
 
         private RenderTexture videoTexture;
 
@@ -150,10 +152,16 @@ namespace OpenworldCrime.UI.Menu
 
         public void EnterGame()
         {
-            if (loadingScreen.IsLoading) return;
+            if (loadingScreen.IsLoading || (navigationScreen != null && navigationScreen.IsOpen)) return;
             ClosePanels();
             SetButtonsInteractable(false);
-            loadingScreen.Begin(music);
+            if (navigationScreen != null) navigationScreen.Show(StartLoading);   // pick the minimap style first
+            else StartLoading();
+        }
+
+        private void StartLoading()
+        {
+            if (!loadingScreen.IsLoading) loadingScreen.Begin(music);
         }
 
         private void HandleLoadingCovered()

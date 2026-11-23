@@ -474,12 +474,15 @@ namespace OpenworldCrime.Police
         /// A cruiser placed right where the caller wants it (e.g. on the player's tail in a cutscene), already moving, chasing the
         /// wanted player like any dispatched car. False when no car is free.
         /// </summary>
-        public bool SpawnChaseCar(Vector3 position, Quaternion rotation, Vector3 velocity)
+        public bool SpawnChaseCar(Vector3 position, Quaternion rotation, Vector3 velocity) => SpawnChaseCarUnit(position, rotation, velocity) != null;
+
+        /// <summary>Same as <see cref="SpawnChaseCar"/>, returning the cruiser (scripted chases steer it for a while).</summary>
+        public PoliceCarUnit SpawnChaseCarUnit(Vector3 position, Quaternion rotation, Vector3 velocity)
         {
             PoliceCarUnit unit = TakeCar();
-            if (unit == null) return false;
+            if (unit == null) return null;
             unit.Activate(this, position, rotation, velocity);
-            return true;
+            return unit;
         }
 
         public bool CanVanish(Vector3 point, float keepDistance)
