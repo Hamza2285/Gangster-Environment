@@ -46,6 +46,9 @@ namespace OpenworldCrime.Vehicles
         public float CurrentHealth { get; private set; }
         public VehicleDamageStage Stage { get; private set; }
         public bool IsDestroyed => Stage == VehicleDamageStage.Destroyed;
+
+        /// <summary>Takes no damage while set (e.g. the hero car during a cutscene, beside a blast it is part of).</summary>
+        public bool Invulnerable { get; set; }
         public float MaxHealth => settings != null ? settings.maxHealth : 1f;
         public VehicleDamageSettings Settings => settings;
         /// <summary>
@@ -140,7 +143,7 @@ namespace OpenworldCrime.Vehicles
 
         private void ApplyHealthDamage(float amount, Transform sender)
         {
-            if (!valid || IsDestroyed || amount <= 0f) return;
+            if (!valid || IsDestroyed || amount <= 0f || Invulnerable) return;
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
             OnDamaged?.Invoke(amount, sender);
             UpdateStage();

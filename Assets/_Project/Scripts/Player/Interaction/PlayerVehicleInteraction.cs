@@ -963,6 +963,56 @@ namespace OpenworldCrime.Player
             StartCoroutine(vehicle.UsesQuickMount ? QuickMountRoutine(vehicle) : EnterRoutine(vehicle, clipStartTime));
         }
 
+        /// <summary>
+        /// Puts the player straight into the driver's seat, no walk or clip (e.g. a mission that starts with him already driving).
+        /// False when he is not on foot or the vehicle is missing.
+        /// </summary>
+        public bool EnterInstant(IVehicleController vehicle)
+        {
+            if (State != VehicleInteractionState.OnFoot || vehicle == null || (vehicle as UnityEngine.Object) == null) return false;
+            CurrentVehicle = vehicle;
+            vehicle.SetOccupied(true);
+            SetState(VehicleInteractionState.Entering);
+            OnVehicleEnterStarted?.Invoke(vehicle);
+            LockPlayer();
+            StowWeapon();
+            controller.DisableGravityAndCollision();
+            SetVehicleCollisionIgnored(vehicle, true);
+            animator.Play(seatedStateHash, BaseLayer, 0f);
+            transform.SetParent(vehicle.GetDriverSeat(), true);
+            FinishSeating(vehicle);
+            return true;
+        }
+
+        /// <summary>
+        /// While driving the real character is hidden and the car shows its seated driver dummy. A cutscene close-up shows the
+        /// real one instead (his own model, in the seated pose); false goes back to the dummy. Input and physics stay off.
+        /// </summary>
+        public void SetRealDriverVisible(bool visible)
+        {
+            if (State != VehicleInteractionState.InVehicle || CurrentVehicle == null) return;
+            if (visible)
+            {
+                realDriverRootMotion = animator.applyRootMotion;
+                animator.applyRootMotion = false;
+                characterModel.SetActive(true);
+                animator.enabled = true;
+                animator.Play(seatedStateHash, BaseLayer, 0f);
+                transform.localPosition = Vector3.zero;
+                transform.localRotation = Quaternion.identity;
+                CurrentVehicle.SetDriverVisualActive(false);
+            }
+            else
+            {
+                animator.enabled = false;
+                characterModel.SetActive(false);
+                animator.applyRootMotion = realDriverRootMotion;
+                CurrentVehicle.SetDriverVisualActive(true);
+            }
+        }
+
+        private bool realDriverRootMotion;
+
         /// <summary>Starts exiting the current vehicle. Returns false (and raises OnExitBlocked) if not possible.</summary>
         public bool RequestExit()
         {

@@ -28,8 +28,22 @@ namespace OpenworldCrime.EditorTools
     /// have lightmap UVs and are big enough to matter; everything else (props, foliage, signs, water) is probe lit.
     /// Menu: Tools > OpenworldCrime > Lighting. Runs asynchronously; progress in Temp/daynight_bake_status.txt.
     /// </summary>
+    [InitializeOnLoad]
     public static class DayNightLightBaker
     {
+        // Entering Play mode cancels a lightmap bake halfway (the scene then keeps night lightmaps in the day: black city).
+        static DayNightLightBaker()
+        {
+            EditorApplication.playModeStateChanged += state =>
+            {
+                if (state != PlayModeStateChange.ExitingEditMode || (!IsRunning && !Lightmapping.isRunning)) return;
+                EditorApplication.isPlaying = false;
+                const string message = "Light bake in progress - Play is blocked until it finishes (see Temp/daynight_bake_status.txt).";
+                Debug.LogWarning("[DayNightLightBaker] " + message);
+                foreach (SceneView view in SceneView.sceneViews) view.ShowNotification(new GUIContent(message), 6f);
+            };
+        }
+
         private const string SettingsPath = "Assets/_Project/Lighting/OWC_CityLighting.lighting";
         private const string SetsFolder = "Assets/_Project/Scenes/Gangstar_Gameplay/LightingSets";
         private const string NightMapsFolder = SetsFolder + "/Night";
@@ -240,8 +254,9 @@ namespace OpenworldCrime.EditorTools
             s.lightmapCompression = LightmapCompression.NormalQuality;
             s.directionalityMode = LightmapsMode.NonDirectional; // half the memory; normal maps keep realtime sun detail
             s.ao = true;
-            s.aoMaxDistance = 1.5f;
-            s.aoExponentIndirect = 1f;
+            // Short, soft AO: at ~2 texels per metre a long reach turns every corner into a dark block.
+            s.aoMaxDistance = 0.8f;
+            s.aoExponentIndirect = 0.5f;
             s.aoExponentDirect = 0f;
             s.maxBounces = 3;
             s.directSampleCount = 64;
@@ -260,6 +275,26 @@ namespace OpenworldCrime.EditorTools
             s.filteringGaussianRadiusAO = 2f;
             s.prioritizeView = false;
             s.autoGenerate = false;
+            // Texels that see a few back faces (walls meeting the ground, props sunk into pavements) were thrown away and came
+            // out as black specks and blocks on the facades: accept more of them and start the rays a little off the surface.
+            const string ParamsPath = "Assets/_Project/Lighting/OWC_CityLightmapParameters.giparams";
+            var parameters = AssetDatabase.LoadAssetAtPath<LightmapParameters>(ParamsPath);
+            if (parameters == null)
+            {
+                parameters = new LightmapParameters { name = "OWC_CityLightmapParameters" };
+                AssetDatabase.CreateAsset(parameters, ParamsPath);
+            }
+            parameters.backFaceTolerance = 0.5f;
+            parameters.pushoff = 0.02f;
+            parameters.antiAliasingSamples = 8;
+            EditorUtility.SetDirty(parameters);
+            var settingsObject = new SerializedObject(s);
+            SerializedProperty defaultParameters = settingsObject.FindProperty("m_LightmapParameters");
+            if (defaultParameters != null)
+            {
+                defaultParameters.objectReferenceValue = parameters;
+                settingsObject.ApplyModifiedPropertiesWithoutUndo();
+            }
             EditorUtility.SetDirty(s);
             AssetDatabase.SaveAssets();
             return s;

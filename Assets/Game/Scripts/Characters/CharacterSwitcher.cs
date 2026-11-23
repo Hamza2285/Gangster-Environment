@@ -122,9 +122,13 @@ public class CharacterSwitcher : MonoBehaviour
         StartCoroutine(SwitchTo(chosen));
     }
 
+    // A mission that needs the other character where it is (e.g. Mia riding along in the intro) sets this to its reason.
+    public static string BlockedReason;
+
     // Null when switching is fine right now; otherwise the reason, shown to the player.
     string WhyNot()
     {
+        if (!string.IsNullOrEmpty(BlockedReason)) return BlockedReason;
         if (GamePlayer.MenuOpen || ClothingStoreMenu.IsOpen) return "Close the menu to switch character";
         if (GamePlayer.InVehicle) return "Get out of the vehicle to switch character";
         var travel = ClothingStoreTravel.Instance;

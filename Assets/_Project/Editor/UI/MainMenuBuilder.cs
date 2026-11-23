@@ -40,6 +40,8 @@ namespace OpenworldCrime.EditorTools
         // Backgrounds with no people (cut-outs go in front of them); the transparent PNGs are the character cut-outs.
         private static readonly string[] StillBackgrounds = { "Neon Nights at the Empty Nightclub", "Sunset City Beach Reflections" };
         private static readonly string[] IconNames = { "Icon_Policy", "Icon_Share", "Icon_Settings", "Icon_Exit" };
+        // Right-hand menu icons (were 132: the user asked for them smaller).
+        public const float IconSize = 92f;
 
         private static readonly string[] Tips =
         {
@@ -336,9 +338,9 @@ namespace OpenworldCrime.EditorTools
 
             // Right-hand icon bar.
             var bar = NewRect("Right Bar", safe);
-            Anchor(bar, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(170f, 640f), new Vector2(-36f, 40f));
+            Anchor(bar, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(120f, 460f), new Vector2(-30f, 40f));
             var layout = bar.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 26f;
+            layout.spacing = 20f;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = layout.childControlHeight = false;
             layout.childForceExpandWidth = layout.childForceExpandHeight = false;
@@ -348,7 +350,7 @@ namespace OpenworldCrime.EditorTools
             {
                 var b = NewImage(labels[i] + " Button", bar, icons[i], Color.white);
                 b.preserveAspect = true;
-                b.rectTransform.sizeDelta = new Vector2(132f, 132f);
+                b.rectTransform.sizeDelta = new Vector2(IconSize, IconSize);
                 iconButtons[i] = b.gameObject.AddComponent<Button>();
                 iconButtons[i].transition = Selectable.Transition.ColorTint;
                 var colors = iconButtons[i].colors;

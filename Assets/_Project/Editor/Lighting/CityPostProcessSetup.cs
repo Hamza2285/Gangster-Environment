@@ -26,10 +26,10 @@ namespace OpenworldCrime.EditorTools
         private const int DayPriority = 110;   // above the scene's Global / Outdoor volumes and Hamza's Night Effects (100)
         private const int NightPriority = 120;
         // ACES darkens mid-tones a little, so exposure is higher than it was with no tonemapping.
-        private const float DayExposure = 0.45f;
-        private const float DayContrast = 12f;
-        private const float DaySaturation = 10f;
-        private const float DayTemperature = 6f;
+        private const float DayExposure = 0.2f;
+        private const float DayContrast = 14f;
+        private const float DaySaturation = 8f;
+        private const float DayTemperature = 2f;
         private const float DayTint = 0f;
         private const float NightExposure = 0.8f; // Ghost's night exposure
 
@@ -70,34 +70,35 @@ namespace OpenworldCrime.EditorTools
         private static VolumeProfile BuildDayProfile()
         {
             VolumeProfile p = NewProfile("OWC_City_Day");
-            // Golden-hour "Vice" look: ACES filmic tonemapping rolls bright facades and signs off softly instead of clipping
-            // (URP applies it in the LDR grading path too, inside the same LUT pass, so the phone pays nothing extra), then a
-            // soft pink / lavender grade: peach-pink highlights, violet shadows, a touch of magenta tint.
+            // Natural daylight (the user asked for "everything natural", GTA V style; the pink "Vice" grade is gone): ACES filmic
+            // tonemapping rolls bright facades and signs off softly instead of clipping (URP applies it in the LDR grading path
+            // too, inside the same LUT pass, so the phone pays nothing extra), a little contrast and saturation, neutral colour.
             Add<Tonemapping>(p).mode.Override(TonemappingMode.ACES);
             var color = Add<ColorAdjustments>(p);
             color.postExposure.Override(DayExposure);
             color.contrast.Override(DayContrast);
             color.saturation.Override(DaySaturation);
-            color.colorFilter.Override(new Color(1f, 0.753f, 0.912f)); // Ghost's pink filter: the main pink of the day look
+            color.colorFilter.Override(Color.white);
             var white = Add<WhiteBalance>(p);
             white.temperature.Override(DayTemperature);
             white.tint.Override(DayTint);
             var split = Add<SplitToning>(p);
-            split.shadows.Override(new Color(0.5f, 0.48f, 0.56f));
-            split.highlights.Override(new Color(1f, 0.86f, 0.74f));
-            split.balance.Override(-15f);
+            // Barely there: sunlit highlights a touch warm, shade a touch cool, like real daylight.
+            split.shadows.Override(new Color(0.48f, 0.5f, 0.54f));
+            split.highlights.Override(new Color(0.54f, 0.51f, 0.48f));
+            split.balance.Override(0f);
             var bloom = Add<Bloom>(p);
-            bloom.threshold.Override(0.95f);
-            bloom.intensity.Override(0.2f); // Ghost's
-            bloom.scatter.Override(0.65f);
-            bloom.tint.Override(new Color(1f, 0.82f, 0.86f));
+            bloom.threshold.Override(1f);
+            bloom.intensity.Override(0.18f);
+            bloom.scatter.Override(0.6f);
+            bloom.tint.Override(Color.white);
             bloom.highQualityFiltering.Override(false);
             bloom.downscale.Override(BloomDownscaleMode.Quarter);
             bloom.maxIterations.Override(5);
             var vignette = Add<Vignette>(p);
-            vignette.intensity.Override(0.22f);
+            vignette.intensity.Override(0.16f);
             vignette.smoothness.Override(0.45f);
-            vignette.color.Override(new Color(0.12f, 0.02f, 0.1f));
+            vignette.color.Override(Color.black);
             return Save(p);
         }
 
@@ -110,13 +111,13 @@ namespace OpenworldCrime.EditorTools
             color.postExposure.Override(NightExposure);
             color.contrast.Override(14f);
             color.saturation.Override(14f);
-            color.colorFilter.Override(new Color(1f, 0.783f, 0.956f)); // Ghost's pink night filter
+            color.colorFilter.Override(new Color(0.96f, 0.97f, 1f)); // a faint moonlit cool; the neon signs bring the colour
             var white = Add<WhiteBalance>(p);
-            white.temperature.Override(-10f);
-            white.tint.Override(12f);
+            white.temperature.Override(-8f);
+            white.tint.Override(0f);
             var split = Add<SplitToning>(p);
-            split.shadows.Override(new Color(0.4f, 0.42f, 0.7f));
-            split.highlights.Override(new Color(1f, 0.7f, 0.85f));
+            split.shadows.Override(new Color(0.45f, 0.48f, 0.6f));
+            split.highlights.Override(new Color(0.55f, 0.52f, 0.48f));
             split.balance.Override(-10f);
             var lgg = Add<LiftGammaGain>(p);
             lgg.lift.Override(new Vector4(0.92f, 0.94f, 1f, -0.03f)); // Ghost's lift / gamma / gain
@@ -126,7 +127,7 @@ namespace OpenworldCrime.EditorTools
             bloom.threshold.Override(0.9f);
             bloom.intensity.Override(0.8f);
             bloom.scatter.Override(0.7f);
-            bloom.tint.Override(new Color(1f, 0.8f, 0.95f));
+            bloom.tint.Override(Color.white);
             bloom.highQualityFiltering.Override(false);
             bloom.downscale.Override(BloomDownscaleMode.Quarter);
             bloom.maxIterations.Override(5);

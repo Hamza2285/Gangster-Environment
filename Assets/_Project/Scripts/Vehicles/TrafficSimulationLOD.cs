@@ -79,6 +79,8 @@ namespace OpenworldCrime.Vehicles
             public TSTrafficAI Ai;
             public TSSimpleCar Simple;
             public TrafficVehicleAdapter Adapter;
+            public TrafficBikeAdapter Bike;
+            public Behaviour[] FarOffBehaviours;
             public VehicleCharacterImpact Impact;
             public Rigidbody Body;
             public Transform Transform;
@@ -147,6 +149,10 @@ namespace OpenworldCrime.Vehicles
             TrafficVehicleAdapter.OnCarDisabled += HandleCarDisabled;
             IReadOnlyList<TrafficVehicleAdapter> active = TrafficVehicleAdapter.ActiveCars;
             for (int i = 0; i < active.Count; i++) HandleCarEnabled(active[i]);
+            TrafficBikeAdapter.OnBikeEnabled += HandleBikeEnabled;
+            TrafficBikeAdapter.OnBikeDisabled += HandleBikeDisabled;
+            IReadOnlyList<TrafficBikeAdapter> bikes = TrafficBikeAdapter.ActiveBikes;
+            for (int i = 0; i < bikes.Count; i++) HandleBikeEnabled(bikes[i]);
             aiTickRoutine = StartCoroutine(FarAiTicks());
         }
 
@@ -154,6 +160,8 @@ namespace OpenworldCrime.Vehicles
         {
             TrafficVehicleAdapter.OnCarEnabled -= HandleCarEnabled;
             TrafficVehicleAdapter.OnCarDisabled -= HandleCarDisabled;
+            TrafficBikeAdapter.OnBikeEnabled -= HandleBikeEnabled;
+            TrafficBikeAdapter.OnBikeDisabled -= HandleBikeDisabled;
             if (aiTickRoutine != null) StopCoroutine(aiTickRoutine);
             aiTickRoutine = null;
             for (int i = 0; i < cars.Count; i++)
@@ -174,6 +182,40 @@ namespace OpenworldCrime.Vehicles
             // Every (re)spawn starts as a normal iTS car; the batched check decides once TSSimpleCar has started.
             car.Tier = Tier.Near;
             car.Speed = 0f;
+        }
+
+        // Traffic motorbikes (same iTS TSSimpleCar / TSTrafficAI underneath): far ones were the biggest physics cost left.
+        private void HandleBikeEnabled(TrafficBikeAdapter bike)
+        {
+            if (bike == null || bike.TrafficAI == null) return;
+            TSTrafficAI ai = bike.TrafficAI;
+            if (!byAi.TryGetValue(ai, out Car car))
+            {
+                car = CreateCar(null, ai);
+                if (car == null) return;
+                car.Bike = bike;
+                var rig = ai.GetComponent<BikeRig>();
+                car.FarOffBehaviours = rig != null ? new Behaviour[] { rig } : new Behaviour[0];
+                car.Index = cars.Count;
+                cars.Add(car);
+                byAi[ai] = car;
+            }
+            car.Tier = Tier.Near;
+            car.Speed = 0f;
+        }
+
+        private void HandleBikeDisabled(TrafficBikeAdapter bike)
+        {
+            if (bike == null || bike.TrafficAI == null) return;
+            if (byAi.TryGetValue(bike.TrafficAI, out Car car) && car.Tier == Tier.Far) SetNear(car);
+        }
+
+        // A vehicle the AI should drive right now (not taken out of traffic by the player, a crash or a fleeing driver).
+        private static bool InTraffic(Car car)
+        {
+            if (car.Adapter != null && car.Adapter.State != TrafficVehicleState.TrafficControlled) return false;
+            if (car.Bike != null && !car.Bike.RidingInTraffic) return false;
+            return true;
         }
 
         // iTS disables pooled cars through TSTrafficAI.Disable (SetActive false) and later re-enables them with Enable(), which
@@ -310,7 +352,7 @@ namespace OpenworldCrime.Vehicles
         private Tier Evaluate(Car car, Vector3 camPos, Vector3 camForward)
         {
             // Anything the player is interacting with (carjack, killed driver, crash) stays a normal physics car.
-            if (car.Adapter != null && car.Adapter.State != TrafficVehicleState.TrafficControlled) return Tier.Near;
+            if (!InTraffic(car)) return Tier.Near;
             if (car.Ai.crashed || car.Ai.reservedForEventTrigger || !car.Ai.IsEnabled) return Tier.Near;
 
             Vector3 offset = car.Transform.position - camPos;
@@ -342,7 +384,7 @@ namespace OpenworldCrime.Vehicles
             {
                 if (car.SavedSpeed != null) car.Ai.UpdateCarSpeed = car.SavedSpeed;
                 // A car taken out of traffic while far (panic flight, bail-out) keeps its AI off: its new owner drives it.
-                if (car.Adapter == null || car.Adapter.State == TrafficVehicleState.TrafficControlled) car.Ai.enabled = true;
+                if (InTraffic(car)) car.Ai.enabled = true;
             }
             if (car.Body != null)
             {
@@ -366,6 +408,9 @@ namespace OpenworldCrime.Vehicles
             for (int i = 0; i < car.AntiRoll.Length; i++)
                 if (car.AntiRoll[i] != null) car.AntiRoll[i].enabled = physics;
             if (car.Simple != null) car.Simple.enabled = physics;
+            if (car.FarOffBehaviours != null)
+                for (int i = 0; i < car.FarOffBehaviours.Length; i++)
+                    if (car.FarOffBehaviours[i] != null) car.FarOffBehaviours[i].enabled = physics;
             if (car.Impact != null) car.Impact.enabled = physics;
             for (int i = 0; i < car.FarOffTriggers.Length; i++)
                 if (car.FarOffTriggers[i] != null) car.FarOffTriggers[i].enabled = physics;
@@ -416,7 +461,7 @@ namespace OpenworldCrime.Vehicles
                     Car car = cars[i];
                     if (car.Ai == null) continue;
                     // A car out of traffic (stopped for the player, driver killed, panicking) has its AI off on purpose.
-                    if (car.Adapter != null && car.Adapter.State != TrafficVehicleState.TrafficControlled) continue;
+                    if (!InTraffic(car)) continue;
                     bool run = car.Tier == Tier.Near || farAiTickInterval <= 1 || (fixedStep + car.Index) % farAiTickInterval == 0;
                     if (car.Ai.enabled != run) car.Ai.enabled = run;
                 }

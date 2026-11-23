@@ -146,6 +146,7 @@ namespace OpenworldCrime.Vehicles
 
         private void Start()
         {
+            CollectParkedSceneVehicles();
             for (int i = 0; i < prewarmedPrefabs.Length; i++)
             {
                 if (prewarmedPrefabs[i] != null && !prewarmed.ContainsKey(prewarmedPrefabs[i])) StartCoroutine(PrewarmRoutine(prewarmedPrefabs[i], 0f));
@@ -322,6 +323,17 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Distance (m) beyond which unoccupied abandoned and parked vehicles go dormant (graphics profiles).</summary>
         public void SetDormantDistance(float distance) => dormantDistance = Mathf.Max(5f, distance);
+
+        // Every drivable car placed in the scene sleeps while far from the player, not only the ones listed by hand (cars added
+        // later, like the hospital and clothing store ambulances, were running full RCC physics all game). Runs before the
+        // prewarmed takeover cars exist, so only scene-placed cars are found.
+        private void CollectParkedSceneVehicles()
+        {
+            var all = new List<RCCVehicleAdapter>(parkedSceneVehicles);
+            foreach (RCCVehicleAdapter vehicle in FindObjectsByType<RCCVehicleAdapter>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (vehicle != null && !vehicle.IsOccupied && !all.Contains(vehicle)) all.Add(vehicle);
+            parkedSceneVehicles = all.ToArray();
+        }
 
         private void UpdateParkedSceneVehicles(Vector3 reference)
         {

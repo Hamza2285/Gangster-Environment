@@ -103,6 +103,16 @@ namespace OpenworldCrime.Vehicles
         private Transform usedEnterPoint;
 
         public bool HasRider => riderVisual != null && riderVisual.activeInHierarchy;
+
+        // Traffic LOD (TrafficSimulationLOD): far bikes glide along their route without physics, like the cars. Only a bike
+        // that is plainly riding in traffic may go far; anything the player is doing with it keeps it on full physics.
+        private static readonly List<TrafficBikeAdapter> activeBikes = new List<TrafficBikeAdapter>();
+        public static IReadOnlyList<TrafficBikeAdapter> ActiveBikes => activeBikes;
+        public static event Action<TrafficBikeAdapter> OnBikeEnabled;
+        public static event Action<TrafficBikeAdapter> OnBikeDisabled;
+        public TSTrafficAI TrafficAI => trafficAI;
+        public bool RidingInTraffic => valid && state == BikeState.Traffic && !knockOffPending && stumbleRoutine == null
+                                       && (bikeCrash == null || !bikeCrash.Crashed) && HasRider;
         public bool CanEnter => valid && isActiveAndEnabled && state == BikeState.Traffic && !bikeCrash.Crashed && trafficAI.IsEnabled && body.linearVelocity.magnitude <= maxTakeoverSpeed;
         public bool IsWrecked => bikeCrash != null && bikeCrash.Crashed;
         public bool IsReadyForEntry => body.linearVelocity.magnitude <= stoppedSpeed;
@@ -239,10 +249,14 @@ namespace OpenworldCrime.Vehicles
                 riderHealth.OnWounded += HandleRiderWounded;
             }
             if (valid) simpleCar.brakeTorque = baseBrakeTorque;
+            if (!activeBikes.Contains(this)) activeBikes.Add(this);
+            OnBikeEnabled?.Invoke(this);
         }
 
         private void OnDisable()
         {
+            activeBikes.Remove(this);
+            OnBikeDisabled?.Invoke(this);
             if (knockOffRoutine != null) StopCoroutine(knockOffRoutine);
             knockOffRoutine = null;
             if (riderHealth != null)

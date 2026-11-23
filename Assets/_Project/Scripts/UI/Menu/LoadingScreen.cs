@@ -33,8 +33,14 @@ namespace OpenworldCrime.UI.Menu
 
         [Header("Loading")]
         [SerializeField] private string gameScene = "Gangstar_Gameplay";
-        [Tooltip("The loading screen shows at least this long (the game activates then, or when loaded if later).")]
-        [SerializeField, Min(0f)] private float minDisplaySeconds = 10f;
+        [Tooltip("The loading screen shows for a random time between these (seconds), and longer while the game scene is still loading.")]
+        [SerializeField, Min(0f)] private float minDisplaySeconds = 7f;
+        [SerializeField, Min(0f)] private float maxDisplaySeconds = 10f;
+        [Tooltip("After the switch, the black holds until the game runs smoothly (this many frames in a row under Smooth Frame " +
+                 "Seconds), at most Max Settle Seconds, so the city is not seen still spawning in.")]
+        [SerializeField, Min(0)] private int settleFrames = 12;
+        [SerializeField, Min(0.01f)] private float smoothFrameSeconds = 0.045f;
+        [SerializeField, Min(0f)] private float maxSettleSeconds = 4f;
         [Tooltip("A new artwork every this many seconds.")]
         [SerializeField, Min(0.5f)] private float slideInterval = 3f;
         [SerializeField, Min(0.1f)] private float fadeInSeconds = 0.6f;
@@ -97,6 +103,7 @@ namespace OpenworldCrime.UI.Menu
             if (music != null) StartCoroutine(FadeOutMusic(music));
 
             float started = Time.unscaledTime;
+            float displaySeconds = UnityEngine.Random.Range(minDisplaySeconds, Mathf.Max(minDisplaySeconds, maxDisplaySeconds));
             OnSlideChanged?.Invoke(0f);
             for (float t = 0f; t < fadeInSeconds; t += Time.unscaledDeltaTime)
             {
@@ -131,9 +138,25 @@ namespace OpenworldCrime.UI.Menu
             while (true)
             {
                 float elapsed = Time.unscaledTime - started;
+                // Editor (load deferred): the artwork plays most of its time first, then the load runs with it still on screen
+                // (it freezes there while the editor loads, rather than the screen going black for the whole load).
+                if (op == null && deferLoad && elapsed >= displaySeconds * 0.7f)
+                {
+                    Application.backgroundLoadingPriority = ThreadPriority.High;
+                    op = SceneManager.LoadSceneAsync(gameScene, LoadSceneMode.Single);
+                    if (op == null)
+                    {
+                        Debug.LogError($"[{nameof(LoadingScreen)}] Scene '{gameScene}' is not in the build settings.", this);
+                        Application.backgroundLoadingPriority = priorityBefore;
+                        yield break;
+                    }
+                    op.allowSceneActivation = false;
+                }
+                // The bar shows the real load: it never runs ahead of it, never goes back, and waits at the time it has reached.
                 float real = op != null ? Mathf.Clamp01(op.progress / 0.9f) : 1f;
-                float wanted = Mathf.Min(real, minDisplaySeconds > 0f ? Mathf.Clamp01(elapsed / minDisplaySeconds) : 1f);
-                shown = Mathf.MoveTowards(shown, wanted, Time.unscaledDeltaTime * 0.5f);
+                if (deferLoad) real = op != null ? 0.7f + 0.3f * real : 0.7f;
+                float wanted = Mathf.Min(real, displaySeconds > 0f ? Mathf.Clamp01(elapsed / displaySeconds) : 1f);
+                if (wanted > shown) shown = Mathf.MoveTowards(shown, wanted, Time.unscaledDeltaTime * 0.5f);
                 SetProgress(shown);
                 float nowReal = Time.realtimeSinceStartup;
                 float frame = nowReal - lastFrame;
@@ -148,7 +171,8 @@ namespace OpenworldCrime.UI.Menu
                     slideshow.Next();
                     OnSlideChanged?.Invoke(elapsed);
                 }
-                if ((op == null || op.progress >= 0.9f) && elapsed >= minDisplaySeconds && shown >= 0.999f) break;
+                // Done only when the time is up AND the scene is loaded: a slow load keeps the loading screen up longer.
+                if (op != null && op.progress >= 0.9f && elapsed >= displaySeconds && shown >= 0.999f) break;
                 yield return null;
             }
 
@@ -181,6 +205,16 @@ namespace OpenworldCrime.UI.Menu
             screenGroup.alpha = 0f;
             yield return null;
             yield return null;
+            // The new scene spawns its traffic, people and lighting over its first frames: stay black until it runs smoothly.
+            float settleStart = Time.realtimeSinceStartup, last = settleStart;
+            int smooth = 0;
+            while (smooth < settleFrames && Time.realtimeSinceStartup - settleStart < maxSettleSeconds)
+            {
+                yield return null;
+                float now = Time.realtimeSinceStartup;
+                smooth = now - last <= smoothFrameSeconds ? smooth + 1 : 0;
+                last = now;
+            }
             for (float t = 0f; t < gameFadeInSeconds; t += Time.unscaledDeltaTime)
             {
                 SetBlack(1f - Smooth(t / gameFadeInSeconds));

@@ -470,6 +470,18 @@ namespace OpenworldCrime.Police
 
         /// <summary>True when a unit at the point can disappear unnoticed: out of the camera's view and at least
         /// <paramref name="keepDistance"/> away, or simply too far (Vanish Distance) to be noticed.</summary>
+        /// <summary>
+        /// A cruiser placed right where the caller wants it (e.g. on the player's tail in a cutscene), already moving, chasing the
+        /// wanted player like any dispatched car. False when no car is free.
+        /// </summary>
+        public bool SpawnChaseCar(Vector3 position, Quaternion rotation, Vector3 velocity)
+        {
+            PoliceCarUnit unit = TakeCar();
+            if (unit == null) return false;
+            unit.Activate(this, position, rotation, velocity);
+            return true;
+        }
+
         public bool CanVanish(Vector3 point, float keepDistance)
         {
             Camera camera = Camera.main;
