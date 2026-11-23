@@ -181,6 +181,22 @@ namespace OpenworldCrime.Controls
             OnControlsModeChanged?.Invoke(useMobileControls);
         }
 
+        // Invector shows its equipment slot boxes again by itself (weapon change, inventory closing, character switch), which
+        // put them over the stick on phones: in mobile mode they are pushed back to hidden every frame.
+        private void LateUpdate()
+        {
+            if (!applied || !useMobileControls) return;
+            for (int i = 0; i < keyboardOnlyObjects.Length; i++)
+            {
+                GameObject target = keyboardOnlyObjects[i];
+                if (target == null) continue;
+                Canvas canvas = target.GetComponent<Canvas>();
+                CanvasGroup group = canvas == null ? target.GetComponent<CanvasGroup>() : null;
+                if ((canvas != null && canvas.enabled) || (canvas == null && (group == null || group.alpha > 0f || group.blocksRaycasts)))
+                    SetHudVisible(target, false);
+            }
+        }
+
         private void HandlePlayerStateChanged(PlayerState state) => RefreshLayout();
 
         private void RefreshLayout()

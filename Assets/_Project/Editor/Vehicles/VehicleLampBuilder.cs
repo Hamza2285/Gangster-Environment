@@ -64,7 +64,8 @@ namespace OpenworldCrime.EditorTools
         public static void BuildMenu() => Debug.Log(BuildAll());
 
         /// <summary>Splits the lamps of every final car prefab and wires <see cref="VehicleLights"/>. Returns a per-prefab report.</summary>
-        public static string BuildAll()
+        /// <param name="onlyCar">If set (e.g. "Taxi"), only that car's Traffic_ / Drivable_ prefabs are processed.</param>
+        public static string BuildAll(string onlyCar = null)
         {
             EnsureFolder(MeshFolder);
             EnsureFolder(MaterialFolder);
@@ -78,6 +79,7 @@ namespace OpenworldCrime.EditorTools
                     string path = AssetDatabase.GUIDToAssetPath(guid);
                     string file = Path.GetFileNameWithoutExtension(path);
                     if (!file.StartsWith("Drivable_") && !file.StartsWith("Traffic_")) continue;
+                    if (onlyCar != null && file.Replace("Drivable_", "").Replace("Traffic_", "") != onlyCar) continue;
                     if (Path.GetDirectoryName(path).Replace('\\', '/') != PrefabFolders[0] && Path.GetDirectoryName(path).Replace('\\', '/') != PrefabFolders[1]) continue;
                     GameObject root = PrefabUtility.LoadPrefabContents(path);
                     try

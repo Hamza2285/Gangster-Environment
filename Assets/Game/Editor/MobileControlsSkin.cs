@@ -15,7 +15,9 @@ using UnityEngine.UI;
 // day / night buttons and weapon box, and most of those buttons have nothing behind them yet. Safe to run again.
 public static class MobileControlsSkin
 {
-    const string SheetPath = "Assets/Game_Play_buttons.png";
+    // The final sheet: the same layout as the first one (Assets/Game_Play_buttons.png) plus the car controls (steering arrows,
+    // brake and gas pedals, handbrake), the jump icon and the stars.
+    const string SheetPath = "Assets/Game_Play buttons final_2.png";
     const float SheetHeight = 1080f;
 
     // Name -> rect on the sheet (x0, y0, x1, y1 from the top-left, pixels).
@@ -24,8 +26,13 @@ public static class MobileControlsSkin
         { "Joystick", Box(32, 760, 340, 1056) }, { "JoystickKnob", Box(1216, 704, 1340, 828) },
         { "Fire", Box(1636, 796, 1900, 1064) }, { "Bullet", Box(1184, 504, 1344, 664) },
         { "Sprint", Box(1216, 852, 1356, 992) }, { "Grenade", Box(1388, 856, 1524, 992) },
-        { "Reload", Box(1388, 696, 1524, 832) }, { "EnterCar", Box(1388, 392, 1524, 528) },
-        { "ExitCar", Box(1388, 536, 1528, 672) }, { "Aim", Box(1544, 392, 1684, 528) },
+        // The door with the arrow pointing in is "get in", the one pointing out is "get out".
+        { "Reload", Box(1388, 696, 1524, 832) }, { "EnterCar", Box(1388, 536, 1528, 672) },
+        { "ExitCar", Box(1388, 392, 1524, 528) }, { "Aim", Box(1544, 392, 1684, 528) },
+        { "SteerLeft", Box(37, 51, 313, 327) }, { "SteerRight", Box(393, 51, 669, 327) },
+        { "JumpIcon", Box(991, 508, 1145, 662) }, { "Handbrake", Box(1188, 334, 1342, 488) },
+        { "Brake", Box(820, 925, 960, 1041) }, { "Gas", Box(1001, 772, 1171, 1042) },
+        { "StarYellow", Box(1315, 100, 1370, 148) }, { "StarOutline", Box(1255, 100, 1312, 148) },
         { "Punch", Box(1544, 536, 1684, 676) }, { "Stand", Box(1704, 388, 1844, 532) },
         { "Crouch", Box(1708, 552, 1844, 688) }, { "Weapon", Box(966, 178, 1086, 294) },
         { "Settings", Box(1796, 24, 1896, 124) }, { "Chat", Box(1564, 144, 1640, 220) },
@@ -47,7 +54,7 @@ public static class MobileControlsSkin
         { "FireLeft", new Place("Bullet", 1265, 585, 152) },
         { "Vehicle", new Place("EnterCar", 1455, 460, 132) },
         { "Aim", new Place("Aim", 1613, 460, 130) },
-        { "Jump", new Place("Stand", 1775, 460, 136) },
+        { "Jump", new Place("JumpIcon", 1775, 460, 136) },
         { "Exit", new Place("ExitCar", 1457, 605, 132) },
         { "Punch", new Place("Punch", 1612, 607, 132) },
         { "Crouch", new Place("Crouch", 1777, 618, 132) },
@@ -133,6 +140,8 @@ public static class MobileControlsSkin
         }
 
         HideEquipSlotsOnPhones(log);
+        SkinCarControls(sprites, log);
+        SkinWantedStars(sprites, log);
 
         // The contextual get-in button (MobileGameButtons) shows the same door icon.
         var style = AssetDatabase.LoadAssetAtPath<GameButtonStyleAsset>("Assets/Game/Resources/UIButtons/ButtonStyle.asset");
@@ -266,6 +275,58 @@ public static class MobileControlsSkin
         }
         so.ApplyModifiedPropertiesWithoutUndo();
         log.AppendLine($"  equipment slot boxes hidden on phones: {added} added");
+    }
+
+    // RCC's driving buttons keep their places and touch areas; their icons (the child image of the same name) come from the
+    // sheet: steering arrows, brake pedal, gas pedal and handbrake lever. (The sheet has no nitro icon, so NOS keeps RCC's.)
+    static void SkinCarControls(Dictionary<string, Sprite> sprites, System.Text.StringBuilder log)
+    {
+        var rcc = FindRoot("RCC Mobile Controls");
+        var buttons = rcc != null ? rcc.transform.Find("Controller Buttons") : null;
+        if (buttons == null) { log.AppendLine("  no RCC Controller Buttons"); return; }
+        var icons = new (string button, string sprite, float height)[]
+        {
+            ("Left", "SteerLeft", 200f), ("Right", "SteerRight", 200f),
+            ("Brake", "Brake", 150f), ("Gas", "Gas", 250f), ("Handbrake", "Handbrake", 160f),
+        };
+        int n = 0;
+        foreach (var (name, spriteName, height) in icons)
+        {
+            var button = buttons.Find(name) as RectTransform;
+            var icon = button != null ? button.Find(name) as RectTransform : null;
+            if (icon == null) { log.AppendLine("  missing RCC " + name); continue; }
+            Sprite sprite = sprites[spriteName];
+            SetImage(icon.gameObject, sprite);
+            icon.sizeDelta = new Vector2(height * sprite.rect.width / sprite.rect.height, height);
+            // The tall gas pedal gets a touch area to match.
+            if (button.sizeDelta.y < height + 30f) button.sizeDelta = new Vector2(button.sizeDelta.x, height + 30f);
+            EditorUtility.SetDirty(button.gameObject);
+            n++;
+        }
+        log.AppendLine($"  car controls: {n} icons from the sheet");
+    }
+
+    // Wanted level: the sheet's yellow star for earned stars, its outline star for the rest.
+    static void SkinWantedStars(Dictionary<string, Sprite> sprites, System.Text.StringBuilder log)
+    {
+        var hud = Object.FindFirstObjectByType<OpenworldCrime.Police.WantedHudView>(FindObjectsInactive.Include);
+        if (hud == null) { log.AppendLine("  no wanted HUD"); return; }
+        var so = new SerializedObject(hud);
+        so.FindProperty("activeStarSprite").objectReferenceValue = sprites["StarYellow"];
+        so.FindProperty("inactiveStarSprite").objectReferenceValue = sprites["StarOutline"];
+        so.FindProperty("activeStarColour").colorValue = Color.white;
+        so.FindProperty("inactiveStarColour").colorValue = Color.white;
+        var stars = so.FindProperty("stars");
+        for (int i = 0; i < stars.arraySize; i++)
+        {
+            var image = stars.GetArrayElementAtIndex(i).objectReferenceValue as Image;
+            if (image == null) continue;
+            image.sprite = sprites["StarOutline"];
+            image.preserveAspect = true;
+            EditorUtility.SetDirty(image);
+        }
+        so.ApplyModifiedPropertiesWithoutUndo();
+        log.AppendLine("  wanted stars: yellow / outline from the sheet");
     }
 
     static GameObject FindRoot(string name)

@@ -333,15 +333,16 @@ namespace OpenworldCrime.EditorTools
         }
 
         /// <summary>Re-points freshly built car prefabs at the existing roster and fits its drivers to their roofs (called after a build).</summary>
-        public static string RepatchPrefabs()
+        /// <param name="onlyCar">If set (e.g. "Taxi"), only that car's Traffic_ / Drivable_ prefabs are patched.</param>
+        public static string RepatchPrefabs(string onlyCar = null)
         {
             var roster = AssetDatabase.LoadAssetAtPath<PedDriverRoster>(RosterPath);
-            return roster != null && roster.Count > 0 ? "[PedDriverBuilder]\n" + PatchPrefabs(roster) : "[PedDriverBuilder] no roster yet (run Build Pedestrian Drivers)";
+            return roster != null && roster.Count > 0 ? "[PedDriverBuilder]\n" + PatchPrefabs(roster, onlyCar) : "[PedDriverBuilder] no roster yet (run Build Pedestrian Drivers)";
         }
 
         // Every car prefab uses the roster. Each driver is seated full size: per car and per driver, the smallest change of seat height
         // and recline that clears the actual roof mesh, measured from the baked head against the car's triangles.
-        private static string PatchPrefabs(PedDriverRoster roster)
+        private static string PatchPrefabs(PedDriverRoster roster, string onlyCar = null)
         {
             var sb = new StringBuilder();
             SetHeadCenters(roster);
@@ -356,6 +357,8 @@ namespace OpenworldCrime.EditorTools
                 {
                     Transform floor = root.transform.Find("CabinFloor");
                     string car = root.name.Replace("Drivable_", "");
+                    // Bikes have no cabin seat (their riders are set up separately).
+                    if (root.transform.Find("DriverSeat") == null || (onlyCar != null && car != onlyCar)) continue;
                     fitsByCar[car] = ComputeFits(root.transform, root.transform.Find("DriverSeat"), floor != null ? floor.position.y : float.NegativeInfinity, roster, false, car, sb);
                 }
                 finally { PrefabUtility.UnloadPrefabContents(root); }
@@ -366,6 +369,7 @@ namespace OpenworldCrime.EditorTools
                 foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { folder }))
                 {
                     string path = AssetDatabase.GUIDToAssetPath(guid);
+                    if (onlyCar != null && System.IO.Path.GetFileNameWithoutExtension(path).Replace("Traffic_", "").Replace("Drivable_", "") != onlyCar) continue;
                     GameObject root = PrefabUtility.LoadPrefabContents(path);
                     try
                     {

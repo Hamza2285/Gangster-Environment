@@ -50,6 +50,8 @@ namespace OpenworldCrime.UI.Menu
         [SerializeField] private LoadingScreen loadingScreen;
         [Tooltip("Minimap style screen shown after ENTER GAME, before loading (optional).")]
         [SerializeField] private NavigationScreen navigationScreen;
+        [Tooltip("Legal terms screen shown after the minimap screen, before loading (optional).")]
+        [SerializeField] private TermsScreen termsScreen;
 
         private RenderTexture videoTexture;
 
@@ -152,10 +154,16 @@ namespace OpenworldCrime.UI.Menu
 
         public void EnterGame()
         {
-            if (loadingScreen.IsLoading || (navigationScreen != null && navigationScreen.IsOpen)) return;
+            if (loadingScreen.IsLoading || (navigationScreen != null && navigationScreen.IsOpen) || (termsScreen != null && termsScreen.IsOpen)) return;
             ClosePanels();
             SetButtonsInteractable(false);
-            if (navigationScreen != null) navigationScreen.Show(StartLoading);   // pick the minimap style first
+            if (navigationScreen != null) navigationScreen.Show(ShowTerms);   // pick the minimap style first
+            else ShowTerms();
+        }
+
+        private void ShowTerms()
+        {
+            if (termsScreen != null) termsScreen.Show(StartLoading);   // then accept the terms (skipped once accepted)
             else StartLoading();
         }
 

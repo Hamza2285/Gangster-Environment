@@ -48,6 +48,11 @@ public class GameMapUI : MonoBehaviour
 
     [Header("Colors")]
     public Color routeArrowColor = new Color(0.15f, 0.95f, 0.3f, 1f);
+    [Tooltip("Minimap GPS route: a solid band over the road while a marker is set.")]
+    public Color minimapRouteColor = new Color(0.25f, 0.88f, 0.76f, 1f);
+    public Color minimapRouteRimColor = new Color(0.07f, 0.5f, 0.45f, 1f);
+    [Tooltip("Minimap GPS route width in world metres (the minimap draws roads wider than they are; 28 fills them).")]
+    public float minimapRouteWidth = 28f;
     public Color markerColor = new Color(1f, 0.78f, 0.1f, 1f);
     public Color taxiColor = new Color(1f, 0.9f, 0.2f, 1f);
 
@@ -633,7 +638,12 @@ public class GameMapUI : MonoBehaviour
         map.texture = MakeMinimapTexture();
         map.raycastTarget = false;
 
-        miniRoute = NewRoute("Route", miniContent, 7f);
+        // GTA-style GPS line: one solid band covering the road (only drawn while a marker is set).
+        miniRoute = NewRoute("Route", miniContent, minimapRouteWidth * (miniRadius / minimapRange));
+        miniRoute.solid = true;
+        miniRoute.color = minimapRouteColor;
+        miniRoute.rimColor = minimapRouteRimColor;
+        miniRoute.rimWidth = 1.5f;
 
 
         // Icons sit outside the rotating content so they stay upright and can clamp to the edge.

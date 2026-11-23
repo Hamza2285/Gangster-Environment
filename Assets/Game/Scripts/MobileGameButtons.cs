@@ -238,11 +238,12 @@ public class MobileGameButtons : MonoBehaviour
         string label = bike ? (steal ? "STEAL\nBIKE" : "RIDE\nBIKE") : (steal ? "STEAL\nCAR" : "ENTER\nCAR");
         if (enterLabel.text != label) enterLabel.text = label;
 
-        // Cars: the door icon of the controls sheet, where the mock puts it; bikes keep the labelled disc.
+        // Every vehicle (cars and bikes, steal or enter): the get-in door icon of the controls sheet, where the mock puts it.
+        // The labelled disc is only a fallback when the sheet's icon is missing.
         var image = enterButton.GetComponent<Image>();
         var rect = (RectTransform)enterButton.transform;
         Sprite door = GameButtonStyle.EnterCar;
-        bool icon = !bike && door != null;
+        bool icon = door != null;
         image.sprite = icon ? door : knob;
         image.preserveAspect = icon;
         image.color = icon ? new Color(1f, 1f, 1f, 0.92f) : new Color(0.15f, 0.5f, 0.2f, 0.75f);

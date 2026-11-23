@@ -361,9 +361,11 @@ namespace OpenworldCrime.EditorTools
                 b.gameObject.AddComponent<UIPressFeedback>();
             }
 
-            // ENTER GAME (bottom centre): the button scales on press; its inner group breathes.
+            // START GAME (bottom centre): the user's button art; the button scales on press, its inner group breathes.
+            Sprite startArt = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/Menu/Start_Game_button.png");
             var enterImage = NewImage("Enter Game Button", safe, ui, new Color(0f, 0f, 0f, 0.001f));
-            Anchor(enterImage.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(560f, 120f), new Vector2(0f, 54f));
+            Anchor(enterImage.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                startArt != null ? new Vector2(600f, 600f * 87f / 466f) : new Vector2(560f, 120f), new Vector2(0f, 54f));
             var enter = enterImage.gameObject.AddComponent<Button>();
             enter.transition = Selectable.Transition.None;
             enterImage.gameObject.AddComponent<UIPressFeedback>();
@@ -383,7 +385,17 @@ namespace OpenworldCrime.EditorTools
             shadow.effectDistance = new Vector2(3f, -3f);
             var pulse = pulseRoot.gameObject.AddComponent<UIPulse>();
             SetRef(pulse, "target", pulseRoot);
-            SetRef(pulse, "glow", glow);
+            if (startArt != null)
+            {
+                plate.gameObject.SetActive(false);
+                glow.gameObject.SetActive(false);
+                enterText.gameObject.SetActive(false);
+                var art = NewImage("Art", pulseRoot, startArt, Color.white);
+                Stretch(art.rectTransform);
+                art.preserveAspect = true;
+                art.raycastTarget = false;
+            }
+            else SetRef(pulse, "glow", glow);
 
             // Panels.
             var closeButtons = new List<Button>();
