@@ -66,8 +66,18 @@ namespace OpenworldCrime.UI
             MapBlip.OnBlipRemoved -= Remove;
         }
 
+        private Vector2 lastFullSize, lastMiniSize;
+
         private void LateUpdate()
         {
+            // The full map is built small and resized when it first opens (and the minimap with its shape): fixed blips were
+            // placed for the old size and drifted toward the centre (off their roads). Re-placed whenever a map changes size.
+            Vector2 fullSize = fullMap != null ? fullMap.rect.size : Vector2.zero;
+            Vector2 miniSize = miniContent != null ? miniContent.rect.size : Vector2.zero;
+            bool resized = fullSize != lastFullSize || miniSize != lastMiniSize;
+            lastFullSize = fullSize;
+            lastMiniSize = miniSize;
+
             float fullScale = fullMap != null && fullMap.localScale.x > 0.0001f ? fullMapScale / fullMap.localScale.x : 1f;
             for (int i = 0; i < iconList.Count; i++)
             {
@@ -77,7 +87,7 @@ namespace OpenworldCrime.UI
                 if (entry.mini != null) entry.mini.rotation = Quaternion.identity;
                 // Areas keep their world size on the full map (they scale with the map's zoom like the map itself).
                 if (entry.full != null) entry.full.localScale = area ? Vector3.one : Vector3.one * fullScale;
-                if (blip.TracksMovement)
+                if (blip.TracksMovement || resized)
                 {
                     Place(blip, entry.mini, miniContent);
                     Place(blip, entry.full, fullMap);

@@ -187,7 +187,7 @@ public class TaxiHud : MonoBehaviour
         optionButtons.Add(NewButton("Watch the whole trip  [1]", panel, new Vector2(0f, 0f), new Vector2(520f, 66f), () => WatchChosen?.Invoke()));
         optionButtons.Add(NewButton("Skip to destination  [2 / Enter]", panel, new Vector2(0f, -80f), new Vector2(520f, 66f), () => SkipChosen?.Invoke()));
 
-        var back = NewText("Esc: back to map", panel, 22, TextAnchor.MiddleCenter, new Color(0.75f, 0.75f, 0.75f, 1f));
+        var back = NewText(GameInput.MobileControls ? "BACK: back to map" : "Esc: back to map", panel, 22, TextAnchor.MiddleCenter, new Color(0.75f, 0.75f, 0.75f, 1f));
         Place(back.rectTransform, new Vector2(0f, -140f), new Vector2(580f, 30f));
 
         optionsPanel.SetActive(false);

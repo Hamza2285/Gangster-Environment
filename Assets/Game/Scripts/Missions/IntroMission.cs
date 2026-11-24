@@ -58,6 +58,8 @@ public class IntroMission : MonoBehaviour
 
     enum Phase { None, Cutscene, LoseCops, Drive, Stop, Done }
     Phase phase;
+    const float TakeoverGrace = 4f;   // seconds after the player gets the wheel: the car is invulnerable and he can't drop out
+    float takeoverTime = -100f;
 
     PlayerVehicleInteraction driver;
     IVehicleController vehicle;
@@ -197,7 +199,8 @@ public class IntroMission : MonoBehaviour
         GamePlayer.MenuOpen = false;
         if (blink != null) yield return blink.Open(0.35f);
         SetObjective("Lose the cops");
-        StartCoroutine(EndInvulnerability(carHealth, 4f));
+        takeoverTime = Time.time;
+        StartCoroutine(EndInvulnerability(carHealth, TakeoverGrace));
 
         // 2. Lose the cops, then the drive.
         var wanted = WantedManager.Instance;
@@ -213,17 +216,16 @@ public class IntroMission : MonoBehaviour
         while (true)
         {
             if (Failed(out string why)) { yield return Fail(why); yield break; }
-            bool inCar = driver.State == VehicleInteractionState.InVehicle && driver.CurrentVehicle == vehicle;
             float distance = Flat(car.transform.position - dropPoint).magnitude;
-            if (!inCar) SetObjective("Get back in the car - Mia is waiting");
-            else if (wanted != null && wanted.Stars > 0) SetObjective("Lose the cops");
+            // Complete only after the chase is over: if the cops are back on him, they have to be lost again first.
+            if (wanted != null && wanted.Stars > 0) SetObjective("Lose the cops");
             else if (distance > 14f) SetObjective("Drop Mia at " + dropOffName);
             else
             {
                 SetObjective("Stop the car");
                 if (carBody.linearVelocity.magnitude < 1.5f) break;
             }
-            if (inCar && WaypointSystem.Instance != null && !WaypointSystem.Instance.HasMarker) WaypointSystem.Instance.SetMarker(dropPoint);
+            if (WaypointSystem.Instance != null && !WaypointSystem.Instance.HasMarker) WaypointSystem.Instance.SetMarker(dropPoint);
             yield return null;
         }
 
@@ -848,8 +850,7 @@ public class IntroMission : MonoBehaviour
     {
         var blink = ScreenBlink.Instance;
         if (blink != null) yield return blink.Close(0.3f);
-        Vector3 door = car.transform.position + car.transform.right * 2.3f;
-        if (Physics.Raycast(door + Vector3.up * 2f, Vector3.down, out RaycastHit hit, 5f, ~(1 << 2), QueryTriggerInteraction.Ignore)) door = hit.point;
+        Vector3 door = FootpathSideExit();
         Vector3 toStore = Flat(storeDoor - door);
         if (mia != null)
         {
@@ -902,6 +903,24 @@ public class IntroMission : MonoBehaviour
     static void SetFloat(Animator a, string name, float v) { foreach (var p in a.parameters) if (p.name == name && p.type == AnimatorControllerParameterType.Float) a.SetFloat(name, v); }
     static void SetBool(Animator a, string name, bool v) { foreach (var p in a.parameters) if (p.name == name && p.type == AnimatorControllerParameterType.Bool) a.SetBool(name, v); }
 
+    // Mia gets out on the footpath side: the side of the car the store is on (the kerb), not into the traffic lane. The spot is
+    // stepped out until it is clear of the car and of street furniture, so she never appears inside a pole or the bodywork.
+    Vector3 FootpathSideExit()
+    {
+        Vector3 side = car.transform.right;
+        if (Vector3.Dot(Flat(storeDoor - car.transform.position), side) < 0f) side = -side;
+        Vector3 best = car.transform.position + side * 2.3f;
+        for (float out_ = 2.0f; out_ <= 4.0f; out_ += 0.4f)
+        {
+            Vector3 at = car.transform.position + side * out_;
+            if (!Physics.Raycast(at + Vector3.up * 2.5f, Vector3.down, out RaycastHit hit, 6f, ~(1 << 2), QueryTriggerInteraction.Ignore)) continue;
+            bool blocked = Physics.CheckCapsule(hit.point + Vector3.up * 0.4f, hit.point + Vector3.up * 1.5f, 0.3f, ~(1 << 2), QueryTriggerInteraction.Ignore);
+            best = hit.point;
+            if (!blocked) break;
+        }
+        return best;
+    }
+
     bool Failed(out string why)
     {
         why = null;
@@ -912,19 +931,73 @@ public class IntroMission : MonoBehaviour
         {
             var health = car.GetComponent<VehicleHealth>();
             if (health != null && health.IsDestroyed) why = "The car was wrecked";
+            // Getting out (or being thrown out) of the car with Mia in it ends the mission.
+            else if ((phase == Phase.LoseCops || phase == Phase.Drive) && driver != null
+                     && (driver.State != VehicleInteractionState.InVehicle || driver.CurrentVehicle != vehicle))
+            {
+                // Right after the takeover (the car is still invulnerable then) a hit from a cruiser could throw him out
+                // before he has even touched the controls: he is put straight back behind the wheel instead.
+                if (Time.time - takeoverTime < TakeoverGrace)
+                {
+                    if (driver.State == VehicleInteractionState.OnFoot) driver.EnterInstant(vehicle);
+                    return false;
+                }
+                why = "You left Mia in the car";
+            }
         }
         return why != null;
     }
 
+    // Failed: the banner, then everything is put back and the mission starts again from the cutscene.
     IEnumerator Fail(string why)
     {
         if (WaypointSystem.Instance != null) WaypointSystem.Instance.ClearMarker();
         SetObjective("");
-        Banner("MISSION FAILED", why, 4f);
-        if (mia != null) Destroy(mia);
+        Banner("MISSION FAILED", why, 3.5f);
         CharacterSwitcher.BlockedReason = null;
-        PlayerPrefs.SetInt(DoneKey, 1);   // no second forced intro; it can be replayed from the menu item
-        yield return new WaitForSeconds(4.5f);
+        yield return new WaitForSeconds(3.5f);
+
+        var blink = ScreenBlink.Instance;
+        if (blink != null) yield return blink.Close(0.4f);
+        TearDown();
+        // A dead player respawns first; the restart waits for him to be standing again (on foot).
+        var manager = driver != null ? driver.GetComponent<OpenworldCrime.Player.PlayerManager>() : null;
+        for (float t = 0f; t < 20f; t += Time.unscaledDeltaTime)
+        {
+            bool dead = manager != null && manager.CurrentState == OpenworldCrime.Player.PlayerState.Dead;
+            if (!dead && driver != null && driver.State == VehicleInteractionState.OnFoot) break;
+            yield return null;
+        }
+        StartCoroutine(Run());
+    }
+
+    // Removes the mission's car, Mia, the chasing cruisers and the wanted level, and gets Jason out of the car if he is in it.
+    // (No StopAllCoroutines: the restart itself runs as one. The chase helpers end on their own once the phase is reset.)
+    void TearDown()
+    {
+        EndSlowMotion();
+        if (miaGraph.IsValid()) miaGraph.Destroy();
+        if (mia != null) Destroy(mia);
+        mia = null;
+        if (driver != null && driver.State == VehicleInteractionState.InVehicle && car != null)
+            driver.ForceExitAt(car.transform.position + car.transform.right * 2.5f, car.transform.rotation);
+        var dispatcher = FindFirstObjectByType<PoliceDispatcher>();
+        foreach (var cop in cops)
+        {
+            if (cop.unit == null) continue;
+            if (dispatcher != null) dispatcher.Release(cop.unit);
+            else Destroy(cop.unit.gameObject);
+        }
+        cops.Clear();
+        spinWheels.Clear();
+        var wanted = WantedManager.Instance;
+        if (wanted != null) wanted.ClearWanted();
+        if (car != null) Destroy(car, 0.5f);   // a moment for the forced exit to let go of it
+        car = null;
+        carBody = null;
+        vehicle = null;
+        skip = false;
+        phase = Phase.None;
         Cleanup();
     }
 

@@ -10,7 +10,8 @@ namespace OpenworldCrime.Police
     [CreateAssetMenu(menuName = "OpenworldCrime/Police/Police Settings", fileName = "PoliceSettings")]
     public class PoliceSettings : ScriptableObject
     {
-        public const int FirstCruiserStar = 2;
+        // A police car comes from the first star: a star always means a real chase.
+        public const int FirstCruiserStar = 1;
         [Serializable]
         public struct CrimeRule
         {

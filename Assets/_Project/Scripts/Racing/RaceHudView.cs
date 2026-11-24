@@ -164,7 +164,7 @@ namespace OpenworldCrime.Racing
                 promptInfo.text = blocked ?? (kind + "   1st: $" + race.RewardFor(1) + best);
             }
             if (startButton != null) startButton.interactable = blocked == null;
-            if (startLabel != null) startLabel.text = blocked == null ? "START RACE  [ENTER]" : "UNAVAILABLE";
+            if (startLabel != null) startLabel.text = blocked == null ? (GameInput.MobileControls ? "START RACE" : "START RACE  [ENTER]") : "UNAVAILABLE";
         }
 
         private void HandleState(RaceState state)

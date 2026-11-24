@@ -681,8 +681,11 @@ public class ClothingStoreMenu : MonoBehaviour
         hintText = Label("Text", bar, 20, TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0.8f));
         hintText.supportRichText = true;
         Stretch(hintText.rectTransform, 0f);
-        hintText.text = Key("W S") + " Select    " + Key("A D") + " Category    " + Key("Enter") + " Buy / Wear    "
-            + Key("Q E") + " / Drag  Turn    " + Key("Scroll") + " Zoom    " + Key("Esc") + " Done";
+        // Phones: what to touch instead of which keys to press.
+        hintText.text = GameInput.MobileControls
+            ? Key("Tap") + " an item to select    " + Key("Tap") + " the button to buy / wear    " + Key("Drag") + " to turn    " + Key("DONE") + " to leave"
+            : Key("W S") + " Select    " + Key("A D") + " Category    " + Key("Enter") + " Buy / Wear    "
+              + Key("Q E") + " / Drag  Turn    " + Key("Scroll") + " Zoom    " + Key("Esc") + " Done";
         var shadow = hintText.gameObject.AddComponent<Outline>();
         shadow.effectColor = new Color(0f, 0f, 0f, 0.7f);
     }
