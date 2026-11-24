@@ -33,7 +33,9 @@ namespace OpenworldCrime.Vehicles
     /// - RCC drivable: brake / reverse / headlight switch (RCC's low beam key) read from RCC_CarControllerV3 (cheap compare per
     ///   frame while the engine runs, a few times a second when parked; only changes swap). Lamps only light with the engine
     ///   running, so parked empty cars stay dark; starting the engine at night switches the headlights on;
-    /// - night: the global <see cref="SetNightMode"/> hook (VehicleNightLightsSync follows the day/night controller);
+    /// - night: the global <see cref="SetNightLevel"/> (VehicleNightLightsSync follows the day/night blend). Each car has its own
+    ///   switch-on point in the dusk (Night Switch Range), so the street lights up car by car rather than all at once, and its
+    ///   lamps ramp up / down over Lamp Ramp Seconds in a few steps (still shared material variants, one per step);
     /// - wreck: <see cref="VehicleHealth.OnDestroyedWreck"/> puts every lamp out until the car is reused.
     /// Real-time Light components: everything in Other Realtime Lights is switched off for good; Realtime Headlights are only on for
     /// the vehicle the player drives, while the headlights are on and within Realtime Light Distance of the camera.
@@ -62,6 +64,13 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Share of Full Intensity used for tail lights / dim lamps.")]
         [SerializeField, Range(0f, 1f)] private float dimShare = 0.3f;
 
+        [Header("Night")]
+        [Tooltip("Range of the dusk night level (0 day - 1 night) in which this car switches its lights on; a random point per car.")]
+        [SerializeField] private Vector2 nightSwitchRange = new Vector2(0.22f, 0.55f);
+        [Tooltip("Seconds the lamps take to come up / go out (in Lamp Ramp Steps).")]
+        [SerializeField, Min(0f)] private float lampRampSeconds = 0.6f;
+        [SerializeField, Range(1, 8)] private int lampRampSteps = 4;
+
         [Header("State Sources (optional)")]
         [SerializeField] private TSTrafficAI trafficAI;
         [SerializeField] private RCC_CarControllerV3 rccController;
@@ -80,10 +89,13 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Real-time headlights are switched off beyond this distance (m) from the camera. Exposed for the graphics profiles.")]
         [SerializeField, Min(0f)] private float realtimeLightDistance = 60f;
 
-        /// <summary>Global night switch for the Phase 4 time-of-day system (headlights and tail lights on for every vehicle).</summary>
+        /// <summary>Global night switch (true from the middle of the dusk); cars decide individually from <see cref="NightLevel"/>.</summary>
         public static bool NightMode { get; private set; }
         /// <summary>Raised when <see cref="NightMode"/> changes.</summary>
         public static event Action<bool> OnNightModeChanged;
+        /// <summary>Night level, 0 day - 1 night (the day/night blend).</summary>
+        public static float NightLevel { get; private set; }
+        private static event Action<float> OnNightLevelChanged;
 
         private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
         private static readonly int EmissionMapId = Shader.PropertyToID("_EmissionMap");
@@ -102,11 +114,23 @@ namespace OpenworldCrime.Vehicles
         private bool wrecked;
         private Transform cameraTransform;
         private const float ParkedPollInterval = 0.3f;
+        private float nightSwitch;
+        private bool carNight;
+        private float lampScale = 1f;
+        private Coroutine rampRoutine;
 
         /// <summary>Sets the global night state (raises <see cref="OnNightModeChanged"/>). Called by the time-of-day system.</summary>
-        public static void SetNightMode(bool night)
+        public static void SetNightMode(bool night) => SetNightLevel(night ? 1f : 0f);
+
+        /// <summary>Sets the night level (0 day - 1 night): every car switches at its own point of the dusk.</summary>
+        public static void SetNightLevel(float level)
         {
-            if (NightMode == night) return;
+            level = Mathf.Clamp01(level);
+            if (Mathf.Abs(level - NightLevel) < 0.002f && level > 0f && level < 1f) return;
+            NightLevel = level;
+            OnNightLevelChanged?.Invoke(level);
+            bool night = NightMode ? level > 0.3f : level >= 0.4f;
+            if (night == NightMode) return;
             NightMode = night;
             OnNightModeChanged?.Invoke(night);
         }
@@ -132,6 +156,7 @@ namespace OpenworldCrime.Vehicles
         {
             sourceMaterials = new Material[slots.Length];
             appliedLevels = new Level[slots.Length];
+            nightSwitch = UnityEngine.Random.Range(nightSwitchRange.x, nightSwitchRange.y);
             for (int i = 0; i < slots.Length; i++)
             {
                 LightSlot slot = slots[i];
@@ -155,22 +180,25 @@ namespace OpenworldCrime.Vehicles
 
         private void OnEnable()
         {
-            OnNightModeChanged += HandleNightModeChanged;
+            OnNightLevelChanged += HandleNightLevelChanged;
             if (trafficAI != null) trafficAI.OnUpdateAI += HandleTrafficUpdate;
             if (health != null) health.OnDestroyedWreck += HandleWrecked;
             braking = false;
             reversing = false;
             wrecked = health != null && health.IsDestroyed;
-            if (rccController != null && NightMode) rccController.lowBeamHeadLightsOn = true;
+            carNight = NightLevel >= nightSwitch;
+            lampScale = 1f;
+            rampRoutine = null;
+            if (rccController != null && carNight) rccController.lowBeamHeadLightsOn = true;
             engineRunning = rccController != null && rccController.engineRunning;
-            headlightsOn = rccController != null ? rccController.lowBeamHeadLightsOn && engineRunning : NightMode;
+            headlightsOn = rccController != null ? rccController.lowBeamHeadLightsOn && engineRunning : carNight;
             Apply(true);
             if (rccController != null) StartCoroutine(PollRccRoutine());
         }
 
         private void OnDisable()
         {
-            OnNightModeChanged -= HandleNightModeChanged;
+            OnNightLevelChanged -= HandleNightLevelChanged;
             if (trafficAI != null) trafficAI.OnUpdateAI -= HandleTrafficUpdate;
             if (health != null) health.OnDestroyedWreck -= HandleWrecked;
             SetRealtimeHeadlights(false);
@@ -185,7 +213,7 @@ namespace OpenworldCrime.Vehicles
             {
                 bool engine = rccController.engineRunning;
                 // Engine started at night (the player got in): headlights on, as the night switch does for running cars.
-                if (engine && !engineRunning && NightMode) rccController.lowBeamHeadLightsOn = true;
+                if (engine && !engineRunning && carNight) rccController.lowBeamHeadLightsOn = true;
                 engineRunning = engine;
                 bool brake = engine && rccController.brakeInput >= 0.1f;
                 bool reverse = engine && rccController.direction == -1 && Mathf.Abs(rccController.speed) > 0.5f;
@@ -226,15 +254,39 @@ namespace OpenworldCrime.Vehicles
             if (braking != wasBraking) Apply(false);
         }
 
-        private void HandleNightModeChanged(bool night)
+        // This car's own switch point (with a little hysteresis), then a short ramp of its lamps.
+        private void HandleNightLevelChanged(float level)
         {
+            bool night = carNight ? level > nightSwitch - 0.08f : level >= nightSwitch;
+            if (night == carNight) return;
+            carNight = night;
             if (rccController != null)
             {
                 rccController.lowBeamHeadLightsOn = night;
                 headlightsOn = night && rccController.engineRunning;
             }
             else headlightsOn = night;
-            Apply(false);
+            if (night && lampRampSeconds > 0f && isActiveAndEnabled)
+            {
+                if (rampRoutine != null) StopCoroutine(rampRoutine);
+                rampRoutine = StartCoroutine(RampLamps());
+            }
+            else Apply(false);
+        }
+
+        // Lamps come up in a few steps (one shared variant per step): a quick warm-up instead of a pop.
+        private System.Collections.IEnumerator RampLamps()
+        {
+            float stepTime = lampRampSeconds / lampRampSteps;
+            var wait = new WaitForSeconds(stepTime);
+            for (int step = 1; step <= lampRampSteps; step++)
+            {
+                lampScale = (float)step / lampRampSteps;
+                Apply(true);
+                if (step < lampRampSteps) yield return wait;
+            }
+            lampScale = 1f;
+            rampRoutine = null;
         }
 
         private void Apply(bool force)
@@ -272,7 +324,8 @@ namespace OpenworldCrime.Vehicles
 
         private Material GetVariant(Material source, VehicleLightRole role, Level level)
         {
-            var key = (source, role, level, fullIntensity * (level == Level.Dim ? dimShare : 1f));
+            float ramp = level == Level.Off ? 1f : Mathf.Clamp01(lampScale);
+            var key = (source, role, level, fullIntensity * (level == Level.Dim ? dimShare : 1f) * ramp);
             if (variants.TryGetValue(key, out Material variant) && variant != null) return variant;
 
             variant = new Material(source)
@@ -341,7 +394,9 @@ namespace OpenworldCrime.Vehicles
             foreach (Material m in variants.Values) if (m != null) Destroy(m);
             variants.Clear();
             NightMode = false;
+            NightLevel = 0f;
             OnNightModeChanged = null;
+            OnNightLevelChanged = null;
             GlobalRealtimeLightDistance = -1f;
         }
     }

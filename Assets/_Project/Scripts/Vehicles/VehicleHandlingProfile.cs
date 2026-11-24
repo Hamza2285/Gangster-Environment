@@ -27,6 +27,11 @@ namespace OpenworldCrime.Vehicles
         [SerializeField, Range(0.1f, 0.9f)] private float clutchInertia = 0.12f;
         [Tooltip("Multiplies the final drive ratio (higher = quicker acceleration, revs out sooner).")]
         [SerializeField, Range(0.6f, 1.6f)] private float finalDriveMultiplier = 1f;
+        [Tooltip("Upshift no later than this share of the rev limit in each gear. RCC spaces its shift speeds evenly up to the top " +
+                 "speed while its gear ratios are not even, so the middle gears ran out of revs well before their shift speed and " +
+                 "sat on the rev limiter (throttle cut on / off several times a second: the engine sound fluttered like rapid gear " +
+                 "changes). The shift speeds are lowered to what each gear can actually reach.")]
+        [SerializeField, Range(0.75f, 0.99f)] private float upshiftAtRevShare = 0.92f;
 
         [Header("Steering (speed sensitive)")]
         [Tooltip("Front wheel angle (deg) when slow: sharp turns in town.")]
@@ -86,6 +91,30 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Handbrake torque on the rear wheels, as a multiple of the brake torque.")]
         [SerializeField, Range(0.5f, 4f)] private float handbrakeMultiplier = 1.5f;
 
+        // RCC spaces its shift speeds evenly up to the top speed while its gear ratios are not even: lower each gear's shift speed
+        // to what the gear reaches at Upshift At Rev Share of the rev limit (never later than RCC's own value).
+        private void MatchShiftSpeedsToGearing(RCC_CarControllerV3 car)
+        {
+            if (car.gears == null) return;
+            for (int i = 0; i < car.gears.Length - 1; i++)
+            {
+                float reach = GearReachKmh(car, i, upshiftAtRevShare);
+                if (reach <= 0f) continue;
+                RCC_CarControllerV3.Gear gear = car.gears[i];
+                gear.targetSpeedForNextGear = Mathf.Min(gear.targetSpeedForNextGear, Mathf.Max(5, Mathf.FloorToInt(reach)));
+            }
+        }
+
+        // Speed (km/h) a gear reaches at a share of the rev limit = RPM / (gear ratio x final drive) wheel turns per minute x circumference.
+        private static float GearReachKmh(RCC_CarControllerV3 car, int gearIndex, float revShare)
+        {
+            RCC_WheelCollider wheel = car.RearLeftWheelCollider != null ? car.RearLeftWheelCollider : car.FrontLeftWheelCollider;
+            if (wheel == null || wheel.wheelCollider == null || car.gears == null || gearIndex < 0 || gearIndex >= car.gears.Length) return 0f;
+            float ratio = car.gears[gearIndex].maxRatio * car.finalRatio;
+            if (ratio <= 0f) return 0f;
+            return car.maxEngineRPM * revShare / ratio * (2f * Mathf.PI * wheel.wheelCollider.radius * 0.06f);
+        }
+
         /// <summary>
         /// Applies the profile to an RCC car that has not initialised yet (called from Awake before RCC's own Awake), so RCC
         /// builds its torque curve, gears, steering range and tyre curves from these values.
@@ -102,6 +131,7 @@ namespace OpenworldCrime.Vehicles
             car.finalRatio *= finalDriveMultiplier;
             // The prefabs carry gear speeds built for another top speed; rebuild them for this car.
             car.InitGears();
+            MatchShiftSpeedsToGearing(car);
 
             car.steerAngle = lowSpeedSteerAngle;
             car.highspeedsteerAngle = highSpeedSteerAngle;

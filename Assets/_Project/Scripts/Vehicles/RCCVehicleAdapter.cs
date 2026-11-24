@@ -468,6 +468,8 @@ namespace OpenworldCrime.Vehicles
         private void AddContactHelpers()
         {
             if (GetComponent<VehicleHumanContactFx>() == null) gameObject.AddComponent<VehicleHumanContactFx>();
+            if (GetComponent<VehicleEngineAudioSmoother>() == null) gameObject.AddComponent<VehicleEngineAudioSmoother>(); // no engine-sound flutter at speed
+            if (GetComponent<VehicleShiftAssist>() == null) gameObject.AddComponent<VehicleShiftAssist>(); // upshift before the rev limiter
             if (GetComponent<UnityEngine.AI.NavMeshObstacle>() == null)
                 VehicleNavMeshObstacle.Configure(gameObject.AddComponent<UnityEngine.AI.NavMeshObstacle>(), gameObject);
         }

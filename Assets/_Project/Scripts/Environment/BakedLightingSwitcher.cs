@@ -11,8 +11,13 @@ namespace OpenworldCrime.Environment
     ///
     /// Bake mode is Baked Indirect: the sun / moon stays a realtime light for direct light and shadows (it moves during the
     /// 40 s day/night transition), the bake adds sky light, bounce, ambient occlusion and, at night, the light pools of every
-    /// street lamp (baked-only lights, zero runtime cost). The sets are exchanged at the middle of a transition, where the
-    /// sun is low and the difference between the two bounce bakes is smallest.
+    /// street lamp (baked-only lights, zero runtime cost).
+    /// During a transition the two bakes are crossfaded with the controller's night blend: each lightmap pair is blended on the
+    /// GPU (RGBM decoded, blended, re-encoded; Hidden/OpenworldCrime/LightmapBlend) into a temporary texture shown in place of
+    /// the bake, and the probes are blended on the CPU a few times a second. The temporaries exist only while the blend is
+    /// strictly between day and night; at either end the original compressed bake is shown again and they are released. So
+    /// the street lamp pools, sky light and bounce fade instead of swapping in one frame. Devices that cannot copy a render
+    /// texture into a texture fall back to the old exchange at Swap At Night Amount.
     ///
     /// Additive interiors: Unity appends an interior's lightmaps behind the city's and merges its probes, and re-merges the
     /// probes (re-tetrahedralization) whenever a scene is added or removed, which restores the scene's own bake. So the
@@ -36,13 +41,27 @@ namespace OpenworldCrime.Environment
         [Tooltip("Seconds between reads of the day/night amount.")]
         [SerializeField, Min(0.05f)] private float checkInterval = 0.25f;
 
+        [Header("Crossfade")]
+        [Tooltip("Blend the bakes during a transition (off: exchange them at Swap At Night Amount).")]
+        [SerializeField] private bool crossfade = true;
+        [SerializeField] private Shader blendShader;
+        [Tooltip("Size of the blended lightmaps as a share of the bake (0.5 = a quarter of the memory; lightmaps are soft).")]
+        [SerializeField, Range(0.25f, 1f)] private float blendResolution = 0.5f;
+        [Tooltip("Blend change that triggers a new lightmap blend (GPU) / probe blend (CPU).")]
+        [SerializeField, Range(0.001f, 0.05f)] private float lightmapStep = 0.004f;
+        [SerializeField, Range(0.005f, 0.1f)] private float probeStep = 0.02f;
+        [Tooltip("Probes blended per frame (the blend is spread over a few frames, then applied at once: no hitch).")]
+        [SerializeField, Min(100)] private int probesPerFrame = 1000;
+
         [Header("Realtime Street Lights")]
         [Tooltip("The controller's nearby realtime street lights. Their light is baked into the night lightmaps and probes, so they are switched off while baked lighting is active (saves up to 4 per-pixel lights at night).")]
         [SerializeField] private bool disableRealtimeStreetLights = true;
         [SerializeField] private GameObject[] realtimeStreetLights = new GameObject[0];
 
-        /// <summary>True while the night bake is shown.</summary>
+        /// <summary>True while the night bake is shown (or the blend is past half way).</summary>
         public bool IsShowingNight { get; private set; }
+        /// <summary>True while blended lightmaps are shown.</summary>
+        public bool IsBlending => blending;
 
         private SphericalHarmonicsL2[] dayProbes;
         private SphericalHarmonicsL2[] nightProbes;
@@ -50,6 +69,15 @@ namespace OpenworldCrime.Environment
         private bool valid;
         private bool warnedBlock;
         private bool warnedProbes;
+        // Crossfade state (temporaries live only while blending).
+        private bool blending;
+        private Texture2D[] blendMaps;
+        private RenderTexture blendTarget;
+        private Material blendMaterial;
+        private SphericalHarmonicsL2[] blendProbes;
+        private float blendedLightmaps = -1f, blendedProbes = -1f;
+        private int probeCursor = -1;      // >= 0 while a probe blend is being built over several frames
+        private float probeTarget;
 
         private void Awake()
         {
@@ -65,7 +93,8 @@ namespace OpenworldCrime.Environment
             SceneManager.sceneUnloaded += HandleSceneUnloaded;
             SetRealtimeStreetLightsActive(!disableRealtimeStreetLights);
             applied = false;
-            Apply(dayNight != null && dayNight.NightBlend >= swapAtNightAmount);
+            if (dayNight != null) Follow(dayNight.NightBlend);
+            else Apply(false);
             if (dayNight != null) StartCoroutine(Watch());
         }
 
@@ -75,6 +104,14 @@ namespace OpenworldCrime.Environment
             LightProbes.tetrahedralizationCompleted -= HandleProbesRebuilt;
             SceneManager.sceneUnloaded -= HandleSceneUnloaded;
             SetRealtimeStreetLightsActive(true);
+            if (blending) { applied = false; Apply(IsShowingNight); }
+            ReleaseBlend();
+        }
+
+        private void OnDestroy()
+        {
+            ReleaseBlend();
+            if (blendMaterial != null) Destroy(blendMaterial);
         }
 
         private IEnumerator Watch()
@@ -82,9 +119,122 @@ namespace OpenworldCrime.Environment
             var wait = new WaitForSeconds(checkInterval);
             while (true)
             {
-                yield return wait;
-                if (dayNight != null) Apply(dayNight.NightBlend >= swapAtNightAmount);
+                // Every frame while a transition moves (the blend steps are thresholded), slowly otherwise.
+                if (dayNight != null) Follow(dayNight.NightBlend);
+                if (blending) yield return null;
+                else yield return wait;
             }
+        }
+
+        /// <summary>Shows the bake for a night amount: day, night, or (crossfade on) a blend of both.</summary>
+        public void Follow(float night)
+        {
+            if (!valid) return;
+            if (!crossfade || night <= 0.001f || night >= 0.999f || !CanBlend())
+            {
+                if (blending) { applied = false; blending = false; }
+                Apply(night >= (crossfade && CanBlend() ? 0.5f : swapAtNightAmount));
+                ReleaseBlend();
+                return;
+            }
+            Blend(night);
+        }
+
+        private bool CanBlend()
+        {
+            if (blendShader == null || !blendShader.isSupported || daySet.HasOwnLayout || nightSet.HasOwnLayout) return false;
+            return (SystemInfo.copyTextureSupport & CopyTextureSupport.RTToTexture) != 0;
+        }
+
+        private void Blend(float night)
+        {
+            LightmapData[] maps = LightmapSettings.lightmaps;
+            int start = FindCityBlock(maps);
+            if (start < 0 && blendMaps != null) start = FindBlendBlock(maps);
+            if (start < 0) return;
+            if (blendMaps == null) CreateBlend();
+            if (!blending || Mathf.Abs(night - blendedLightmaps) >= lightmapStep)
+            {
+                blendMaterial.SetFloat(BlendId, night);
+                for (int i = 0; i < blendMaps.Length; i++)
+                {
+                    blendMaterial.SetTexture(DayTexId, daySet.GetLightmapColor(i));
+                    blendMaterial.SetTexture(NightTexId, nightSet.GetLightmapColor(i));
+                    Graphics.Blit(null, blendTarget, blendMaterial);
+                    Graphics.CopyTexture(blendTarget, blendMaps[i]);
+                }
+                blendedLightmaps = night;
+            }
+            if (!blending)
+            {
+                // Shown once; the textures' content changes in place afterwards.
+                for (int i = 0; i < blendMaps.Length; i++)
+                {
+                    maps[start + i].lightmapColor = blendMaps[i];
+                    maps[start + i].lightmapDir = null;
+                }
+                LightmapSettings.lightmaps = maps;
+                blending = true;
+                applied = false;
+            }
+            // Probes: a new blend is built a slice per frame into the buffer, then applied whole.
+            if (probeCursor < 0 && (Mathf.Abs(night - blendedProbes) >= probeStep || blendedProbes < 0f))
+            {
+                probeCursor = 0;
+                probeTarget = night;
+            }
+            if (probeCursor >= 0)
+            {
+                int end = Mathf.Min(blendProbes.Length, probeCursor + probesPerFrame);
+                float w = probeTarget, d = 1f - probeTarget;
+                for (int i = probeCursor; i < end; i++) blendProbes[i] = dayProbes[i] * d + nightProbes[i] * w;
+                probeCursor = end;
+                if (probeCursor >= blendProbes.Length)
+                {
+                    ApplyProbes(blendProbes, daySet);
+                    blendedProbes = probeTarget;
+                    probeCursor = -1;
+                }
+            }
+            IsShowingNight = night >= 0.5f;
+        }
+
+        private int FindBlendBlock(LightmapData[] maps)
+        {
+            for (int i = 0; i + blendMaps.Length <= maps.Length; i++)
+                if (maps[i].lightmapColor == blendMaps[0]) return i;
+            return -1;
+        }
+
+        private void CreateBlend()
+        {
+            if (blendMaterial == null) blendMaterial = new Material(blendShader) { hideFlags = HideFlags.HideAndDontSave };
+            Texture2D source = daySet.GetLightmapColor(0);
+            int w = Mathf.Max(64, Mathf.RoundToInt(source.width * blendResolution));
+            int h = Mathf.Max(64, Mathf.RoundToInt(source.height * blendResolution));
+            blendTarget = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { name = "Lightmap Blend Target" };
+            blendTarget.Create();
+            blendMaps = new Texture2D[daySet.LightmapCount];
+            for (int i = 0; i < blendMaps.Length; i++)
+            {
+                var t = new Texture2D(w, h, TextureFormat.RGBA32, false, true) { name = "Lightmap Blend " + i, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                t.Apply(false, true); // GPU only: no CPU copy kept
+                blendMaps[i] = t;
+            }
+            blendProbes = new SphericalHarmonicsL2[dayProbes.Length];
+            blendedLightmaps = blendedProbes = -1f;
+            probeCursor = -1;
+        }
+
+        private void ReleaseBlend()
+        {
+            if (blendMaps != null) foreach (Texture2D t in blendMaps) if (t != null) Destroy(t);
+            blendMaps = null;
+            if (blendTarget != null) { blendTarget.Release(); Destroy(blendTarget); blendTarget = null; }
+            blendProbes = null;
+            blending = false;
+            probeCursor = -1;
+            blendedLightmaps = blendedProbes = -1f;
         }
 
         /// <summary>Shows the night or the day bake (no-op if it is already shown).</summary>
@@ -131,6 +281,10 @@ namespace OpenworldCrime.Environment
             return true;
         }
 
+        private static readonly int DayTexId = Shader.PropertyToID("_DayTex");
+        private static readonly int NightTexId = Shader.PropertyToID("_NightTex");
+        private static readonly int BlendId = Shader.PropertyToID("_Blend");
+
         private int FindCityBlock(LightmapData[] maps)
         {
             Texture2D day0 = daySet.GetLightmapColor(0);
@@ -139,6 +293,7 @@ namespace OpenworldCrime.Environment
             {
                 Texture2D color = maps[i].lightmapColor;
                 if (color == day0 || color == night0) return i;
+                if (blendMaps != null && blendMaps.Length > 0 && color == blendMaps[0]) return i; // blended maps shown
             }
             return -1;
         }
@@ -170,15 +325,17 @@ namespace OpenworldCrime.Environment
 
         private void HandleProbesRebuilt()
         {
-            if (applied) ApplyProbes(IsShowingNight ? nightProbes : dayProbes, IsShowingNight ? nightSet : daySet);
+            if (blending && blendProbes != null) ApplyProbes(blendProbes, daySet);
+            else if (applied) ApplyProbes(IsShowingNight ? nightProbes : dayProbes, IsShowingNight ? nightSet : daySet);
         }
 
         private void HandleSceneUnloaded(Scene scene)
         {
             // Removing a scene can rebuild the lightmap array from the remaining scenes' own bakes.
-            if (!applied) return;
+            if (!applied && !blending) return;
             applied = false;
-            Apply(IsShowingNight);
+            if (blending) { blending = false; if (dayNight != null) Follow(dayNight.NightBlend); }
+            else Apply(IsShowingNight);
         }
 
         private void SetRealtimeStreetLightsActive(bool active)
