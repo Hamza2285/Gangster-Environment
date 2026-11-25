@@ -62,6 +62,25 @@ namespace OpenworldCrime.EditorTools
                 shaderList.GetArrayElementAtIndex(i).FindPropertyRelative("source").objectReferenceValue = pairs[i].Item1;
                 shaderList.GetArrayElementAtIndex(i).FindPropertyRelative("chase").objectReferenceValue = pairs[i].Item2;
             }
+            // Material assets that keep the shader variants in a build (see RoadPanelChase.keepVariants).
+            var keep = new List<Material>();
+            foreach (Renderer r in renderers)
+                foreach (Material m in r.sharedMaterials)
+                {
+                    if (m == null || !sources.Contains(m.shader)) continue;
+                    Shader target = pairs[sources.IndexOf(m.shader)].Item2;
+                    string path = "Assets/_Project/Shaders/RoadPanelChase/" + m.name + " (Panel Chase).mat";
+                    var asset = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    if (asset != null && keep.Contains(asset)) continue;
+                    var fresh = new Material(m) { name = m.name + " (Panel Chase)", shader = target };
+                    if (asset == null) { AssetDatabase.CreateAsset(fresh, path); asset = fresh; }
+                    else { EditorUtility.CopySerialized(fresh, asset); EditorUtility.SetDirty(asset); }
+                    keep.Add(asset);
+                }
+            SerializedProperty keepList = so.FindProperty("keepVariants");
+            keepList.arraySize = keep.Count;
+            for (int i = 0; i < keep.Count; i++) keepList.GetArrayElementAtIndex(i).objectReferenceValue = keep[i];
+            AssetDatabase.SaveAssets();
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorSceneManager.MarkSceneDirty(city);
             return $"[RoadPanelChaseSetup] 'Road Panel Chase' under ///Manager/// with {renderers.Count} road renderers (save the scene)";

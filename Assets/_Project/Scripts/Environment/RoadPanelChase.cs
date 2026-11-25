@@ -27,6 +27,10 @@ namespace OpenworldCrime.Environment
         [Tooltip("Road renderers that use one of the source shaders (filled by Tools > OpenworldCrime > Lighting > Set Up Road Panel Chase).")]
         [SerializeField] private Renderer[] renderers = new Renderer[0];
         [SerializeField] private ShaderPair[] shaders = new ShaderPair[0];
+        [Tooltip("Material assets with the chase shaders and the road materials' keywords (made by the setup). Not drawn: they are " +
+                 "here so a build keeps those shader variants. Without them the variants were stripped (no asset used the shaders), " +
+                 "and on phones the roads lost their gloss map and turned into smoothness-1 mirrors.")]
+        [SerializeField] private Material[] keepVariants = new Material[0];
 
         [Header("Chase")]
         [Tooltip("Panels per second the light travels.")]
@@ -102,6 +106,9 @@ namespace OpenworldCrime.Environment
                 if (shaders[i].source == source.shader) chase = shaders[i].chase;
             if (chase == null) return null;
             var copy = new Material(source) { name = source.name + " (Panel Chase)", shader = chase };
+            // Exactly the keywords that are in the build.
+            for (int i = 0; i < keepVariants.Length; i++)
+                if (keepVariants[i] != null && keepVariants[i].shader == chase) copy.shaderKeywords = keepVariants[i].shaderKeywords;
             ApplyTuning(copy);
             copies.Add(source, copy);
             return copy;

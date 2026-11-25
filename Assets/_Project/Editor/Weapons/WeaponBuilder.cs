@@ -315,7 +315,7 @@ namespace OpenworldCrime.EditorTools
             // Grip first: the model's grip point sits where the template's grip is (the weapon origin, inside the animated
             // fist), so the right palm wraps the grip and the index finger reaches the trigger like on the template.
             GameObject model = AddFittedModel(spec, root.transform, scopeMaterial, out float rawLength);
-            model.transform.position += GripAnchor + spec.handOffset;
+            model.transform.position += GripAnchor + spec.handOffset + (spec.template == Template.Pistol ? PistolGripFit : Vector3.zero);
             Bounds bounds = MeshBounds(model);
             supportFit = new SupportFit { templateLh = templateLh, guardDrop = templateGuardBottom - templateLh.y, sideGap = templateLh.x - templateGuardLeft };
 
@@ -408,12 +408,13 @@ namespace OpenworldCrime.EditorTools
                     lh.z = Mathf.Clamp(bounds.max.z * info.leftHandAlong, reachZ - 0.03f, reachZ + 0.08f);
                     lh.y = SliceBottom(verts, lh.z, muzzle.y) - supportFit.guardDrop;
                     lh.x = SliceLeft(verts, lh.z, muzzle.y) + supportFit.sideGap;
+                    SetSupportPalm(root, model, lh.z, muzzle.y);
                 }
                 else
                 {
                     // Pistols: the template's two-hand cup, moved with the grip, slightly lower so the left palm cups the grip
                     // under the right hand and its fingers wrap the right fingers instead of poking above them.
-                    lh += PistolCupOffset;
+                    lh += PistolCupOffset + PistolSupportFit;
                 }
                 shooter.handIKTarget.position = lh + spec.supportOffset;
             }
@@ -569,6 +570,51 @@ namespace OpenworldCrime.EditorTools
         private static readonly Vector3 GripAnchor = new Vector3(0.033f, 0f, 0.12f);
         private static readonly Vector3 PistolCupOffset = new Vector3(0.01f, -0.02f, 0.12f);
 
+        // Hand fit checked on Player_Jason aiming (WeaponHandCapture, 2026-11-24), on top of the per-model offsets:
+        // - catalog pistols sat ~3 cm too far back and 1.5 cm low in the fist (grip butt sticking out under the wrist, fist
+        //   round the frame): moved forward / up so the grip fills the palm and the index finger is in the trigger guard;
+        // - their second hand hung open ~10 cm under the grip: raised 4 cm so it cups the right fist (SupportHandGrip closes
+        //   the fingers);
+        // - long guns keep the target below, but also get a "SupportPalm" point on the handguard's underside: SupportHandGrip
+        //   moves the target at runtime until the character's palm touches it (the palm sat 2-3 cm under / beside the guard).
+        private static readonly Vector3 PistolGripFit = new Vector3(0f, 0.015f, 0.03f);
+        private static readonly Vector3 PistolSupportFit = new Vector3(-0.01f, 0.04f, 0f);
+
+        /// <summary>Name of the long guns' handguard contact point, read by <see cref="SupportHandGrip"/> at runtime.</summary>
+        public const string SupportPalmName = SupportHandGrip.SupportPalmName;
+
+        // Where the support palm should touch a long gun: the underside of the handguard on its centre line, at the hand's
+        // reach (z of the IK target). The IK target itself is only a starting point: the character's palm sits at a different
+        // spot of the hand bone on every rig, so SupportHandGrip moves the target until the palm meets this point.
+        private static void SetSupportPalm(Transform root, GameObject model, float z, float boreY)
+        {
+            // Cross-section of the gun at z from its triangles (low-poly guns have no vertices along long flat faces).
+            List<Vector3[]> segments = SliceSegments(model, z);
+            float minX = float.MaxValue, maxX = float.MinValue;
+            foreach (Vector3[] s in segments)
+                foreach (Vector3 p in s)
+                    if (p.y > boreY - 0.05f && p.y < boreY + 0.03f) { minX = Mathf.Min(minX, p.x); maxX = Mathf.Max(maxX, p.x); }
+            float centreX = minX <= maxX ? (minX + maxX) * 0.5f : GripAnchor.x;
+            float bottom = float.MaxValue;
+            foreach (Vector3[] s in segments)
+            {
+                Vector3 a = s[0], b = s[1];
+                if (centreX < Mathf.Min(a.x, b.x) - 0.002f || centreX > Mathf.Max(a.x, b.x) + 0.002f) continue;
+                float y = Mathf.Abs(b.x - a.x) < 1e-5f ? Mathf.Min(a.y, b.y) : Mathf.Lerp(a.y, b.y, (centreX - a.x) / (b.x - a.x));
+                if (y > boreY - 0.075f && y < boreY + 0.01f) bottom = Mathf.Min(bottom, y);
+            }
+            if (bottom == float.MaxValue) bottom = boreY - 0.035f;
+
+            Transform palm = root.Find(SupportPalmName);
+            if (palm == null)
+            {
+                palm = new GameObject(SupportPalmName).transform;
+                palm.SetParent(root, false);
+            }
+            palm.localPosition = root.InverseTransformPoint(new Vector3(centreX, bottom, z));
+            palm.localRotation = Quaternion.identity;
+        }
+
         private struct SupportFit
         {
             public Vector3 templateLh;
@@ -580,6 +626,38 @@ namespace OpenworldCrime.EditorTools
 
         // Bottom / left side of the gun body at a slice along the barrel, ignoring parts hanging more than 12 cm below the
         // bore (magazines, grips, launchers), i.e. the handguard the support hand holds.
+        // Segments where the model's triangles cross the plane at z (model space = builder root space).
+        private static List<Vector3[]> SliceSegments(GameObject model, float z)
+        {
+            var segments = new List<Vector3[]>();
+            var hits = new List<Vector3>(3);
+            foreach (MeshFilter mf in model.GetComponentsInChildren<MeshFilter>())
+            {
+                Mesh mesh = mf.sharedMesh;
+                var mr = mf.GetComponent<MeshRenderer>();
+                if (mesh == null || mr == null || !mr.enabled) continue;
+                Matrix4x4 m = mf.transform.localToWorldMatrix;
+                Vector3[] v = mesh.vertices;
+                int[] t = mesh.triangles;
+                for (int i = 0; i + 2 < t.Length; i += 3)
+                {
+                    Vector3 p0 = m.MultiplyPoint3x4(v[t[i]]), p1 = m.MultiplyPoint3x4(v[t[i + 1]]), p2 = m.MultiplyPoint3x4(v[t[i + 2]]);
+                    hits.Clear();
+                    Cross(p0, p1, z, hits);
+                    Cross(p1, p2, z, hits);
+                    Cross(p2, p0, z, hits);
+                    if (hits.Count >= 2) segments.Add(new[] { hits[0], hits[1] });
+                }
+            }
+            return segments;
+        }
+
+        private static void Cross(Vector3 a, Vector3 b, float z, List<Vector3> hits)
+        {
+            if ((a.z - z) * (b.z - z) > 0f || Mathf.Approximately(a.z, b.z)) return;
+            hits.Add(Vector3.Lerp(a, b, (z - a.z) / (b.z - a.z)));
+        }
+
         private static float SliceBottom(List<Vector3> verts, float z, float boreY)
         {
             float min = float.MaxValue;

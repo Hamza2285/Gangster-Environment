@@ -114,6 +114,12 @@ namespace OpenworldCrime.Police
         private void HandleBusted()
         {
             if (routine != null) return;
+            // The first mission restarts instead: no fine, no release point.
+            if (IntroMission.TakeArrest())
+            {
+                if (WantedManager.Instance != null) WantedManager.Instance.CompleteBust();
+                return;
+            }
             if (!valid)
             {
                 if (WantedManager.Instance != null) WantedManager.Instance.CompleteBust();

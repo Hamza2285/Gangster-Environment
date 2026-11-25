@@ -1,4 +1,4 @@
-﻿//----------------------------------------------
+//----------------------------------------------
 //            Realistic Car Controller
 //
 // Copyright © 2014 - 2020 BoneCracker Games
@@ -90,6 +90,8 @@ public class RCC_Camera : MonoBehaviour{
 	public float TPSOffsetX = 0f;										// Offset X.
 	public float TPSOffsetY = .5f;										// Offset Y.
 	public bool TPSAutoFocus = true;								// Auto focus to player vehicle.
+	public float TPSFocusHeight = .88f;				// Auto focus: camera height as a multiple of the vehicle size (RCC default .75).
+	public float TPSFocusDistance = 2.45f;				// Auto focus: camera distance as a multiple of the vehicle size (RCC default 2.55).
 	public bool TPSAutoReverse = true;								// Auto reverse when player vehicle is at reverse gear.
 	public bool TPSCollision = true;									// Collision effect when player vehicle crashes.
 	public Vector3 TPSOffset = new Vector3(0f, 0f, .25f);   // Camera will look at front wheel distance.
@@ -825,8 +827,8 @@ public class RCC_Camera : MonoBehaviour{
 		while (timer > 0f) {
 			
 			timer -= Time.deltaTime;
-			TPSDistance = Mathf.Lerp(TPSDistance, RCC_GetBounds.MaxBoundsExtent (playerCar.transform) * 2.55f, Time.deltaTime);
-			TPSHeight = Mathf.Lerp (TPSHeight, RCC_GetBounds.MaxBoundsExtent (playerCar.transform) * .75f, Time.deltaTime);
+			TPSDistance = Mathf.Lerp(TPSDistance, RCC_GetBounds.MaxBoundsExtent (playerCar.transform) * TPSFocusDistance, Time.deltaTime);
+			TPSHeight = Mathf.Lerp (TPSHeight, RCC_GetBounds.MaxBoundsExtent (playerCar.transform) * TPSFocusHeight, Time.deltaTime);
 			yield return null;
 
 		}
@@ -840,8 +842,8 @@ public class RCC_Camera : MonoBehaviour{
 		while (timer > 0f) {
 
 			timer -= Time.deltaTime;
-			TPSDistance = Mathf.Lerp(TPSDistance, RCC_GetBounds.MaxBoundsExtent (bounds) * 2.55f, Time.deltaTime);
-			TPSHeight = Mathf.Lerp(TPSHeight, RCC_GetBounds.MaxBoundsExtent (bounds) * .75f, Time.deltaTime);
+			TPSDistance = Mathf.Lerp(TPSDistance, RCC_GetBounds.MaxBoundsExtent (bounds) * TPSFocusDistance, Time.deltaTime);
+			TPSHeight = Mathf.Lerp(TPSHeight, RCC_GetBounds.MaxBoundsExtent (bounds) * TPSFocusHeight, Time.deltaTime);
 			yield return null;
 
 		}

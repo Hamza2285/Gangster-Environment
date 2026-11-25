@@ -72,6 +72,14 @@ public class HospitalRespawn : MonoBehaviour
         var mission = FindFirstObjectByType<AmbulanceMission>();
         if (mission != null) mission.Abort("You died");
 
+        // In the first mission there is no hospital: a short fade, back on his feet, and the mission restarts at the chase.
+        if (IntroMission.HandlesDeath)
+        {
+            yield return MissionRevive(controller);
+            respawning = false;
+            yield break;
+        }
+
         // WASTED: fade to a grey-red tint with the big title.
         canvas.gameObject.SetActive(true);
         bill.text = "";
@@ -125,6 +133,44 @@ public class HospitalRespawn : MonoBehaviour
         respawning = false;
     }
 
+    IEnumerator MissionRevive(vThirdPersonController controller)
+    {
+        canvas.gameObject.SetActive(true);
+        bill.text = "";
+        if (billPlate != null) billPlate.gameObject.SetActive(false);
+        wasted.color = Color.clear;
+        tint.color = Color.clear;
+        yield return new WaitForSecondsRealtime(1f);
+        for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / 0.5f)
+        {
+            tint.color = new Color(0f, 0f, 0f, t);
+            yield return null;
+        }
+        tint.color = Color.black;
+        if (controller != null)
+        {
+            var interaction = controller.GetComponent<PlayerVehicleInteraction>();
+            for (float t = 0f; t < 3f && interaction != null && interaction.State != VehicleInteractionState.OnFoot; t += Time.unscaledDeltaTime)
+            {
+                if (interaction.State == VehicleInteractionState.InVehicle)
+                    interaction.ForceExitAt(controller.transform.position + controller.transform.right * 2.5f, controller.transform.rotation);
+                yield return null;
+            }
+            Revive(controller, true);
+            yield return null;
+            RestoreCombat(controller);
+        }
+        // Black until the mission has him back behind the wheel.
+        for (float t = 0f; t < 10f && IntroMission.Restarting; t += Time.unscaledDeltaTime) yield return null;
+        for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / 0.4f)
+        {
+            tint.color = new Color(0f, 0f, 0f, 1f - t);
+            yield return null;
+        }
+        tint.color = Color.clear;
+        canvas.gameObject.SetActive(false);
+    }
+
     // Dying can cut a shot, a reload or a weapon switch short, and the animator reset above drops the weapon's poses. So the
     // shooter forgets any half-done reload or aim, the camera leaves aim mode, and the weapon in hand is equipped afresh,
     // exactly as when the player draws it.
@@ -168,7 +214,7 @@ public class HospitalRespawn : MonoBehaviour
         }
     }
 
-    void Revive(vThirdPersonController controller)
+    void Revive(vThirdPersonController controller, bool inPlace = false)
     {
         var ragdoll = controller.GetComponent<vRagdoll>();
         if (ragdoll != null && controller.ragdolled) ragdoll.RestoreRagdoll();
@@ -177,8 +223,8 @@ public class HospitalRespawn : MonoBehaviour
         controller.ResetHealth();
         controller.isDead = false;
 
-        Vector3 at = respawnPoint != null ? respawnPoint.position : controller.transform.position;
-        float yaw = respawnPoint != null ? respawnPoint.eulerAngles.y : controller.transform.eulerAngles.y;
+        Vector3 at = respawnPoint != null && !inPlace ? respawnPoint.position : controller.transform.position;
+        float yaw = respawnPoint != null && !inPlace ? respawnPoint.eulerAngles.y : controller.transform.eulerAngles.y;
         var player = GamePlayer.Current;
         if (player != null && player.transform == controller.transform) player.Teleport(at, yaw);
         else controller.transform.SetPositionAndRotation(at, Quaternion.Euler(0f, yaw, 0f));

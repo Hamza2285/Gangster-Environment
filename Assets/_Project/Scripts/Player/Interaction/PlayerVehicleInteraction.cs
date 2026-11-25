@@ -95,6 +95,10 @@ namespace OpenworldCrime.Player
         [Tooltip("With Approach Walk: farther than this (m) from the door the character jogs, then walks the last steps " +
                  "(Gangstar / GTA style - no slow stroll all the way round the car). 0 = always walk.")]
         [SerializeField, Min(0f)] private float approachJogDistance = 2.5f;
+        [Tooltip("Held up (by the car body, a kerb, another car) this close (m) to the door: gets in from there instead of pushing on.")]
+        [SerializeField, Min(0.1f)] private float approachGoodEnoughDistance = 2.2f;
+        [Tooltip("... when the way to the door has not got shorter for this long (s).")]
+        [SerializeField, Min(0.1f)] private float approachNoProgressSeconds = 0.45f;
         [Tooltip("Gives up after this many seconds (e.g. the path is blocked by a wall).")]
         [SerializeField, Min(1f)] private float approachTimeout = 8f;
         [Tooltip("A reserved vehicle that is still braking (e.g. a traffic car) gets this long (s) to stop before the enter is cancelled.")]
@@ -602,6 +606,7 @@ namespace OpenworldCrime.Player
                     float stuckTimer = 0f;
                     int stuckRebuilds = 0;
                     Vector3 stuckCheckPosition = transform.position;
+                    float closest = float.MaxValue, sinceCloser = 0f;
 
                     while (true)
                     {
@@ -637,6 +642,14 @@ namespace OpenworldCrime.Player
                             for (int w = waypoint; w < path.Count - 1; w++) remaining += Vector3.Distance(path[w], path[w + 1]);
                             controller.alwaysWalkByDefault = remaining <= approachJogDistance;
                         }
+
+                        // Near the door but not getting any nearer (pressed against the bodywork): that is close enough.
+                        Vector3 doorGap = enterPosition - position;
+                        doorGap.y = 0f;
+                        if (doorGap.magnitude < closest - 0.05f) { closest = doorGap.magnitude; sinceCloser = 0f; }
+                        else sinceCloser += Time.deltaTime;
+                        if (doorGap.magnitude <= approachGoodEnoughDistance && sinceCloser >= approachNoProgressSeconds
+                            && waypoint >= path.Count - 1) break;
 
                         // Not making progress (e.g. snagged on a mirror or wheel): rebuild the path from here.
                         stuckTimer += Time.deltaTime;

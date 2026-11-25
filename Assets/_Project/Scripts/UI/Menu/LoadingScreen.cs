@@ -34,13 +34,13 @@ namespace OpenworldCrime.UI.Menu
         [Header("Loading")]
         [SerializeField] private string gameScene = "Gangstar_Gameplay";
         [Tooltip("The loading screen shows for a random time between these (seconds), and longer while the game scene is still loading.")]
-        [SerializeField, Min(0f)] private float minDisplaySeconds = 7f;
-        [SerializeField, Min(0f)] private float maxDisplaySeconds = 10f;
+        [SerializeField, Min(0f)] private float minDisplaySeconds = 14f;
+        [SerializeField, Min(0f)] private float maxDisplaySeconds = 17f;
         [Tooltip("After the switch, the black holds until the game runs smoothly (this many frames in a row under Smooth Frame " +
                  "Seconds), at most Max Settle Seconds, so the city is not seen still spawning in.")]
-        [SerializeField, Min(0)] private int settleFrames = 12;
+        [SerializeField, Min(0)] private int settleFrames = 40;
         [SerializeField, Min(0.01f)] private float smoothFrameSeconds = 0.045f;
-        [SerializeField, Min(0f)] private float maxSettleSeconds = 4f;
+        [SerializeField, Min(0f)] private float maxSettleSeconds = 12f;
         [Tooltip("A new artwork every this many seconds.")]
         [SerializeField, Min(0.5f)] private float slideInterval = 3f;
         [SerializeField, Min(0.1f)] private float fadeInSeconds = 0.6f;
@@ -72,6 +72,12 @@ namespace OpenworldCrime.UI.Menu
 
         public bool IsLoading { get; private set; }
 
+        /// <summary>The loading screen (or its black) is still over the game scene: the opening cutscene waits for it.</summary>
+        public static bool CoversGame { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => CoversGame = false;
+
         private void Awake()
         {
             if (root == null || screenGroup == null || slideshow == null || !slideshow.IsValid || blackFade == null)
@@ -90,6 +96,11 @@ namespace OpenworldCrime.UI.Menu
             IsLoading = true;
             root.SetActive(true);
             StartCoroutine(LoadRoutine(music));
+        }
+
+        private void OnDestroy()
+        {
+            if (IsLoading) CoversGame = false;
         }
 
         private IEnumerator LoadRoutine(AudioSource music)
@@ -199,6 +210,7 @@ namespace OpenworldCrime.UI.Menu
             }
             // Keep the black overlay through the scene change, then fade into the game.
             DontDestroyOnLoad(root);
+            CoversGame = true;
             op.allowSceneActivation = true;
             while (!op.isDone) yield return null;
             Application.backgroundLoadingPriority = priorityBefore;
@@ -215,6 +227,7 @@ namespace OpenworldCrime.UI.Menu
                 smooth = now - last <= smoothFrameSeconds ? smooth + 1 : 0;
                 last = now;
             }
+            CoversGame = false; // the game may start its opening now, as the black lifts
             for (float t = 0f; t < gameFadeInSeconds; t += Time.unscaledDeltaTime)
             {
                 SetBlack(1f - Smooth(t / gameFadeInSeconds));

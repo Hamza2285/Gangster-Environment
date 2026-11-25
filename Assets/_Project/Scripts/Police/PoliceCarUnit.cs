@@ -56,6 +56,10 @@ namespace OpenworldCrime.Police
         [SerializeField, Min(5f)] private float directApproachDistance = 35f;
         [Tooltip("The player off the road but within this distance (m) of the route's end: the route is extended to him.")]
         [SerializeField, Min(0f)] private float routeExtendDistance = 25f;
+        [Tooltip("Suspect on foot off the road: the crew gets out at the end of the route when this close (m).")]
+        [SerializeField, Min(5f)] private float crewWalkDistance = 55f;
+        [Tooltip("Chasing a car and farther behind than this (m), off camera: moved up along its path to 60 % of it.")]
+        [SerializeField, Min(40f)] private float catchUpDistance = 100f;
         [Tooltip("Top speed share while searching.")]
         [SerializeField, Range(0.2f, 1f)] private float searchSpeedShare = 0.55f;
         [Tooltip("A returning car is removed once out of sight and at least this far (m) from the camera.")]
@@ -94,9 +98,11 @@ namespace OpenworldCrime.Police
         private TrafficVehicleAdapter ambientSuspect;
         private Transform lastAttacker;
         private readonly List<Vector3> route = new List<Vector3>(128);
+        private readonly List<Vector3> laneRoute = new List<Vector3>(128);
         private readonly List<RoadNetwork.Link> links = new List<RoadNetwork.Link>();
         private float nextRepath;
         private float nextShot;
+        private float nextCatchUp;
         private float stateSince;
         private float stoppedSince = -1f;
         private float nextDeployTime;
@@ -189,6 +195,7 @@ namespace OpenworldCrime.Police
             chase.cornerSpeed = settings.carCornerSpeed;
             chase.targetGap = settings.carChaseGap;
             chase.drifting = false;
+            chase.endGap = 5f;
             chase.Begin(simpleCar, settings.carEngineTorque);
 
             crewOut = false;
@@ -236,6 +243,13 @@ namespace OpenworldCrime.Police
         private void Update()
         {
             if (State == UnitState.Inactive || State == UnitState.Wrecked) return;
+            // Stars: whatever else it was doing, the player comes first.
+            if (IsAmbient && wanted != null && wanted.Stars > 0 && owner.HasPatrolSlot(wanted.Stars))
+            {
+                EndAmbientFlight();
+                IsAmbient = false;
+                SetState(wanted.IsSearching ? UnitState.Search : UnitState.Pursue);
+            }
             if (IsAmbient)
             {
                 if (State == UnitState.AmbientPursuit) PursueAmbient();
@@ -256,7 +270,7 @@ namespace OpenworldCrime.Police
             }
             bool dispatchCruisers = settings.CarUnitsFor(wanted.Stars) > 0;
             if (!dispatchCruisers && State != UnitState.Return) SetState(UnitState.Return);
-            else if (dispatchCruisers && State == UnitState.Return && owner.HasCruiserSlot(wanted.Stars))
+            else if (dispatchCruisers && State == UnitState.Return && owner.HasPatrolSlot(wanted.Stars))
                 SetState(wanted.IsSearching ? UnitState.Search : UnitState.Pursue);
             else if (wanted.IsSearching && State == UnitState.Pursue) SetState(UnitState.Search);
             else if (!wanted.IsSearching && State == UnitState.Search) SetState(UnitState.Pursue);
@@ -276,7 +290,10 @@ namespace OpenworldCrime.Police
             Vector3 target = targetTransform.position;
             float distance = FlatDistance(target);
             bool suspectStopped = !wanted.PlayerInVehicle || wanted.PlayerSpeed < 1f;
-            if (suspectStopped && distance <= settings.carDeployDistance && settings.officersPerCar > 0 && Time.time >= nextDeployTime)
+            // As near as the road gets to a suspect in a park or an alley: the crew goes the rest of the way on foot.
+            bool roadEnds = !wanted.PlayerInVehicle && routeWasRoad && distance <= crewWalkDistance && Speed < 1.5f
+                            && chase.RemainingOnPath < 9f && Time.time - stateSince > 3f;
+            if (suspectStopped && Speed < 9f && (distance <= settings.carDeployDistance || roadEnds) && settings.officersPerCar > 0 && Time.time >= nextDeployTime)
             {
                 SetState(UnitState.Deployed);
                 return;
@@ -321,8 +338,22 @@ namespace OpenworldCrime.Police
             chase.target = driving ? targetTransform : null;
             chase.targetGap = ram ? 0f : settings.carChaseGap;
             chase.cautious = !ram;
+            // Left far behind and out of view: closes up along its path, as if it had driven faster there.
+            if (driving && !IsAmbient && now >= nextCatchUp && FlatDistance(targetTransform.position) > catchUpDistance
+                && chase.CatchUp(targetTransform.position, catchUpDistance * 0.6f)) nextCatchUp = now + 4f;
 
             Vector3 target = targetTransform.position;
+            // On the trail of a moving car: the path extends itself. A new route only when the trail was lost or is a long way round.
+            if (driving && routeWasRoad && chase.RemainingOnPath > 0.5f)
+            {
+                Vector3 toEnd = target - chase.LastPathPoint;
+                toEnd.y = 0f;
+                if (toEnd.magnitude < ChaseDriver.TrailReach && chase.RemainingOnPath < FlatDistance(target) * 2f + 60f)
+                {
+                    if (chase.Stopped) chase.SetStopped(false);
+                    return;
+                }
+            }
             bool direct = FlatDistance(target) <= directApproachDistance && HasClearApproach(transform.position, target);
             bool stale = (target - lastRouteTarget).sqrMagnitude > RouteRefreshDistance * RouteRefreshDistance
                          || chase.RemainingOnPath < RouteRefreshDistance * 2f || !routeWasRoad;
@@ -513,7 +544,8 @@ namespace OpenworldCrime.Police
         }
 
         private bool HasClearApproach(Vector3 from, Vector3 point) =>
-            !Physics.Linecast(from + Vector3.up * 1.3f, point + Vector3.up * 1.3f,
+            // As wide as the car, not just a thin line past a corner.
+            !Physics.SphereCast(from + Vector3.up * 1.6f, 1.05f, point - from, out _, Vector3.Distance(from, point),
                 settings.sightBlockers, QueryTriggerInteraction.Ignore);
 
         private void RefreshRoute(Vector3 point, bool direct)
@@ -524,7 +556,8 @@ namespace OpenworldCrime.Police
                 return;
             }
             lastRouteTarget = point;
-            routeWasRoad = !direct;
+            // (A straight run at a car is extended by its trail just as well.)
+            routeWasRoad = !direct || chase.target != null;
             chase.SetPath(route);
             if (chase.Stopped) chase.SetStopped(false);
         }
@@ -533,7 +566,7 @@ namespace OpenworldCrime.Police
         {
             Vector3 from = transform.position;
             RoadNetwork network = direct ? null : RoadNetwork.Instance;
-            if (network != null && network.TryFindRoute(from + transform.forward * 6f, point, route))
+            if (network != null && FindRoadRoute(network, from, point))
             {
                 route.Insert(0, from);
                 Vector3 end = route[route.Count - 1];
@@ -547,6 +580,33 @@ namespace OpenworldCrime.Police
             route.Add(from);
             route.Add(point);
             return true;
+        }
+
+        // Along the lane the car is on; only turns round (or joins another lane) when that is much shorter and nothing solid is between.
+        private bool FindRoadRoute(RoadNetwork network, Vector3 from, Vector3 point)
+        {
+            float ahead = Mathf.Clamp(Speed * 0.6f, 5f, 14f);
+            bool any = network.TryFindRoute(from + transform.forward * 6f, point, route);
+            bool reachable = any && HasClearApproach(from, route[0]);
+            if (reachable && Vector3.Dot(transform.forward, route[0] - from) > 0f
+                && Vector3.Dot(transform.forward, route[Mathf.Min(1, route.Count - 1)] - route[0]) > 0f) return true;
+            if (network.TryFindLaneAhead(from, transform.forward, ahead, out RoadNetwork.RoadPoint start)
+                && network.TryFindNearest(point, out RoadNetwork.RoadPoint end)
+                && network.TryFindRoute(start, end, laneRoute, links)
+                && (!reachable || Length(laneRoute) < Length(route) * 1.6f + 60f))
+            {
+                route.Clear();
+                route.AddRange(laneRoute);
+                return true;
+            }
+            return any;
+        }
+
+        private static float Length(List<Vector3> points)
+        {
+            float total = 0f;
+            for (int i = 1; i < points.Count; i++) total += Vector3.Distance(points[i - 1], points[i]);
+            return total;
         }
 
         private void SetState(UnitState state)

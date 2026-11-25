@@ -43,6 +43,12 @@ namespace OpenworldCrime.Police
         [SerializeField, Min(1)] private int officerPoolMax = 12;
         [SerializeField, Min(1)] private int carPoolMax = 5;
 
+        [Header("Patrol Cars")]
+        [Tooltip("Patrol cars of the traffic this close (m) to a wanted player join the chase.")]
+        [SerializeField, Min(10f)] private float patrolJoinDistance = 100f;
+        [Tooltip("How many may join on top of the cars sent for the wanted level.")]
+        [SerializeField, Min(0)] private int extraPatrolCars = 2;
+
         [Header("Timing")]
         [SerializeField, Min(0.1f)] private float tickInterval = 0.5f;
         [Tooltip("Reinforcements and recalls wait until the unit is out of sight and this far (m) from the camera.")]
@@ -150,7 +156,11 @@ namespace OpenworldCrime.Police
                 nextCarDispatch = 0f;
             }
             lastStars = wanted.Stars;
-            if (wanted.Stars > 0 && !wanted.IsBustInProgress) Dispatch(wanted, now);
+            if (wanted.Stars > 0 && !wanted.IsBustInProgress)
+            {
+                CallInPatrolCars(wanted);
+                Dispatch(wanted, now);
+            }
             if (wanted.Stars == 0 && !wanted.IsBustInProgress) TryAmbientChase(wanted, now);
             Recall(wanted);
         }
@@ -229,7 +239,7 @@ namespace OpenworldCrime.Police
         // hand-over (TryBeginFlee + EndFlee) is the adapter's public way to hand a car straight back to the iTS pool.
         private void TakeOverPatrolCar(TrafficVehicleAdapter car, int responseStars)
         {
-            if (!car.CanLeaveTraffic || !HasCruiserSlot(responseStars)) return;
+            if (!car.CanLeaveTraffic || !HasPatrolSlot(responseStars)) return;
             PoliceCarUnit unit = TakeCar();
             if (unit == null) return;
             if (!WakeTrafficForPursuit(car))
@@ -311,6 +321,25 @@ namespace OpenworldCrime.Police
             if (now >= nextCarDispatch && CountChasingCars() < settings.CarUnitsFor(stars))
             {
                 nextCarDispatch = now + (SpawnCar(wanted) ? settings.dispatchInterval : Mathf.Min(1.5f, settings.dispatchInterval));
+            }
+        }
+
+        // Patrol cars already on the road near a wanted player join the chase (during a search: only those who see the player).
+        private void CallInPatrolCars(WantedManager wanted)
+        {
+            if (!HasPatrolSlot(wanted.Stars) || (InteriorTravelManager.Instance != null && InteriorTravelManager.Instance.IsInside)) return;
+            Vector3 player = wanted.PlayerPosition;
+            IReadOnlyList<TrafficVehicleAdapter> traffic = TrafficVehicleAdapter.ActiveCars;
+            for (int i = traffic.Count - 1; i >= 0; i--)
+            {
+                TrafficVehicleAdapter car = traffic[i];
+                if (car == null || !car.IsPolice || !car.HasDriver || car.IsDriverKilled || car.IsWrecked) continue;
+                Vector3 eye = car.transform.position + Vector3.up * 1.5f;
+                float distance = Vector3.Distance(eye, player);
+                if (distance > patrolJoinDistance) continue;
+                if (wanted.IsSearching && (distance > settings.carSightRadius
+                    || Physics.Linecast(eye, player + Vector3.up * 1.2f, settings.sightBlockers, QueryTriggerInteraction.Ignore))) continue;
+                TakeOverPatrolCar(car, wanted.Stars);
             }
         }
 
@@ -548,6 +577,9 @@ namespace OpenworldCrime.Police
 
         internal bool HasCruiserSlot(int stars) => CountChasingCars() < settings.CarUnitsFor(stars);
 
+        /// <summary>Police who happen to be there may join on top of the cars sent for the stars.</summary>
+        internal bool HasPatrolSlot(int stars) => settings.CarUnitsFor(stars) > 0 && CountChasingCars() < settings.CarUnitsFor(stars) + extraPatrolCars;
+
         private static int CountStandingOfficers()
         {
             int count = 0;
@@ -632,7 +664,7 @@ namespace OpenworldCrime.Police
         // Free car from the pool. When all are out, a parked (crew out) or wrecked car out of sight is recalled, else the pool grows.
         private PoliceCarUnit TakeCar()
         {
-            if (freeCars.Count == 0 && !ReclaimParkedCar() && allCars.Count < carPoolMax) CreateCar();
+            if (freeCars.Count == 0 && !ReclaimParkedCar() && allCars.Count < carPoolMax + extraPatrolCars) CreateCar();
             if (freeCars.Count == 0) return null;
             PoliceCarUnit unit = freeCars[freeCars.Count - 1];
             freeCars.RemoveAt(freeCars.Count - 1);

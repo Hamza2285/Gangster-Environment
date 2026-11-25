@@ -27,6 +27,12 @@ public class ChaseDriver : MonoBehaviour
     public Transform leader;
     public float leaderGap = 10f;
 
+    [Tooltip("Stops this far (m) short of the end of the path when there is no car to follow.")]
+    public float endGap = 0f;
+
+    /// <summary>A chased car this close (m) to the end of the path extends it.</summary>
+    public const float TrailReach = 30f;
+
     public bool Stopped { get; private set; }
     public float Speed { get; private set; }
     public float RemainingOnPath { get { return _along.Count == 0 ? 0f : _along[_along.Count - 1] - AlongAt(transform.position); } }
@@ -47,6 +53,9 @@ public class ChaseDriver : MonoBehaviour
     private bool _isDrifting;
     private bool _ended;
     private float _weaveSeed;
+    private float _reverseUntil, _reverseSteer, _wedged, _nextReverse;
+    private float _halfLength = 2.4f, _halfWidth = 1f;
+    private readonly RaycastHit[] _wallHits = new RaycastHit[24];
 
     // Drift effects.
     private readonly List<ParticleSystem> _smoke = new List<ParticleSystem>();
@@ -63,6 +72,7 @@ public class ChaseDriver : MonoBehaviour
         car.carCanCrash = false;
         _body = GetComponent<Rigidbody>();
         _own = GetComponentsInChildren<Collider>(true);
+        MeasureCar();
         _savedTorque = car.EngineTorque;
         _savedAccel = car.maxAcceleration;
         _savedBrake = car.brakeTorque;
@@ -130,17 +140,42 @@ public class ChaseDriver : MonoBehaviour
         Vector3 pos = transform.position;
         Speed = Vector3.Dot(_body.linearVelocity, transform.forward);
 
+        float playerGap = PlayerCarGuard.Brake(transform, _body, _halfLength, _halfWidth);
+
         if (Stopped || _path.Count < 2)
         {
-            _car.OnAIUpdate(0f, 1f, 0f, false);
+            _reverseUntil = 0f;
+            // Brakes along its path, not straight on over the footpath.
+            float stopSteer = 0f;
+            if (_path.Count >= 2 && Speed > 1.5f)
+            {
+                AdvanceProgress(pos);
+                Vector3 to = transform.InverseTransformPoint(PointAt(AlongAt(pos) + Mathf.Clamp(Speed * 0.7f, 6f, 14f)));
+                if (to.z > 1f) stopSteer = Mathf.Clamp(Mathf.Atan2(2f * WheelBase * to.x, to.sqrMagnitude) * Mathf.Rad2Deg / MaxSteerDegrees, -0.6f, 0.6f);
+            }
+            _car.OnAIUpdate(stopSteer, 1f, 0f, false);
             UpdateDrift(0f, false);
             return;
         }
 
+        // The path grows along the very way the chased car takes, so it never ends where that car was a second ago.
+        if (target != null)
+        {
+            float step = Flat(target.position - LastPathPoint).magnitude;
+            if (step > 3f && step < TrailReach) Append(target.position);
+        }
         AdvanceProgress(pos);
         float along = AlongAt(pos);
         float lookAhead = Mathf.Clamp(Mathf.Abs(Speed) * 0.7f, 6f, 18f);
         Vector3 aim = PointAt(along + lookAhead);
+        bool alongside = false;
+        // At (or past) the end of the path behind a moving car: on toward it, never round on the spot for a point left behind.
+        if (target != null && _along[_along.Count - 1] - along < 5f)
+        {
+            // Alongside it (or past it): the same way it is heading, which is along the road.
+            alongside = Vector3.Dot(target.position - pos, transform.forward) <= 3f;
+            aim = alongside ? pos + Flat(target.forward).normalized * 10f : target.position;
+        }
         Vector3 fwd = Flat(aim - pos).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, fwd);
 
@@ -155,6 +190,10 @@ public class ChaseDriver : MonoBehaviour
             if (Blocked(pos + right * swerveWidth, fwd, range * (cautious ? 1.5f : 1f)) >= range * (cautious ? 1.5f : 1f)) wantSwerve = swerveWidth;
             else if (Blocked(pos - right * swerveWidth, fwd, range * (cautious ? 1.5f : 1f)) >= range * (cautious ? 1.5f : 1f)) wantSwerve = -swerveWidth;
         }
+        // Never swings past the player on foot: it stops.
+        if (!float.IsPositiveInfinity(playerGap)) wantSwerve = 0f;
+        // ... nor into a wall beside the road.
+        if (wantSwerve != 0f && WallAhead(pos + right * wantSwerve * 0.5f, (fwd * 12f + right * wantSwerve * 0.5f).normalized, 12f) < 11f) wantSwerve = 0f;
         _swerve = Mathf.MoveTowards(_swerve, wantSwerve, Time.fixedDeltaTime * (cautious ? 2.5f : 6f));
         float weaveOffset = weave > 0f ? Mathf.Sin(Time.time * 0.45f + _weaveSeed) * weave : 0f;
         aim += right * (_swerve + weaveOffset);
@@ -171,30 +210,126 @@ public class ChaseDriver : MonoBehaviour
         float turn = TurnAhead(along, 22f);
         if (turn > 30f) desired = Mathf.Lerp(topSpeed, cornerSpeed, Mathf.InverseLerp(30f, 80f, turn));
         // Grip limit: v = sqrt(lateral g * radius), looking far enough ahead to brake in time.
-        float lateral = cautious ? 5f : 6.5f;
-        for (float ahead = 0f; ahead <= 30f; ahead += 10f)
+        float lateral = cautious ? 7f : 7.5f;
+        float scan = Mathf.Clamp(Speed * Speed / 9f + 20f, 30f, 130f);
+        for (float ahead = 0f; ahead <= scan; ahead += 6f)
         {
-            float bend = TurnAhead(along + ahead, 12f) * Mathf.Deg2Rad;
-            if (bend < 0.05f) continue;
-            float radius = 12f / bend;
+            float bend = TurnAhead(along + ahead, 18f) * Mathf.Deg2Rad;
+            if (bend < 0.12f) continue;
+            float radius = 14f / bend;
             float cornerLimit = Mathf.Sqrt(lateral * radius);
             // Allow for braking from here to the bend.
-            desired = Mathf.Min(desired, Mathf.Sqrt(cornerLimit * cornerLimit + 2f * 6f * ahead));
+            desired = Mathf.Min(desired, Mathf.Sqrt(cornerLimit * cornerLimit + 2f * 4.5f * ahead));
         }
         if (blockedAt < range && wantSwerve == 0f) desired = Mathf.Min(desired, Mathf.Sqrt(2f * 7f * Mathf.Max(0f, blockedAt - 4f)));
         desired = Mathf.Min(desired, GapSpeed(target, targetGap, pos));
         desired = Mathf.Min(desired, GapSpeed(leader, leaderGap, pos));
 
+        // Pointing the wrong way: turn round slowly instead of swinging wide into a building.
+        float offAngle = Vector3.Angle(Flat(transform.forward), Flat(aim - pos));
+        if (offAngle > 28f) desired = Mathf.Min(desired, Mathf.Lerp(18f, 4.5f, Mathf.InverseLerp(28f, 75f, offAngle)));
+        // Comes to rest at the end of its path (a car it follows may well be moving on).
+        float followSpeed = 0f, chasedSpeed = 0f;
+        if (target != null)
+        {
+            var other = target.GetComponent<Rigidbody>();
+            if (other != null) chasedSpeed = other.linearVelocity.magnitude;
+            if (other != null) followSpeed = Mathf.Max(0f, Vector3.Dot(other.linearVelocity, Flat(transform.forward).normalized));
+        }
+        float left = _along[_along.Count - 1] - along - (target == null ? endGap : targetGap);
+        // No faster than it takes to close in (the engine would do twice the player's speed), and back behind a car it ran past.
+        if (target != null) desired = Mathf.Min(desired, Mathf.Max(18f, chasedSpeed + Mathf.Clamp(left * 0.25f, 4f, 16f)));
+        if (alongside) desired = Mathf.Min(desired, followSpeed * 0.75f);
+        desired = Mathf.Min(desired, followSpeed + Mathf.Sqrt(2f * 3.5f * Mathf.Max(0f, left)));
+        // A wall where the nose points: slow enough to turn away from it or stop.
+        float wall = WallAhead(pos, Flat(transform.forward).normalized, Mathf.Clamp(Speed * Speed / 14f + 6f, 8f, 60f));
+        if (wall < float.MaxValue) desired = Mathf.Min(desired, Mathf.Max(2.5f, Mathf.Sqrt(2f * 6f * Mathf.Max(0f, wall - 2.5f))));
+        if (!float.IsPositiveInfinity(playerGap)) desired = Mathf.Min(desired, Mathf.Sqrt(2f * 6f * Mathf.Max(0f, playerGap - 2.5f)));
+
+        if (Reverse(pos, steer, desired, wall, offAngle, playerGap)) return;
+
         float throttle = 0f, brake = 0f;
         if (Speed < desired - 0.3f) throttle = Mathf.Clamp01((desired - Speed) * (cautious ? 0.2f : 0.3f) + 0.1f);
-        else if (Speed > desired + 0.5f) brake = Mathf.Clamp01((Speed - desired) * (cautious ? 0.25f : 0.35f) + 0.05f);
+        else if (Speed > desired + 0.5f) brake = Mathf.Clamp01((Speed - desired) * (cautious ? 0.4f : 0.45f) + 0.05f);
         if (desired < 0.3f) { throttle = 0f; brake = 1f; }
+        // The stock brakes cannot shed chase speeds in time for a corner.
+        if (Speed > desired + 2f && Speed > 5f && Grounded())
+            _body.AddForce(-Flat(transform.forward).normalized * Mathf.Min(6f, Speed - desired), ForceMode.Acceleration);
 
         bool drift = drifting && !cautious && Mathf.Abs(steer) > 0.25f && Speed > 9f;
         UpdateDrift(steer, drift);
         _car.OnAIUpdate(steer, brake, throttle, false);
 
         Recover(pos, desired, along, blockedAt < range && wantSwerve == 0f);
+    }
+
+    // Nose against something, or no room to turn round: backs off with the wheel turned the other way, like any driver would.
+    private bool Reverse(Vector3 pos, float steer, float desired, float wall, float offAngle, float playerGap)
+    {
+        if (Time.time >= _reverseUntil)
+        {
+            bool wedged = Mathf.Abs(Speed) < 0.9f && desired > 1.5f && float.IsPositiveInfinity(playerGap) && (wall < 4f || offAngle > 45f);
+            _wedged = wedged ? _wedged + Time.fixedDeltaTime : 0f;
+            if (_wedged < 0.9f || Time.time < _nextReverse) return false;
+            _wedged = 0f;
+            _reverseUntil = Time.time + 2f;
+            _nextReverse = _reverseUntil + 0.8f;
+            _reverseSteer = Mathf.Abs(steer) > 0.05f ? -Mathf.Sign(steer) : 1f;
+        }
+        Vector3 back = -Flat(transform.forward).normalized;
+        bool blocked = WallAhead(pos, back, 3f) < 2f || Blocked(pos, back, 3f) < 2f;
+        if (!blocked && PlayerCarGuard.OnFoot(out Vector3 player))
+        {
+            Vector3 to = Flat(player - pos);
+            blocked = Vector3.Dot(to, back) > 0f && to.magnitude < _halfLength + 4f;
+        }
+        if (blocked) { _reverseUntil = 0f; return false; }
+        bool tooFast = Speed < -5f;
+        _car.OnAIUpdate(_reverseSteer * 0.8f, Speed > 1f ? 1f : 0f, 0f, false);
+        for (int i = 0; i < _rear.Length; i++) _rear[i].motorTorque = tooFast || Speed > 1f ? 0f : -_car.EngineTorque * 0.4f;
+        UpdateDrift(0f, false);
+        return true;
+    }
+
+    // Distance from the bumper to the first solid, unmovable thing in a car-wide lane.
+    private float WallAhead(Vector3 from, Vector3 dir, float range)
+    {
+        Vector3 origin = from + Vector3.up * 1.25f + dir * (_halfLength - 0.5f);
+        float best = float.MaxValue;
+        int count = Physics.BoxCastNonAlloc(origin, new Vector3(_halfWidth * 0.85f, 0.4f, 0.2f), dir, _wallHits,
+            Quaternion.LookRotation(dir), range, ~((1 << 2) | (1 << 8) | (1 << gameObject.layer)), QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            var hit = _wallHits[i];
+            if (hit.normal.y > 0.6f || hit.collider.attachedRigidbody != null || IsOwn(hit.collider)) continue;
+            if (hit.distance <= 0f && Vector3.Dot(hit.normal, dir) > -0.5f) continue;
+            if (hit.collider.GetComponentInParent<PedestrianWalker>() != null) continue;
+            if (hit.collider.GetComponentInParent<OpenworldCrime.Environment.BreakableProp>() != null) continue;
+            best = Mathf.Min(best, Mathf.Max(0f, hit.distance - 0.5f));
+        }
+        return best;
+    }
+
+    private bool Grounded()
+    {
+        for (int i = 0; i < _rear.Length; i++) if (_rear[i] != null && _rear[i].isGrounded) return true;
+        return false;
+    }
+
+    private void MeasureCar()
+    {
+        float length = 0f, width = 0f;
+        foreach (var c in _own)
+        {
+            var box = c as BoxCollider;
+            if (box == null || box.isTrigger) continue;
+            Vector3 centre = transform.InverseTransformPoint(box.transform.TransformPoint(box.center));
+            Vector3 size = transform.InverseTransformVector(box.transform.TransformVector(box.size));
+            length = Mathf.Max(length, Mathf.Abs(centre.z) + Mathf.Abs(size.z) * 0.5f);
+            width = Mathf.Max(width, Mathf.Abs(centre.x) + Mathf.Abs(size.x) * 0.5f);
+        }
+        if (length > 1.5f) _halfLength = Mathf.Min(length, 3.2f);
+        if (width > 0.6f) _halfWidth = Mathf.Min(width, 1.3f);
     }
 
     private void UpdateDrift(float steer, bool drift)

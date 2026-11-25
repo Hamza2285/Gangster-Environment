@@ -9,7 +9,7 @@ using UnityEngine.Playables;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
-// The opening mission. The game starts on a cutscene: Jason drives a supercar with Mia beside him, police cars right behind,
+// The opening mission. The game starts on a cutscene: Jason drives a car with Mia beside him, police cars right behind,
 // the camera cutting between angles (letterbox, subtitles, SKIP). A blink, and the player has the wheel at speed:
 // 1. lose the cops (wanted level back to zero);
 // 2. a route on the road and a marker lead to the drop-off (a Miami Clothing Store) - "Drop Mia at ...";
@@ -29,19 +29,20 @@ public class IntroMission : MonoBehaviour
     public int reward = 1500;
 
     [Header("Chase")]
-    [Tooltip("The chase route: from the ramp up onto the arch bridge (eastbound), across the bridge - the whole cutscene plays " +
-             "on it - then on through the city toward the store. Fixed, so the cutscene is the same every time.")]
-    public Vector3 routeFrom = new Vector3(-10f, 39f, 364f);
-    public Vector3 routeFromDirection = Vector3.right;
-    public Vector3 routeTo = new Vector3(970f, 28f, -60f);
+    [Tooltip("The chase route: the long straight avenue beside the canal (flat, no bridge). Fixed, so the cutscene is the same " +
+             "every time; the player takes over further along it.")]
+    public Vector3 routeFrom = new Vector3(95f, 28f, 330f);
+    public Vector3 routeFromDirection = Vector3.back;
+    public Vector3 routeTo = new Vector3(93f, 28f, -410f);
     public Vector3 routeToDirection = Vector3.back;
     [Tooltip("Fallback when the route cannot be built: the chase starts on the road nearest this point.")]
     public Vector3 chaseStart = new Vector3(389f, 28f, 327f);
     public int wantedStars = 3;
     public int policeCars = 3;
     [Tooltip("Car speed through the cutscene (m/s).")]
-    public float cutsceneSpeed = 21f;
-    public float shotSeconds = 2.4f;
+    public float cutsceneSpeed = 24f;
+    [Tooltip("Paint variant of the car (index in its VehiclePaintVariants; 12 = race red on the Challenger). -1: leave it random.")]
+    public int carPaint = 12;
 
     [Header("Mia in the passenger seat")]
     [Tooltip("Added to the mirrored driver seat (car space).")]
@@ -50,13 +51,10 @@ public class IntroMission : MonoBehaviour
     static readonly string[] Subtitles =
     {
         "MIA:  Jason... they're right on us!",
-        "JASON:  I see them. Hold on.",
-        "MIA:  You're crazy, you know that?",
-        "JASON:  That's one down.",
-        "MIA:  Lose the rest, then get me to the store!",
+        "JASON:  Hold on!",
     };
 
-    enum Phase { None, Cutscene, LoseCops, Drive, Stop, Done }
+    enum Phase { None, Cutscene, LoseCops, Drive, Done }
     Phase phase;
     const float TakeoverGrace = 4f;   // seconds after the player gets the wheel: the car is invulnerable and he can't drop out
     float takeoverTime = -100f;
@@ -69,10 +67,10 @@ public class IntroMission : MonoBehaviour
     PlayableGraph miaGraph;
     Vector3 dropPoint, storeDoor;
     readonly List<Vector3> path = new List<Vector3>();   // the road behind the start (where the cruisers come from) + the route
-    float heroDistance;                                   // how far along the path the supercar is
+    float heroDistance;                                   // how far along the path the car is
     Light cabinLight;
 
-    // Cruisers held in formation behind the supercar through the cutscene (they always stay in shot), then handed to their AI.
+    // Cruisers held in formation behind the car through the cutscene (they always stay in shot), then handed to their AI.
     class ChaseCop
     {
         public PoliceCarUnit unit;
@@ -113,6 +111,7 @@ public class IntroMission : MonoBehaviour
     // After the wheel scripts (Update): the spin angle of each model is replaced, steering, camber and suspension kept.
     void LateUpdate()
     {
+        SeatMiaLegs();
         if (phase != Phase.Cutscene || spinWheels.Count == 0) return;
         float dt = Time.deltaTime;
         foreach (var w in spinWheels)
@@ -143,20 +142,40 @@ public class IntroMission : MonoBehaviour
     GameObject skipButton;
     Font font;
 
+    static IntroMission active;
+    bool restarting;                   // from a failure until the player is back behind the wheel
+    string failure;                    // set from outside (an arrest)
+
+    /// <summary>The mission is on with the player in charge: dying or being arrested restarts it at the chase. No hospital, no
+    /// bill, no fine (HospitalRespawn and BustedSequence ask).</summary>
+    public static bool HandlesDeath => active != null && (active.restarting || active.phase == Phase.LoseCops || active.phase == Phase.Drive);
+    public static bool Restarting => active != null && active.restarting;
+
+    /// <summary>An arrest during the mission: true when the mission deals with it (it restarts).</summary>
+    public static bool TakeArrest()
+    {
+        if (!HandlesDeath) return false;
+        active.failure = "You were busted";
+        return true;
+    }
+
     void Start()
     {
+        active = this;
         if (!playEveryTime && PlayerPrefs.GetInt(DoneKey, 0) == 1) return;
         if (carPrefab == null) return;
         StartCoroutine(Run());
     }
 
-    IEnumerator Run()
+    IEnumerator Run(bool cutscene = true)
     {
         // Hidden while the city wakes up.
         var blink = ScreenBlink.Instance;
         if (blink != null) yield return blink.Close(0f);
         HideGameView();
         for (float t = 0f; t < 0.6f; t += Time.deltaTime) { HideGameView(); yield return null; }   // HUD built in Start too
+        // The loading screen stays up until the city runs smoothly: the chase waits for it, or it would play behind it.
+        while (OpenworldCrime.UI.Menu.LoadingScreen.CoversGame) { HideGameView(); yield return null; }
 
         var player = GamePlayer.Current;
         if (player == null || PlayableCharacter.CurrentId != "jason") { RestoreGameView(); if (blink != null) yield return blink.Open(0.4f); yield break; }
@@ -167,32 +186,43 @@ public class IntroMission : MonoBehaviour
         if (!SetUpChase(chaseStart)) { Cleanup(); if (blink != null) yield return blink.Open(0.4f); yield break; }
         CharacterSwitcher.BlockedReason = "Mia is riding with you";
 
-        // 1. Cutscene.
+        // 1. Cutscene (not again after a death or an arrest: straight back into the chase).
+        failure = null;
         phase = Phase.Cutscene;
         GamePlayer.MenuOpen = true;
         HideGameView();
-        driver.SetRealDriverVisible(true);       // the close-ups show Jason himself, not the car's driver dummy
-        for (float t = 0f; t < 0.5f; t += Time.unscaledDeltaTime) { AlignMiaWithJason(); yield return null; }
-        var cam = MakeCamera();
         var carHealth = car.GetComponent<VehicleHealth>();
-        if (carHealth != null) carHealth.Invulnerable = true;   // the blast is staged right behind it
-        AddCabinLight();
-        CollectWheels();
-        StartCoroutine(AutoDrive());
-        StartCoroutine(KeepRouteClear());
-        StartCoroutine(Letterbox(true));
-        if (blink != null) StartCoroutine(blink.Open(0.5f));
-        yield return Shots(cam);
-        EndSlowMotion();
-        driver.SetRealDriverVisible(false);
-        if (cabinLight != null) Destroy(cabinLight.gameObject);
+        if (carHealth != null) carHealth.Invulnerable = true;
+        if (cutscene)
+        {
+            driver.SetRealDriverVisible(true);       // the close-ups show Jason himself, not the car's driver dummy
+            for (float t = 0f; t < 0.5f; t += Time.unscaledDeltaTime) { AlignMiaWithJason(); yield return null; }
+            var cam = MakeCamera();
+            AddCabinLight();
+            CollectWheels();
+            StartCoroutine(AutoDrive());
+            StartCoroutine(KeepRouteClear());
+            barTop.sizeDelta = barBottom.sizeDelta = new Vector2(0f, 130f);   // short cutscene: the bars are there from the first frame
+            if (blink != null) StartCoroutine(blink.Open(0.2f));
+            yield return Shots(cam);
+            if (blink != null) yield return blink.Close(0.25f);
+            RemoveCabinLight();
+            driver.SetRealDriverVisible(false);
+            Destroy(cam.gameObject);
+            StartCoroutine(Letterbox(false));
+        }
+        else
+        {
+            // Behind the closed screen: the chase gets up to speed and Mia into her seat.
+            StartCoroutine(AutoDrive());
+            StartCoroutine(KeepRouteClear());
+            for (float t = 0f; t < 0.6f; t += Time.unscaledDeltaTime) { AlignMiaWithJason(); HideGameView(); yield return null; }
+        }
         foreach (var cop in cops) cop.scripted = false;   // their own AI takes the chase from here
 
         // The player takes over at speed.
-        if (blink != null) yield return blink.Close(0.25f);
         phase = Phase.LoseCops;
-        Destroy(cam.gameObject);
-        StartCoroutine(Letterbox(false));
+        restarting = false;
         subtitle.text = "";
         skipButton.SetActive(false);
         RestoreGameView();
@@ -201,6 +231,7 @@ public class IntroMission : MonoBehaviour
         SetObjective("Lose the cops");
         takeoverTime = Time.time;
         StartCoroutine(EndInvulnerability(carHealth, TakeoverGrace));
+        StartCoroutine(EndProtection(TakeoverGrace));
 
         // 2. Lose the cops, then the drive.
         var wanted = WantedManager.Instance;
@@ -209,6 +240,8 @@ public class IntroMission : MonoBehaviour
             if (Failed(out string why)) { yield return Fail(why); yield break; }
             yield return null;
         }
+        // (Dying clears the wanted level too: that is not losing the cops.)
+        if (Failed(out string early)) { yield return Fail(early); yield break; }
         phase = Phase.Drive;
         Banner("COPS LOST", "", 2.2f);
         if (WaypointSystem.Instance != null) WaypointSystem.Instance.SetMarker(dropPoint);
@@ -219,24 +252,28 @@ public class IntroMission : MonoBehaviour
             float distance = Flat(car.transform.position - dropPoint).magnitude;
             // Complete only after the chase is over: if the cops are back on him, they have to be lost again first.
             if (wanted != null && wanted.Stars > 0) SetObjective("Lose the cops");
-            else if (distance > 14f) SetObjective("Drop Mia at " + dropOffName);
+            else if (distance > StopDistance) SetObjective("Drop Mia at " + dropOffName);
             else
             {
                 SetObjective("Stop the car");
                 if (carBody.linearVelocity.magnitude < 1.5f) break;
             }
+            if (SteppedOutAtStore()) break;
             if (WaypointSystem.Instance != null && !WaypointSystem.Instance.HasMarker) WaypointSystem.Instance.SetMarker(dropPoint);
             yield return null;
         }
 
         // 3. Drop-off.
-        phase = Phase.Stop;
-        if (WaypointSystem.Instance != null) WaypointSystem.Instance.ClearMarker();
-        SetObjective("");
-        yield return DropOff();
+        // From here the mission is won: saved straight away, so nothing that happens during the drop-off shot (the app closed,
+        // the car hit, the scene reloaded) can bring the mission back.
         phase = Phase.Done;
         PlayerPrefs.SetInt(DoneKey, 1);
         PlayerPrefs.Save();
+        if (WaypointSystem.Instance != null) WaypointSystem.Instance.ClearMarker();
+        SetObjective("");
+        if (carHealth != null) carHealth.Invulnerable = true;    // the shot needs the car whole
+        yield return DropOff();
+        if (carHealth != null) carHealth.Invulnerable = false;
         var money = OpenworldCrime.Economy.MoneyManager.Instance;
         if (money != null) money.Add(reward);
         Banner("MISSION COMPLETE", "+$" + reward.ToString("N0"), 4.5f);
@@ -297,6 +334,10 @@ public class IntroMission : MonoBehaviour
         vehicle = car.GetComponent<IVehicleController>();
         if (vehicle == null || carBody == null || !driver.EnterInstant(vehicle)) { Destroy(car); return false; }
         carBody.linearVelocity = forward * cutsceneSpeed;
+        var paint = car.GetComponent<VehiclePaintVariants>();
+        if (paint != null && carPaint >= 0 && carPaint < paint.Count) paint.ApplyVariant(carPaint);
+        travel = forward;
+        ProtectCar();
 
         mia = MakeMiaPuppet();
 
@@ -306,17 +347,18 @@ public class IntroMission : MonoBehaviour
         cops.Clear();
         if (dispatcher != null)
         {
-            float[] gaps = { 13f, 24f, 36f, 48f };
+            float[] gaps = { 12f, 15f, 23f, 27f };
             for (int i = 0; i < Mathf.Min(policeCars, gaps.Length); i++)
             {
                 float d = Mathf.Max(0f, heroDistance - gaps[i]);
                 Vector3 heading = Flat(Sample(d + 5f) - Sample(d)).normalized;
                 if (heading.sqrMagnitude < 0.5f) heading = forward;
-                float side = i % 2 == 0 ? 1.6f : -1.6f;
+                float side = i % 2 == 0 ? 1.7f : -1.7f;
                 Vector3 at = Sample(d) + Vector3.Cross(Vector3.up, heading) * side;
                 PoliceCarUnit unit = dispatcher.SpawnChaseCarUnit(at + Vector3.up * 0.3f, Quaternion.LookRotation(heading), heading * cutsceneSpeed);
                 if (unit == null) continue;
                 cops.Add(new ChaseCop { unit = unit, body = unit.GetComponent<Rigidbody>(), gap = gaps[i], side = side, phase = i * 1.7f, distance = d });
+                IgnoreCop(unit.gameObject, true);
             }
         }
         return true;
@@ -351,12 +393,66 @@ public class IntroMission : MonoBehaviour
         }
     }
 
-    // RCC's exhaust flame carries an old-style lens flare drawn over everything; off on the intro car for the close-ups.
-    // (A cabin fill light was tried: so close to the trim it flared white and bleached their faces. Daylight through the
-    // glass reads better.)
+    // So both of them read behind the glass: a soft fill that lights only the two characters (they go on a layer of their own for
+    // the cutscene, so it cannot flare on the trim), and clearer windows. RCC's exhaust flame carries an old-style lens flare
+    // drawn over everything; off on the intro car for the close-ups.
+    const int ActorLayer = 30;
+    readonly Dictionary<GameObject, int> actorLayers = new Dictionary<GameObject, int>();
+    readonly List<Renderer> hiddenShoes = new List<Renderer>();
+    readonly List<KeyValuePair<Renderer, int>> clearedGlass = new List<KeyValuePair<Renderer, int>>();
+
     void AddCabinLight()
     {
         foreach (var flare in car.GetComponentsInChildren<LensFlare>(true)) flare.enabled = false;
+
+        foreach (var root in new[] { driver != null ? driver.gameObject : null, mia })
+        {
+            if (root == null) continue;
+            foreach (var r in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (actorLayers.ContainsKey(r.gameObject)) continue;
+                // His legs and shoes reach through the floor of a low car (nothing below the windows is in shot otherwise): not drawn.
+                if (root != mia && r.enabled && (r.name.Contains("Sneaker") || r.name.Contains("Shoe") || r.name.Contains("Bottoms"))) { r.enabled = false; hiddenShoes.Add(r); }
+                actorLayers.Add(r.gameObject, r.gameObject.layer);
+                r.gameObject.layer = ActorLayer;
+            }
+        }
+        var go = new GameObject("Intro Cabin Light");
+        go.transform.SetParent(car.transform, false);
+        go.transform.position = Heads + car.transform.forward * 0.95f + Vector3.up * 0.2f;
+        cabinLight = go.AddComponent<Light>();
+        cabinLight.type = LightType.Point;
+        cabinLight.range = 3f;
+        cabinLight.intensity = 1.6f;
+        cabinLight.color = new Color(1f, 0.95f, 0.88f);
+        cabinLight.shadows = LightShadows.None;
+        cabinLight.cullingMask = 1 << ActorLayer;
+
+        var block = new MaterialPropertyBlock();
+        foreach (var r in car.GetComponentsInChildren<MeshRenderer>())
+        {
+            var materials = r.sharedMaterials;
+            for (int m = 0; m < materials.Length; m++)
+            {
+                if (materials[m] == null || !materials[m].name.Contains("Glass") || !materials[m].HasProperty("_BaseColor")) continue;
+                Color c = materials[m].GetColor("_BaseColor");
+                c.a *= 0.22f;
+                block.SetColor("_BaseColor", c);
+                r.SetPropertyBlock(block, m);
+                clearedGlass.Add(new KeyValuePair<Renderer, int>(r, m));
+            }
+        }
+    }
+
+    void RemoveCabinLight()
+    {
+        if (cabinLight != null) Destroy(cabinLight.gameObject);
+        foreach (var pair in actorLayers) if (pair.Key != null) pair.Key.layer = pair.Value;
+        actorLayers.Clear();
+        foreach (var r in hiddenShoes) if (r != null) r.enabled = true;
+        hiddenShoes.Clear();
+        foreach (var pair in clearedGlass) if (pair.Key != null) pair.Key.SetPropertyBlock(null, pair.Value);
+        clearedGlass.Clear();
     }
 
     // A point the given distance back from the end of a path, and the direction of travel there.
@@ -418,6 +514,28 @@ public class IntroMission : MonoBehaviour
         return puppet;
     }
 
+    // Her legs in the footwell: her own clip lets them hang straight down, through the floor of a low car. Thighs forward, knees
+    // bent, set over the animation every frame while she rides.
+    void SeatMiaLegs()
+    {
+        if (mia == null || car == null || !mia.transform.IsChildOf(car.transform)) return;
+        var animator = mia.GetComponent<Animator>();
+        if (animator == null || !animator.isHuman) return;
+        for (int side = 0; side < 2; side++)
+        {
+            Transform thigh = animator.GetBoneTransform(side == 0 ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
+            Transform shin = animator.GetBoneTransform(side == 0 ? HumanBodyBones.LeftLowerLeg : HumanBodyBones.RightLowerLeg);
+            Transform foot = animator.GetBoneTransform(side == 0 ? HumanBodyBones.LeftFoot : HumanBodyBones.RightFoot);
+            if (thigh == null || shin == null || foot == null) continue;
+            float spread = side == 0 ? -0.08f : 0.08f;
+            Point(thigh, shin, car.transform.TransformDirection(new Vector3(spread, 0.1f, 1f)));
+            Point(shin, foot, car.transform.TransformDirection(new Vector3(0f, -0.62f, 0.78f)));
+        }
+    }
+
+    static void Point(Transform bone, Transform next, Vector3 direction) =>
+        bone.rotation = Quaternion.FromToRotation(next.position - bone.position, direction) * bone.rotation;
+
     // Everything but the body (transforms, animator, renderers) goes, in an order Unity accepts: a component only once nothing
     // left on its object still needs it (RequireComponent, a joint's rigidbody), so no "can't remove" errors are logged.
     static void StripToBody(GameObject root)
@@ -457,7 +575,60 @@ public class IntroMission : MonoBehaviour
 
     // ---------- Cutscene ----------
 
-    // The car follows the road path at cutscene speed (physics velocity, so the wheels roll) until the player takes over.
+    // ---------- The drive ----------
+
+    Vector3 travel = Vector3.forward;             // smoothed direction of travel (the cameras hang on this)
+
+    // Not a scratch on the car: no crash deformation and no contact with the cruisers until the player has settled in.
+    RCC_CarControllerV3 carRcc;
+    bool carDamage;
+    readonly List<RCC_Exhaust> quietExhausts = new List<RCC_Exhaust>();
+
+    void ProtectCar()
+    {
+        carRcc = car.GetComponent<RCC_CarControllerV3>();
+        if (carRcc != null) { carDamage = carRcc.useDamage; carRcc.useDamage = false; }
+        // No backfire flames flashing through the shots.
+        quietExhausts.Clear();
+        foreach (var exhaust in car.GetComponentsInChildren<RCC_Exhaust>())
+        {
+            if (!exhaust.enabled) continue;
+            exhaust.enabled = false;
+            foreach (var particles in exhaust.GetComponentsInChildren<ParticleSystem>()) particles.Clear();
+            foreach (var light in exhaust.GetComponentsInChildren<Light>()) light.intensity = 0f;
+            quietExhausts.Add(exhaust);
+        }
+    }
+
+    void IgnoreCop(GameObject cop, bool ignore)
+    {
+        if (cop == null || car == null) return;
+        var mine = car.GetComponentsInChildren<Collider>();
+        foreach (var theirs in cop.GetComponentsInChildren<Collider>())
+        {
+            foreach (var c in mine) if (c != null && theirs != null) Physics.IgnoreCollision(c, theirs, ignore);
+            foreach (var other in cops)
+                if (other.unit != null && other.unit.gameObject != cop)
+                    foreach (var c in other.unit.GetComponentsInChildren<Collider>()) Physics.IgnoreCollision(c, theirs, ignore);
+        }
+    }
+
+    // The player has had the wheel a moment: everything is solid again (a cruiser on top of the car right now waits).
+    IEnumerator EndProtection(float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
+        foreach (var exhaust in quietExhausts) if (exhaust != null) exhaust.enabled = true;
+        quietExhausts.Clear();
+        if (carRcc != null) carRcc.useDamage = carDamage;
+        foreach (var cop in cops.ToArray())
+        {
+            while (cop.unit != null && car != null && (cop.unit.transform.position - car.transform.position).sqrMagnitude < 30f) yield return null;
+            if (cop.unit != null) IgnoreCop(cop.unit.gameObject, false);
+        }
+    }
+
+    // The car runs straight down the road at cutscene speed (physics velocity, so the wheels roll) until the player takes over;
+    // the cruisers hold two abreast behind it, drifting gently in their lanes.
     IEnumerator AutoDrive()
     {
         Vector3 last = Flat(car.transform.position);
@@ -468,7 +639,9 @@ public class IntroMission : MonoBehaviour
             Vector3 now = Flat(car.transform.position);
             heroDistance += Vector3.Distance(now, last);
             last = now;
-            Steer(carBody, Sample(heroDistance + 9f), heroDistance, cutsceneSpeed);
+            Vector3 roadDir = Flat(Sample(heroDistance + 5f) - Sample(heroDistance)).normalized;
+            if (roadDir.sqrMagnitude > 0.5f) travel = Vector3.Slerp(travel, roadDir, 1f - Mathf.Exp(-4f * Time.fixedDeltaTime)).normalized;
+            Steer(carBody, heroDistance, 0f, cutsceneSpeed);
 
             float time = Time.time;
             foreach (var cop in cops)
@@ -477,32 +650,31 @@ public class IntroMission : MonoBehaviour
                 Vector3 copNow = Flat(cop.body.position);
                 if (lastCop.TryGetValue(cop, out Vector3 copLast)) cop.distance += Vector3.Distance(copNow, copLast);
                 lastCop[cop] = copNow;
-                // Hold a breathing gap and weave across the lanes, like cruisers hunting for a way past.
-                float wanted = heroDistance - (cop.gap + 2.5f * Mathf.Sin(time * 0.6f + cop.phase));
-                float speed = cutsceneSpeed + Mathf.Clamp((wanted - cop.distance) * 0.9f, -8f, 10f);
-                Vector3 heading = Flat(Sample(cop.distance + 14f) - Sample(cop.distance + 9f)).normalized;
-                Vector3 lateral = Vector3.Cross(Vector3.up, heading) * cop.side * (1f + 0.55f * Mathf.Sin(time * 0.9f + cop.phase));
-                Steer(cop.body, Sample(cop.distance + 9f) + lateral, cop.distance, speed);
+                float wanted = heroDistance - (cop.gap + 1.2f * Mathf.Sin(time * 0.7f + cop.phase));
+                float speed = cutsceneSpeed + Mathf.Clamp((wanted - cop.distance) * 0.9f, -7f, 8f);
+                Steer(cop.body, cop.distance, cop.side * (1f + 0.15f * Mathf.Sin(time * 0.8f + cop.phase)), speed);
             }
             yield return wait;
         }
     }
 
-    // Physics velocity toward a point ahead on the road (the wheels roll), yaw toward the road, kept level: a knock must not roll it.
-    void Steer(Rigidbody body, Vector3 aimPoint, float distance, float speed)
+    // Physics velocity toward a point ahead on the road (the wheels roll), yaw along the road, kept level: a knock must not roll it.
+    void Steer(Rigidbody body, float distance, float lateral, float speed)
     {
-        Vector3 aim = Flat(aimPoint - body.position);
+        Vector3 heading = Flat(Sample(distance + 12f) - Sample(distance + 6f)).normalized;
+        if (heading.sqrMagnitude < 0.5f) heading = Flat(body.rotation * Vector3.forward).normalized;
+        Vector3 aim = Flat(Sample(distance + 9f) + Vector3.Cross(Vector3.up, heading) * lateral - body.position);
         if (aim.sqrMagnitude > 0.01f)
         {
             Vector3 v = aim.normalized * speed;
             v.y = body.linearVelocity.y;
             body.linearVelocity = v;
         }
-        Vector3 heading = Flat(Sample(distance + 5f) - Sample(distance)).normalized;
-        if (heading.sqrMagnitude > 0.5f)
+        Vector3 road = Flat(Sample(distance + 5f) - Sample(distance)).normalized;
+        if (road.sqrMagnitude > 0.5f)
         {
             Vector3 now = Flat(body.rotation * Vector3.forward);
-            Vector3 yaw = Vector3.Slerp(now.sqrMagnitude > 0.01f ? now.normalized : heading, heading, Time.fixedDeltaTime * 5f);
+            Vector3 yaw = Vector3.Slerp(now.sqrMagnitude > 0.01f ? now.normalized : road, road, Time.fixedDeltaTime * 5f);
             body.MoveRotation(Quaternion.LookRotation(yaw, Vector3.up));
         }
         body.angularVelocity = Vector3.zero;
@@ -521,7 +693,8 @@ public class IntroMission : MonoBehaviour
 
     // ---------- The shots ----------
     // Each shot is a camera move: positions and a look target along it (car space: x toward Mia's side, y up, z forward), a lens,
-    // a length in real seconds, handheld shake, an optional subtitle and an optional event (the cruiser blast).
+    // a length in real seconds, handheld shake, and an optional subtitle.
+    // Every shot is in front of or beside the cabin, so Jason and Mia are both in it.
 
     class Shot
     {
@@ -530,9 +703,11 @@ public class IntroMission : MonoBehaviour
         public System.Func<float, Vector3> position;   // k (0..1, eased) -> world position
         public System.Func<float, Vector3> look;       // k -> world look-at point
         public System.Action onStart;
-        public float eventAt = -1f;                     // seconds into the shot
-        public System.Action onEvent;
     }
+
+    // A point around the car in the direction of travel (smoother than the car's own axes).
+    Vector3 Rig(float x, float y, float z) =>
+        car.transform.position + Vector3.Cross(Vector3.up, travel) * x + Vector3.up * y + travel * z;
 
     Vector3 Car(float x, float y, float z) => car.transform.TransformPoint(new Vector3(x, y, z));
     Vector3 Car(Vector3 local) => car.transform.TransformPoint(local);
@@ -570,25 +745,6 @@ public class IntroMission : MonoBehaviour
         return local;
     }
 
-    ChaseCop LeadCop()
-    {
-        ChaseCop best = null;
-        foreach (var cop in cops)
-            if (cop.scripted && cop.unit != null && cop.unit.isActiveAndEnabled && (best == null || cop.gap < best.gap)) best = cop;
-        return best;
-    }
-
-    ChaseCop LastCop()
-    {
-        ChaseCop best = null;
-        foreach (var cop in cops)
-            if (cop.scripted && cop.unit != null && cop.unit.isActiveAndEnabled && (best == null || cop.gap > best.gap)) best = cop;
-        return best;
-    }
-
-    Vector3 CopPoint(ChaseCop cop, float x, float y, float z, Vector3 fallback) =>
-        cop != null && cop.unit != null ? cop.unit.transform.TransformPoint(new Vector3(x, y, z)) : fallback;
-
     // A camera outside the car never sits inside a wall, a railing or a parked car: pulled in toward what it looks at.
     readonly RaycastHit[] hits = new RaycastHit[16];
     Vector3 Clear(Vector3 look, Vector3 wanted)
@@ -614,70 +770,24 @@ public class IntroMission : MonoBehaviour
         return false;
     }
 
+    // Three quick shots, 4.8 seconds: from high above, down at the tyres, and the two of them from the side.
     List<Shot> BuildShots()
     {
-        var shots = new List<Shot>();
-        ChaseCop victim = null;
-        Vector3 blastSpot = Vector3.zero;
-
-        // 1. High on the arch bridge, up among the hangers: the chase races toward the camera across the deck and passes
-        //    right beneath it, the lens tilting down to follow.
-        Vector3 bridgeSpot = Vector3.zero;
-        shots.Add(new Shot { seconds = 3.4f, fovFrom = 52f, fovTo = 40f, shake = 0.08f,
-            onStart = () =>
-            {
-                Vector3 road = Sample(heroDistance + 52f);
-                Vector3 heading = Flat(Sample(heroDistance + 57f) - road).normalized;
-                Vector3 across = Vector3.Cross(Vector3.up, heading);
-                bridgeSpot = Clear(road + Vector3.up * 1.5f, road + Vector3.up * 21f + across * 3.5f);
-            },
-            position = k => bridgeSpot,
-            look = k => Car(0f, 0.4f, Mathf.Lerp(-6f, 2f, k)) });
-        // 2. The cops' view: over the lead cruiser's bonnet, the supercar just out of reach.
-        shots.Add(new Shot { seconds = 1.9f, fovFrom = 34f, fovTo = 28f, shake = 0.8f,
-            position = k => CopPoint(LeadCop(), 0.35f, 1.4f, Mathf.Lerp(0.2f, 0.7f, k), Car(0.5f, 1.5f, -12f)),
-            look = k => Car(0f, 0.8f, 0f) });
-        // 3. Through the windscreen, above the dash: both of them.
-        shots.Add(new Shot { seconds = 2.5f, fovFrom = 42f, fovTo = 37f, shake = 0.3f, subtitle = 0,
-            position = k => Heads + car.transform.forward * Mathf.Lerp(1.65f, 1.35f, k) + Vector3.up * 0.2f,
-            look = k => Heads + Vector3.down * 0.06f });
-        // 4. On the rear deck looking back: the lead cruiser right on the bumper, lights going.
-        shots.Add(new Shot { seconds = 1.8f, fovFrom = 38f, fovTo = 32f, shake = 0.8f, subtitle = 2,
-            position = k => Car(0.55f, 1.2f, Mathf.Lerp(-2.4f, -2.7f, k)),
-            look = k => CopPoint(LeadCop(), 0f, 0.9f, 0f, Car(0f, 0.8f, -14f)) });
-        // 5. Jason, through the windscreen from Mia's side and above the wheel: his face clear, the wheel below it.
-        shots.Add(new Shot { seconds = 2.1f, fovFrom = 32f, fovTo = 28f, shake = 0.3f, subtitle = 1,
-            position = k => JasonHead + car.transform.forward * Mathf.Lerp(1.6f, 1.4f, k) + car.transform.right * 0.45f + Vector3.up * 0.38f,
-            look = k => JasonHead + Vector3.down * 0.02f });
-        // 6. The blast: a camera at the roadside ahead of the last cruiser. The supercar whips past, the cruiser clips the kerb,
-        //    slews and goes up in slow motion right in frame.
-        shots.Add(new Shot { seconds = 3.4f, fovFrom = 40f, fovTo = 32f, shake = 0.25f, subtitle = 3,
-            onStart = () =>
-            {
-                victim = LastCop();
-                float d = (victim != null ? victim.distance : heroDistance - 36f) + 46f;
-                Vector3 road = Sample(d);
-                Vector3 heading = Flat(Sample(d + 5f) - road).normalized;
-                Vector3 across = Vector3.Cross(Vector3.up, heading);
-                Vector3 look0 = road + Vector3.up * 1f;
-                Vector3 a = Clear(look0, road + across * 13f + Vector3.up * 1.8f);
-                Vector3 b = Clear(look0, road - across * 13f + Vector3.up * 1.8f);
-                blastSpot = (a - look0).sqrMagnitude >= (b - look0).sqrMagnitude ? a : b;
-                if (victim != null) victim.scripted = true;
-            },
-            position = k => blastSpot,
-            look = k => victim != null && victim.unit != null ? victim.unit.transform.position + Vector3.up * 0.8f : Car(0f, 0.6f, 0f),
-            eventAt = 0.9f, onEvent = () =>
-            {
-                if (victim == null || victim.unit == null) return;
-                victim.scripted = false;   // physics only from here: the blast throws it
-                StartCoroutine(BlowUp(victim.unit));
-            } });
-        // 7. Head-on and low: the supercar coming out of the smoke toward the lens, the last cruisers behind.
-        shots.Add(new Shot { seconds = 2.2f, fovFrom = 36f, fovTo = 44f, shake = 0.3f, subtitle = 4,
-            position = k => Clear(Car(0f, 0.7f, 2f), Car(Vector3.Lerp(new Vector3(2f, 0.55f, 10f), new Vector3(1.6f, 0.5f, 5.5f), k))),
-            look = k => Car(0f, 0.7f, 0f) });
-        return shots;
+        return new List<Shot>
+        {
+            // 1. From the top: high over the road, the whole chase below.
+            new Shot { seconds = 1.6f, fovFrom = 42f, fovTo = 40f, shake = 0.06f,
+                position = k => Rig(Mathf.Lerp(5f, 4.2f, k), Mathf.Lerp(13f, 11.5f, k), Mathf.Lerp(13f, 12f, k)),
+                look = k => Rig(0.4f, 0.3f, -3f) },
+            // 2. At the tyres: just off the road beside the wheels, the cruisers coming up behind.
+            new Shot { seconds = 1.5f, fovFrom = 40f, fovTo = 38f, shake = 0.3f, subtitle = 0,
+                position = k => Clear(Rig(0f, 0.6f, 0f), Rig(-Mathf.Lerp(3.3f, 3.1f, k), 0.38f, Mathf.Lerp(5.6f, 5.2f, k))),
+                look = k => Rig(-0.2f, 0.6f, -0.6f) },
+            // 3. From the side, through the door window: Jason, and Mia beyond.
+            new Shot { seconds = 1.7f, fovFrom = 34f, fovTo = 31f, shake = 0.12f, subtitle = 1,
+                position = k => Clear(Heads, Rig(-6.6f, 1.5f, Mathf.Lerp(2.3f, 1.9f, k))),
+                look = k => Vector3.Lerp(Heads, Rig(0f, 0.8f, 0f), Mathf.Lerp(0.5f, 0.25f, k)) },
+        };
     }
 
     IEnumerator Shots(Camera cam)
@@ -688,19 +798,17 @@ public class IntroMission : MonoBehaviour
         {
             if (skip) break;
             shot.onStart?.Invoke();
-            if (shot.subtitle >= 0 && shot.subtitle < Subtitles.Length) subtitle.text = Subtitles[shot.subtitle];
-            bool fired = false;
+            subtitle.text = shot.subtitle >= 0 && shot.subtitle < Subtitles.Length ? Subtitles[shot.subtitle] : "";
             for (float t = 0f; t < shot.seconds && !skip; t += Time.unscaledDeltaTime)
             {
                 HideGameView();   // the car's touch pedals and dashboard switch on a moment after he is seated
                 if (GameInput.CancelDown || GameInput.EnterDown) skip = true;
-                if (!fired && shot.onEvent != null && t >= shot.eventAt) { fired = true; shot.onEvent(); }
                 float k = Mathf.SmoothStep(0f, 1f, t / shot.seconds);
                 Vector3 position = shot.position(k);
                 Vector3 look = shot.look(k);
-                // Handheld: a slow drift, plus the kick of a blast.
+                // Handheld: a slow drift.
                 float time = Time.unscaledTime + seed;
-                float shake = shot.shake + impulse;
+                float shake = shot.shake;
                 Vector3 drift = new Vector3(Mathf.PerlinNoise(time * 1.3f, 0f) - 0.5f, Mathf.PerlinNoise(0f, time * 1.1f) - 0.5f, 0f) * 0.08f * shake;
                 cam.transform.position = position;
                 cam.transform.rotation = Quaternion.LookRotation(look - position);
@@ -708,85 +816,21 @@ public class IntroMission : MonoBehaviour
                 cam.transform.rotation *= Quaternion.Euler((Mathf.PerlinNoise(time * 2.3f, 3f) - 0.5f) * 1.6f * shake,
                     (Mathf.PerlinNoise(5f, time * 2.1f) - 0.5f) * 1.6f * shake, (Mathf.PerlinNoise(time * 0.7f, 9f) - 0.5f) * 1.2f * shake);
                 cam.fieldOfView = Mathf.Lerp(shot.fovFrom, shot.fovTo, k);
-                impulse = Mathf.MoveTowards(impulse, 0f, Time.unscaledDeltaTime * 2.5f);
                 yield return null;
             }
         }
+        if (shots.Count > 0 && !skip)   // where the last shot has got to, so the hand-over to the car does not jump
+        {
+            Vector3 end = shots[shots.Count - 1].position(1f);
+            cam.transform.SetPositionAndRotation(end, Quaternion.LookRotation(shots[shots.Count - 1].look(1f) - end));
+        }
+        if (car != null) cam.transform.SetParent(car.transform, true);   // rides along while the screen blinks shut
     }
-
-    float impulse;
 
     IEnumerator EndInvulnerability(VehicleHealth health, float seconds)
     {
         yield return new WaitForSeconds(seconds);
         if (health != null) health.Invulnerable = false;
-    }
-
-    // The cruiser clips the kerb, slews sideways and goes up; the moment plays at a third of the speed.
-    IEnumerator BlowUp(PoliceCarUnit cruiser)
-    {
-        if (cruiser == null) yield break;
-        var body = cruiser.GetComponent<Rigidbody>();
-        if (body != null)
-        {
-            body.AddForce(cruiser.transform.right * 7f + Vector3.up * 1.5f, ForceMode.VelocityChange);
-            body.AddTorque(Vector3.up * 2.6f + cruiser.transform.forward * 1.2f, ForceMode.VelocityChange);
-        }
-        yield return new WaitForSecondsRealtime(0.35f);
-        if (cruiser == null) yield break;
-        StartSlowMotion(0.3f);
-        var health = cruiser.GetComponent<VehicleHealth>();
-        if (health != null) health.ApplyDamage(100000f, car.transform);
-        impulse = 2.5f;
-        if (body != null)
-        {
-            body.AddForce(Vector3.up * 7f + cruiser.transform.right * 3f, ForceMode.VelocityChange);
-            body.AddTorque(cruiser.transform.forward * 4f, ForceMode.VelocityChange);
-        }
-        yield return new WaitForSecondsRealtime(1.8f);
-        EndSlowMotion();
-    }
-
-    float normalFixedStep = -1f;
-
-    void StartSlowMotion(float scale)
-    {
-        if (normalFixedStep < 0f) normalFixedStep = Time.fixedDeltaTime;
-        Time.timeScale = scale;
-        Time.fixedDeltaTime = normalFixedStep * scale;   // smooth physics at the slower rate
-    }
-
-    void EndSlowMotion()
-    {
-        Time.timeScale = 1f;
-        if (normalFixedStep > 0f) Time.fixedDeltaTime = normalFixedStep;
-    }
-
-    PoliceCarUnit NearestCruiser(PoliceCarUnit not)
-    {
-        PoliceCarUnit best = null;
-        float bestDistance = float.MaxValue;
-        foreach (var unit in PoliceCarUnit.Active)
-        {
-            if (unit == null || unit == not) continue;
-            float d = (unit.transform.position - car.transform.position).sqrMagnitude;
-            if (d < bestDistance) { bestDistance = d; best = unit; }
-        }
-        return best;
-    }
-
-    // The closest cruiser that is still far enough back for the blast not to reach the supercar.
-    PoliceCarUnit FarthestCruiser()
-    {
-        PoliceCarUnit best = null;
-        float bestDistance = 0f;
-        foreach (var unit in PoliceCarUnit.Active)
-        {
-            if (unit == null) continue;
-            float d = Vector3.Distance(unit.transform.position, car.transform.position);
-            if (d > 22f && d < 55f && (best == null || d < bestDistance)) { bestDistance = d; best = unit; }
-        }
-        return best != null ? best : NearestCruiser(null);
     }
 
     Camera MakeCamera()
@@ -803,6 +847,7 @@ public class IntroMission : MonoBehaviour
             to.antialiasing = from.antialiasing;
             to.renderShadows = from.renderShadows;
         }
+        cam.cullingMask |= 1 << ActorLayer;
         cam.fieldOfView = 52f;
         cam.nearClipPlane = 0.05f;   // the windscreen shot sits on the bonnet
         cam.depth = 50f;
@@ -868,7 +913,6 @@ public class IntroMission : MonoBehaviour
             }
         }
         // A short shot of her getting out and walking into the store: from the street, past the car, toward the door.
-        phase = Phase.Stop;
         GamePlayer.MenuOpen = true;
         HideGameView();
         var cam = MakeCamera();
@@ -921,9 +965,23 @@ public class IntroMission : MonoBehaviour
         return best;
     }
 
+    const float StopDistance = 18f;       // "Stop the car" this close to the drop-off
+    const float StepOutDistance = 35f;    // getting out this close to it, cops lost, is dropping Mia off too
+
+    // Jason parked by the store and got out himself instead of waiting for the stop: that is the drop-off, not leaving her.
+    bool SteppedOutAtStore()
+    {
+        if (phase != Phase.Drive || car == null || driver == null) return false;
+        if (driver.State == VehicleInteractionState.InVehicle && driver.CurrentVehicle == vehicle) return false;
+        var wanted = WantedManager.Instance;
+        if (wanted != null && wanted.Stars > 0) return false;
+        return Mathf.Min(Flat(car.transform.position - dropPoint).magnitude, Flat(car.transform.position - storeDoor).magnitude) <= StepOutDistance;
+    }
+
     bool Failed(out string why)
     {
-        why = null;
+        why = failure;
+        if (why != null) return true;
         var manager = driver != null ? driver.GetComponent<OpenworldCrime.Player.PlayerManager>() : null;
         if (manager != null && manager.CurrentState == OpenworldCrime.Player.PlayerState.Dead) why = "You died";
         else if (car == null) why = "The car is gone";
@@ -932,7 +990,8 @@ public class IntroMission : MonoBehaviour
             var health = car.GetComponent<VehicleHealth>();
             if (health != null && health.IsDestroyed) why = "The car was wrecked";
             // Getting out (or being thrown out) of the car with Mia in it ends the mission.
-            else if ((phase == Phase.LoseCops || phase == Phase.Drive) && driver != null
+            // (At the store with the cops gone it is the drop-off instead: see SteppedOutAtStore.)
+            else if ((phase == Phase.LoseCops || phase == Phase.Drive) && driver != null && !SteppedOutAtStore()
                      && (driver.State != VehicleInteractionState.InVehicle || driver.CurrentVehicle != vehicle))
             {
                 // Right after the takeover (the car is still invulnerable then) a hit from a cruiser could throw him out
@@ -942,7 +1001,7 @@ public class IntroMission : MonoBehaviour
                     if (driver.State == VehicleInteractionState.OnFoot) driver.EnterInstant(vehicle);
                     return false;
                 }
-                why = "You left Mia in the car";
+                why = LeftMia;
             }
         }
         return why != null;
@@ -951,15 +1010,19 @@ public class IntroMission : MonoBehaviour
     // Failed: the banner, then everything is put back and the mission starts again from the cutscene.
     IEnumerator Fail(string why)
     {
+        // Killed, wrecked or arrested: straight back into the chase. Walking out on Mia: the whole mission again, cutscene too.
+        bool direct = why != LeftMia;
+        restarting = direct;
         if (WaypointSystem.Instance != null) WaypointSystem.Instance.ClearMarker();
         SetObjective("");
-        Banner("MISSION FAILED", why, 3.5f);
+        Banner("MISSION FAILED", why, direct ? 1.2f : 3.5f);
         CharacterSwitcher.BlockedReason = null;
-        yield return new WaitForSeconds(3.5f);
+        yield return new WaitForSecondsRealtime(direct ? 1.3f : 3.5f);
 
         var blink = ScreenBlink.Instance;
         if (blink != null) yield return blink.Close(0.4f);
         TearDown();
+        failure = null;
         // A dead player respawns first; the restart waits for him to be standing again (on foot).
         var manager = driver != null ? driver.GetComponent<OpenworldCrime.Player.PlayerManager>() : null;
         for (float t = 0f; t < 20f; t += Time.unscaledDeltaTime)
@@ -968,14 +1031,17 @@ public class IntroMission : MonoBehaviour
             if (!dead && driver != null && driver.State == VehicleInteractionState.OnFoot) break;
             yield return null;
         }
-        StartCoroutine(Run());
+        var health = driver != null ? driver.GetComponent<Invector.vCharacterController.vThirdPersonController>() : null;
+        if (direct && health != null && !health.isDead) health.ResetHealth();
+        StartCoroutine(Run(!direct));
     }
+
+    const string LeftMia = "You left Mia in the car";
 
     // Removes the mission's car, Mia, the chasing cruisers and the wanted level, and gets Jason out of the car if he is in it.
     // (No StopAllCoroutines: the restart itself runs as one. The chase helpers end on their own once the phase is reset.)
     void TearDown()
     {
-        EndSlowMotion();
         if (miaGraph.IsValid()) miaGraph.Destroy();
         if (mia != null) Destroy(mia);
         mia = null;
@@ -1003,17 +1069,16 @@ public class IntroMission : MonoBehaviour
 
     void Cleanup()
     {
-        EndSlowMotion();
         if (miaGraph.IsValid()) miaGraph.Destroy();
         RestoreGameView();
         GamePlayer.MenuOpen = false;
         CharacterSwitcher.BlockedReason = null;
+        RemoveCabinLight();
         if (hud != null) Destroy(hud.gameObject);
     }
 
     void OnDestroy()
     {
-        if (phase == Phase.Cutscene) EndSlowMotion();
         if (miaGraph.IsValid()) miaGraph.Destroy();
         if (phase != Phase.None && phase != Phase.Done) CharacterSwitcher.BlockedReason = null;
     }

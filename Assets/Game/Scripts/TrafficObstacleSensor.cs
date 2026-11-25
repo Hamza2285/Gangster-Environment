@@ -28,7 +28,7 @@ public class TrafficObstacleSensor : MonoBehaviour
         public Transform transform;
         public Collider[] own;
         public float halfLength, halfWidth, height;
-        public float braking, target;
+        public float braking, target, playerGap = float.PositiveInfinity;
     }
 
     // Each car looks ahead every few physics steps (staggered), keeping its last reading in between.
@@ -78,11 +78,14 @@ public class TrafficObstacleSensor : MonoBehaviour
         {
             var car = cars[i];
             if (car.ai == null) { cars.RemoveAt(i); continue; }
+            // Never over the player, whoever is driving (traffic, a fleeing driver, a taxi, a forced drive).
+            if (car.body != null && !car.body.isKinematic && car.ai.gameObject.activeInHierarchy)
+                car.playerGap = PlayerCarGuard.Brake(car.transform, car.body, car.halfLength, car.halfWidth);
             if (!car.ai.isActiveAndEnabled || car.body == null || car.body.isKinematic) { car.braking = car.target = 0f; continue; }
             if ((car.transform.position - centre).sqrMagnitude > radiusSqr) { car.braking = car.target = 0f; continue; }
 
             if ((i + tick) % LookEvery == 0) car.target = Look(car);
-            float brake = car.target;
+            float brake = Mathf.Max(car.target, BrakeFor(car.playerGap, Reach(car)));
             // Ease off rather than snapping off, so a car does not lurch forward the moment the obstacle leaves the box.
             car.braking = brake > car.braking ? brake : Mathf.MoveTowards(car.braking, brake, Time.fixedDeltaTime * 2f);
             if (car.braking > 0.01f && addExternalBrake != null) addExternalBrake(car.ai, car.braking);
@@ -92,8 +95,7 @@ public class TrafficObstacleSensor : MonoBehaviour
     float Look(Car car)
     {
         Vector3 forward = car.transform.forward;
-        float speed = Mathf.Max(0f, Vector3.Dot(car.body.linearVelocity, forward));
-        float reach = Mathf.Clamp(minLookAhead + speed * lookAheadPerSpeed, minLookAhead, maxLookAhead);
+        float reach = Reach(car);
         Vector3 start = car.transform.position + Vector3.up * (car.height * 0.5f) + forward * (car.halfLength - 0.3f);
         Vector3 half = new Vector3(car.halfWidth * 0.9f, car.height * 0.35f, 0.3f);
 
@@ -109,7 +111,18 @@ public class TrafficObstacleSensor : MonoBehaviour
             if (collider.bounds.max.y < car.transform.position.y + 0.5f) continue;
             nearest = Mathf.Min(nearest, hits[h].distance);
         }
-        if (nearest == float.MaxValue) return 0f;
+        return BrakeFor(nearest, reach);
+    }
+
+    float Reach(Car car)
+    {
+        float speed = Mathf.Max(0f, Vector3.Dot(car.body.linearVelocity, car.transform.forward));
+        return Mathf.Clamp(minLookAhead + speed * lookAheadPerSpeed, minLookAhead, maxLookAhead);
+    }
+
+    float BrakeFor(float nearest, float reach)
+    {
+        if (nearest > reach) return 0f;
         if (nearest <= stopGap) return 1f;
         // Harder the closer it is: full brake at the gap, none at the far end of the look-ahead.
         return Mathf.Clamp01(1f - (nearest - stopGap) / Mathf.Max(0.5f, reach - stopGap)) * 0.8f + 0.2f;

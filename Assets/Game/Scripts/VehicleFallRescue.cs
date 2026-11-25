@@ -13,7 +13,7 @@ public class VehicleFallRescue : MonoBehaviour
     const float FallSpeed = -3f;        // only cars actually dropping
 
     readonly List<RCC_CarControllerV3> cars = new List<RCC_CarControllerV3>();
-    readonly RaycastHit[] hits = new RaycastHit[8];
+    readonly RaycastHit[] hits = new RaycastHit[48];   // roomy: a car brings many colliders of its own
     float nextScan;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

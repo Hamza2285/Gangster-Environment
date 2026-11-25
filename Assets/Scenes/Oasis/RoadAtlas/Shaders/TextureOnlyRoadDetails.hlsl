@@ -18,7 +18,7 @@ void CityExistingRoadWater(float3 world,float2 uv,inout SurfaceData s){
     half damp=smoothstep(.20,.55,originalMask);
     s.albedo*=1-damp*.10-body*.16;
     s.metallic=lerp(s.metallic,0,wet);
-    s.smoothness=lerp(s.smoothness,lerp(.82,.965,wet),wet);
+    s.smoothness=lerp(s.smoothness,lerp(.55,.72,wet),wet);
     // Very shallow, stationary surface ripples; fade fine detail before aliasing.
     float detail=1-smoothstep(.04,.18,length(fwidth(world.xz)));
     float2 ripple=float2(sin(world.x*3.7+world.z*2.1),cos(world.z*4.3-world.x*1.6))*.007*detail;
@@ -29,8 +29,8 @@ void CityExistingRoadWater(float3 world,float2 uv,inout SurfaceData s){
     half facing=1-saturate(dot(waterNormal,view));
     half fresnel=facing*facing*facing*facing*facing;
     // Reuse the existing environment probe: no planar/SSR pass or extra camera.
-    half3 reflected=GlossyEnvironmentReflection(reflect(-view,waterNormal),.055h,1.0h);
-    s.emission+=reflected*wet*(.08h+.52h*fresnel);
+    half3 reflected=GlossyEnvironmentReflection(reflect(-view,waterNormal),.3h,1.0h);
+    s.emission+=min(reflected,1.0h)*wet*(.04h+.18h*fresnel);
 }
 
 void CityTextureRoadDetails(float3 world,float2 uv,inout SurfaceData s){

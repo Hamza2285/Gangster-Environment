@@ -26,12 +26,12 @@ namespace OpenworldCrime.EditorTools
         private const int DayPriority = 110;   // above the scene's Global / Outdoor volumes and Hamza's Night Effects (100)
         private const int NightPriority = 120;
         // ACES darkens mid-tones a little, so exposure is higher than it was with no tonemapping.
-        private const float DayExposure = 0.2f;
+        private const float DayExposure = -0.05f;
         private const float DayContrast = 14f;
         private const float DaySaturation = 8f;
         private const float DayTemperature = 2f;
         private const float DayTint = 0f;
-        private const float NightExposure = 0.8f; // Ghost's night exposure
+        private const float NightExposure = 0.6f; // 0.8 washed the lamp-lit roads out on phones
 
         [MenuItem("Tools/OpenworldCrime/Lighting/Setup City Post Processing")]
         public static void SetupMenu() => Debug.Log(Setup());
@@ -109,7 +109,7 @@ namespace OpenworldCrime.EditorTools
             Add<Tonemapping>(p).mode.Override(TonemappingMode.ACES);
             var color = Add<ColorAdjustments>(p);
             color.postExposure.Override(NightExposure);
-            color.contrast.Override(14f);
+            color.contrast.Override(6f);
             color.saturation.Override(14f);
             color.colorFilter.Override(new Color(0.96f, 0.97f, 1f)); // a faint moonlit cool; the neon signs bring the colour
             var white = Add<WhiteBalance>(p);
@@ -120,12 +120,12 @@ namespace OpenworldCrime.EditorTools
             split.highlights.Override(new Color(0.55f, 0.52f, 0.48f));
             split.balance.Override(-10f);
             var lgg = Add<LiftGammaGain>(p);
-            lgg.lift.Override(new Vector4(0.92f, 0.94f, 1f, -0.03f)); // Ghost's lift / gamma / gain
-            lgg.gamma.Override(new Vector4(0.98f, 0.98f, 1f, 0f));
+            lgg.lift.Override(new Vector4(0.94f, 0.96f, 1f, 0f));
+            lgg.gamma.Override(new Vector4(0.98f, 0.98f, 1f, 0.2f));
             lgg.gain.Override(new Vector4(1f, 0.97f, 0.94f, 0.02f));
             var bloom = Add<Bloom>(p);
             bloom.threshold.Override(0.9f);
-            bloom.intensity.Override(0.8f);
+            bloom.intensity.Override(0.35f);
             bloom.scatter.Override(0.7f);
             bloom.tint.Override(Color.white);
             bloom.highQualityFiltering.Override(false);
