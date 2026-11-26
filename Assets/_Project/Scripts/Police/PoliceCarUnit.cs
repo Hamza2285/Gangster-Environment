@@ -338,9 +338,12 @@ namespace OpenworldCrime.Police
             chase.target = driving ? targetTransform : null;
             chase.targetGap = ram ? 0f : settings.carChaseGap;
             chase.cautious = !ram;
-            // Left far behind and out of view: closes up along its path, as if it had driven faster there.
-            if (driving && !IsAmbient && now >= nextCatchUp && FlatDistance(targetTransform.position) > catchUpDistance
-                && chase.CatchUp(targetTransform.position, catchUpDistance * 0.6f)) nextCatchUp = now + 4f;
+            // Left far behind and out of view: closes up along its path, as if it had driven faster there - but only to just beyond
+            // the distance it can see him from, so a player who keeps outrunning it can still get away (it has to drive the rest).
+            float catchUpTo = Mathf.Max(catchUpDistance * 0.6f, settings.carSightRadius + 25f);
+            float catchUpFrom = Mathf.Max(catchUpDistance, catchUpTo + 40f);
+            if (driving && !IsAmbient && now >= nextCatchUp && FlatDistance(targetTransform.position) > catchUpFrom
+                && chase.CatchUp(targetTransform.position, catchUpTo)) nextCatchUp = now + 6f;
 
             Vector3 target = targetTransform.position;
             // On the trail of a moving car: the path extends itself. A new route only when the trail was lost or is a long way round.

@@ -69,13 +69,14 @@ namespace OpenworldCrime.Player
         }
 
         [Header("Stride match (per character)")]
-        [Tooltip("Natural speeds measured in play (planted-foot drift = 0): Jason walk 1.79, run 2.6, sprint 6.7 m/s; " +
-                 "Mia walk 1.01, run 2.92, sprint 5.3 m/s. Without walk-by-default Invector moves at running speed x stick input, " +
-                 "so the running speed also sets the half-stick walk speed.")]
+        [Tooltip("Natural speeds (planted-foot drift = 0): Jason walk 1.79, run 4.0, sprint 7.7 m/s; Mia walk 1.01, run 3.4, " +
+                 "sprint 6.3 m/s. The run clip covers about 3.5 m/s x the character's scale (Jason 1.08: 3.75 m/s); the old 2.6 " +
+                 "played Jason's run at 1.3x while he moved at 3.4 m/s, legs far too fast for the ground covered. Without " +
+                 "walk-by-default Invector moves at running speed x stick input, so the running speed also sets the half-stick walk speed.")]
         [SerializeField] private CharacterProfile[] profiles =
         {
-            new CharacterProfile("jason", 2f, 3.4f, 7f, 1.79f, 2.6f, 6.7f),
-            new CharacterProfile("girl", 1.4f, 3.4f, 6f, 1.01f, 2.92f, 5.3f),
+            new CharacterProfile("jason", 2f, 3.4f, 7f, 1.79f, 4.0f, 7.7f),
+            new CharacterProfile("girl", 1.4f, 3.4f, 6f, 1.01f, 3.4f, 6.3f),
         };
         [SerializeField] private bool matchStride = true;
         [Tooltip("Limits of the locomotion playback scale.")]

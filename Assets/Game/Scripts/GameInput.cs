@@ -155,6 +155,7 @@ public static class GameInput
     public static bool WhistleDown => KeyDown(KeyCode.T) || Touch("M_Taxi");
     public static bool EnterDown => KeyDown(KeyCode.Return) || KeyDown(KeyCode.KeypadEnter) || Touch("M_Enter");
     public static bool MapDown => KeyDown(KeyCode.M) || Touch("M_Map");
+    public static bool PhoneDown => KeyDown(KeyCode.P);
     public static bool CameraDown => KeyDown(KeyCode.C) || Touch("M_Camera");
     public static bool OutfitDown => KeyDown(KeyCode.O);
     public static bool WatchOptionDown => KeyDown(KeyCode.Alpha1) || Touch("M_Watch");
@@ -247,7 +248,7 @@ public static class GameInput
     {
 #if ENABLE_INPUT_SYSTEM
         var kb = Keyboard.current;
-        if (kb != null) return ToControl(kb, key).isPressed;
+        if (kb != null) { var control = ToControl(kb, key); return control != null && control.isPressed; }
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
         return Input.GetKey(key);
@@ -260,7 +261,7 @@ public static class GameInput
     {
 #if ENABLE_INPUT_SYSTEM
         var kb = Keyboard.current;
-        if (kb != null) return ToControl(kb, key).wasPressedThisFrame;
+        if (kb != null) { var control = ToControl(kb, key); return control != null && control.wasPressedThisFrame; }
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
         return Input.GetKeyDown(key);
@@ -304,7 +305,12 @@ public static class GameInput
             case KeyCode.RightArrow: return kb.rightArrowKey;
             case KeyCode.LeftAlt: return kb.leftAltKey;
             case KeyCode.RightAlt: return kb.rightAltKey;
-            default: return kb.escapeKey;
+            case KeyCode.Escape: return kb.escapeKey;
+            case KeyCode.P: return kb.pKey;
+            default:
+                // Any other key by name (letters and most keys are named the same in both systems). Never a stand-in key:
+                // an unknown key used to read as Escape.
+                return System.Enum.TryParse(key.ToString(), out Key named) && named != Key.None ? kb[named] : null;
         }
     }
 #endif

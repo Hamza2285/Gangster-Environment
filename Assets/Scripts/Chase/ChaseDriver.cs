@@ -368,7 +368,8 @@ public class ChaseDriver : MonoBehaviour
 
     private void SetRearGrip(float factor)
     {
-        for (int i = 0; i < _rear.Length; i++)
+        if (_rear == null || _rearGrip == null) return;
+        for (int i = 0; i < _rear.Length && i < _rearGrip.Length; i++)   // destroyed before its grip was recorded: nothing to put back
         {
             if (_rear[i] == null) continue;
             var f = _rearGrip[i];
