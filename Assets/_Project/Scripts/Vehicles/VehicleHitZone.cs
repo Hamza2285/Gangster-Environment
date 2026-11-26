@@ -31,7 +31,11 @@ namespace OpenworldCrime.Vehicles
         {
             if (damage == null || health == null) return;
             _onStartReceiveDamage.Invoke(damage);
-            health.ApplyDamage(damage.damageValue * damageMultiplier, damage.sender);
+            // With the hit point the car also throws a few bits of debris at it.
+            Vector3 shot = damage.force.sqrMagnitude > 0.0001f ? damage.force
+                : damage.sender != null ? damage.hitPosition - damage.sender.position : Vector3.zero;
+            if (damage.hitPosition == Vector3.zero) health.ApplyDamage(damage.damageValue * damageMultiplier, damage.sender); // no hit point (some melee)
+            else health.ApplyDamage(damage.damageValue * damageMultiplier, damage.sender, damage.hitPosition, shot);
             _onReceiveDamage.Invoke(damage);
         }
     }

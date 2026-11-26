@@ -82,6 +82,24 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Seconds a stopped smoke or fire keeps its last particles before going back to the pool.")]
         [Min(0f)] public float effectFadeTime = 3f;
 
+        [Header("Hit Debris (pooled, see VehicleHitDebrisBurst)")]
+        [Tooltip("Small dark plastic/metal bits with a spark and dust puff, spawned at the contact point of crashes and bullet hits. Empty = none.")]
+        public GameObject hitDebrisEffect;
+        [Tooltip("Crashes slower than this (m/s, along the contact normal, kerbs and landings scaled down) throw no debris. 6 m/s = 22 km/h.")]
+        [Min(0f)] public float debrisMinImpactSpeed = 6f;
+        [Tooltip("Impact speed (m/s) that throws the full amount of debris.")]
+        [Min(0.1f)] public float debrisFullImpactSpeed = 22f;
+        [Tooltip("Debris strength (0-1) of one bullet hit.")]
+        [Range(0f, 1f)] public float debrisBulletStrength = 0.25f;
+        [Tooltip("Seconds per car between two crash debris bursts.")]
+        [Min(0f)] public float debrisCrashCooldown = 0.35f;
+        [Tooltip("Seconds per car between two bullet debris bursts (automatic fire).")]
+        [Min(0f)] public float debrisBulletCooldown = 0.15f;
+        [Tooltip("Seconds a debris burst stays out before it goes back to the pool (longest particle life).")]
+        [Min(0.2f)] public float debrisLifetime = 1.6f;
+        [Tooltip("Debris bursts at once in the whole scene. Over this a hit simply throws none.")]
+        [Min(1)] public int maxDebrisEffects = 6;
+
         [Header("Performance")]
         [Tooltip("Cars burning down at once. Another car reaching the fire stage over this explodes straight away.")]
         [Min(1)] public int maxBurningCars = 3;
@@ -97,6 +115,7 @@ namespace OpenworldCrime.Vehicles
         private void OnValidate()
         {
             heavySmokeAtHealth = Mathf.Clamp(heavySmokeAtHealth, fireAtHealth, smokeAtHealth);
+            debrisFullImpactSpeed = Mathf.Max(debrisFullImpactSpeed, debrisMinImpactSpeed + 0.1f);
         }
     }
 }

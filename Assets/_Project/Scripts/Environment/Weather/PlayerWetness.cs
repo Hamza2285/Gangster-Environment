@@ -10,6 +10,7 @@ namespace OpenworldCrime.Environment
     /// slot keeps its own colour) with a darker base colour and a higher smoothness - wet cloth and skin - and a few drops fall
     /// off the body (one small pooled particle system, re-parented on character switch). Materials on disk are never changed;
     /// at zero wetness the blocks are removed (back to SRP batching).
+    /// Swimming soaks the character at once (PlayerSwimController); he drips and dries from there once out of the water.
     /// Updates only when the wetness changed by a step; nothing per frame while dry.
     /// </summary>
     [DisallowMultipleComponent]
@@ -36,6 +37,7 @@ namespace OpenworldCrime.Environment
         private PlayerVehicleInteractionState vehicleState;
         private float wetness, applied = -1f;
         private float nextLookup;
+        private bool swimming;
 
         /// <summary>How wet the played character is, 0-1.</summary>
         public float Wetness => wetness;
@@ -46,8 +48,12 @@ namespace OpenworldCrime.Environment
             block = new MaterialPropertyBlock();
         }
 
+        private void OnEnable() => OpenworldCrime.Player.PlayerSwimController.OnPlayerSwimmingChanged += HandleSwimming;
+
         private void OnDisable()
         {
+            OpenworldCrime.Player.PlayerSwimController.OnPlayerSwimmingChanged -= HandleSwimming;
+            swimming = false;
             Clear();
             applied = -1f;
         }
@@ -66,11 +72,12 @@ namespace OpenworldCrime.Environment
             wetness = rain > wetness
                 ? Mathf.MoveTowards(wetness, rain, Time.deltaTime / wetSeconds)
                 : Mathf.MoveTowards(wetness, rain, Time.deltaTime / drySeconds);
+            if (swimming) wetness = 1f;
 
             if (drips != null)
             {
                 var em = drips.emission;
-                float rate = sheltered ? 0f : wetness * maxDripRate;
+                float rate = sheltered || swimming ? 0f : wetness * maxDripRate;
                 em.rateOverTime = rate;
                 if (rate > 0.01f && !drips.isPlaying) drips.Play();
                 else if (rate <= 0.01f && drips.isPlaying) drips.Stop();
@@ -128,6 +135,8 @@ namespace OpenworldCrime.Environment
             }
             applied = -1f;
         }
+
+        private void HandleSwimming(bool isSwimming) => swimming = isSwimming;
 
         // Small wrapper so the vehicle check is a field read (no lookup per frame).
         private readonly struct PlayerVehicleInteractionState

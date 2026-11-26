@@ -21,6 +21,8 @@ namespace OpenworldCrime.Vehicles
         [SerializeField, Range(0.8f, 0.99f)] private float upshiftRevShare = 0.94f;
         [Tooltip("Minimum time (s) between two assisted shifts (lets the revs settle in the new gear).")]
         [SerializeField, Min(0f)] private float minSecondsBetweenShifts = 0.5f;
+        [Tooltip("No assisted upshift below this speed (km/h).")]
+        [SerializeField, Min(0f)] private float minUpshiftKmh = 15f;
 
         private RCC_CarControllerV3 car;
         private float lastShift = -10f;
@@ -39,7 +41,9 @@ namespace OpenworldCrime.Vehicles
             float rpm = WheelRevs();
             if (topGear) return;
             if (car.throttleInput < 0.5f && !car.cutGas) return;
-            if (Mathf.Max(rpm, car.engineRPM) < car.maxEngineRPM * upshiftRevShare) return;
+            // Revs from the wheels only: pushing against a wall slips the clutch and spins the engine up while the car stands,
+            // which climbed the gears at a standstill.
+            if (car.speed < minUpshiftKmh || rpm < car.maxEngineRPM * upshiftRevShare) return;
             if (Time.time - lastShift < minSecondsBetweenShifts) return;
             lastShift = Time.time;
             car.StartCoroutine(car.ChangeGear(car.currentGear + 1));

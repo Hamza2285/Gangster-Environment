@@ -26,6 +26,8 @@ namespace OpenworldCrime.Player
         [SerializeField] private Rigidbody body;
         [SerializeField] private Animator animator;
         [SerializeField] private PlayerVehicleInteraction vehicleInteraction;
+        [Tooltip("Landing in water is a splash, not a fall (optional).")]
+        [SerializeField] private PlayerSwimController swimController;
 
         [Header("Layers")]
         [Tooltip("Vehicle colliders (standing on them arms the roof fall; landing back on one is no fall).")]
@@ -69,6 +71,7 @@ namespace OpenworldCrime.Player
             body = GetComponent<Rigidbody>();
             animator = GetComponent<Animator>();
             vehicleInteraction = GetComponent<PlayerVehicleInteraction>();
+            swimController = GetComponent<PlayerSwimController>();
         }
 
         private void Awake()
@@ -115,6 +118,8 @@ namespace OpenworldCrime.Player
         private void FixedUpdate()
         {
             if (controller.isDead) { mode = Mode.None; onVehicle = false; return; }
+            // Came down in the water: the swim controller splashes instead, no ground damage.
+            if (swimController != null && swimController.IsSubmerged) { mode = Mode.None; onVehicle = false; return; }
             switch (mode)
             {
                 case Mode.None: WatchRoof(); return;

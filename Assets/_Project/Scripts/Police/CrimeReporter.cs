@@ -125,6 +125,17 @@ namespace OpenworldCrime.Police
             return sender == car || sender.IsChildOf(car);
         }
 
+        /// <summary>
+        /// A witness phoned the police about a crime of the player's (a carjacked driver calling it in): reported like any crime,
+        /// but the police know without a unit seeing it (<see cref="CrimeReport.PhonedIn"/>), so the wanted level rises through
+        /// the usual rules (<see cref="WantedManager"/>).
+        /// </summary>
+        public static void ReportWitnessCall(CrimeType type, Vector3 position, Transform victim)
+        {
+            var report = new CrimeReport(type, position, victim, false) { PhonedIn = true };
+            OnCrimeCommitted?.Invoke(report);
+        }
+
         private void Report(CrimeType type, Vector3 position, Transform victim, bool againstPolice)
         {
             OnCrimeCommitted?.Invoke(new CrimeReport(type, position, victim, againstPolice));

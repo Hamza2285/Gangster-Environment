@@ -45,8 +45,7 @@ namespace OpenworldCrime.EditorTools
         }
 
         private const string SettingsPath = "Assets/_Project/Lighting/OWC_CityLighting.lighting";
-        private const string SetsFolder = "Assets/_Project/Scenes/Gangstar_Gameplay/LightingSets";
-        private const string NightMapsFolder = SetsFolder + "/Night";
+        private const string DefaultSetsFolder = "Assets/_Project/Scenes/Gangstar_Gameplay/LightingSets";
         private const string StatusFile = "Temp/daynight_bake_status.txt";
         private const string LightingRootName = "OWC_Lighting";
         private const string LampRootName = "BakedStreetLamps";
@@ -58,14 +57,14 @@ namespace OpenworldCrime.EditorTools
         private const float BuildingScale = 0.6f;   // facades: soft bounce / sky light only
         private const float TerrainScale = 0.25f;   // coast cliffs, far terrain
         private const float MinLightmapSize = 1.5f; // smaller objects use probes
-        private const float DayBounce = 1.0f;
-        private const float NightBounce = 1.0f;
+        private const float DefaultDayBounce = 1.0f;
+        private const float DefaultNightBounce = 1.0f;
 
         // --- Baked street lamps ---
-        private const float LampIntensity = 8f;
-        private const float LampRange = 16f;
-        private static readonly Color LampColor = new Color(1f, 0.7f, 0.45f);
-        private const float ShopLightIntensity = 10f;
+        private const float DefaultLampIntensity = 8f;
+        private const float DefaultLampRange = 16f;
+        private static readonly Color DefaultLampColor = new Color(1f, 0.7f, 0.45f);
+        private const float DefaultShopLightIntensity = 10f;
         private const float ShopLightRange = 10f;
         private static readonly Color ShopLightColor = new Color(1f, 0.78f, 0.5f);
 
@@ -83,6 +82,28 @@ namespace OpenworldCrime.EditorTools
             "Gangstar City/Road Atlas Lit", "Gangstar City/PNG Parking Details", "Gangstar City/Beach Shoreline",
         };
 
+        /// <summary>
+        /// What a bake writes and with which values. The default (menu) bake uses the constants above and the scene's own
+        /// sets folder; another lighting look (BrightLightingSetup) passes its own folder, settings asset and light values.
+        /// </summary>
+        public sealed class Options
+        {
+            public string SetsFolder = DefaultSetsFolder;
+            /// <summary>Lighting settings asset to bake with (null: OWC_CityLighting, rewritten with the default values).</summary>
+            public LightingSettings Settings;
+            public float DayBounce = DefaultDayBounce;
+            public float NightBounce = DefaultNightBounce;
+            public float LampIntensity = DefaultLampIntensity;
+            public float LampRange = DefaultLampRange;
+            public Color LampColor = DefaultLampColor;
+            public float ShopLightIntensity = DefaultShopLightIntensity;
+            /// <summary>Called once at the end: true and the status text when both sets were written, false and why otherwise.</summary>
+            public System.Action<bool, string> Completed;
+            public string NightMapsFolder => SetsFolder + "/Night";
+        }
+
+        private static Options options = new Options();
+
         private enum Step { Idle, Night, Day }
         private static Step step = Step.Idle;
         private static double startTime;
@@ -94,18 +115,19 @@ namespace OpenworldCrime.EditorTools
         public static bool IsRunning => step != Step.Idle;
 
         [MenuItem("Tools/OpenworldCrime/Lighting/Prepare City For Bake")]
-        public static void PrepareMenu() => Debug.Log(Prepare());
+        public static void PrepareMenu() => Debug.Log(Prepare(new Options()));
 
         [MenuItem("Tools/OpenworldCrime/Lighting/Bake Day And Night")]
         public static void BakeMenu() => Debug.Log(Start());
 
         /// <summary>Lighting settings, renderer lightmap/probe split, baked lamps and light probes. No bake.</summary>
-        public static string Prepare()
+        public static string Prepare(Options bakeOptions)
         {
+            options = bakeOptions ?? new Options();
             var controller = Object.FindFirstObjectByType<CityDayNightController>(FindObjectsInactive.Include);
             if (controller == null) return "[DayNightLightBaker] No CityDayNightController in the open scene.";
             var report = new StringBuilder("[DayNightLightBaker] prepared:\n");
-            Lightmapping.lightingSettings = GetSettings();
+            Lightmapping.lightingSettings = options.Settings != null ? options.Settings : GetSettings();
             Lightmapping.giWorkflowMode = Lightmapping.GIWorkflowMode.OnDemand;
             report.AppendLine(AssignReceiveGI(controller.gameObject.scene, out layoutRenderers));
             report.AppendLine(ExcludeMismatchedLodGroups(controller.gameObject.scene));
@@ -117,18 +139,21 @@ namespace OpenworldCrime.EditorTools
             return report.ToString();
         }
 
-        public static string Start()
+        public static string Start() => Start(new Options());
+
+        /// <summary>Bakes night, then day, with the given options (asynchronous; options.Completed reports the end).</summary>
+        public static string Start(Options bakeOptions)
         {
             if (Lightmapping.isRunning || IsRunning) return "[DayNightLightBaker] A bake is already running.";
             if (EditorApplication.isPlaying) return "[DayNightLightBaker] Stop play mode first.";
-            string prepared = Prepare();
+            string prepared = Prepare(bakeOptions);
             var controller = Object.FindFirstObjectByType<CityDayNightController>(FindObjectsInactive.Include);
             if (controller == null) return prepared;
 
             restoreNight = controller.IsNight;
             SetLampsActive(GetLightingRoot(controller.gameObject.scene), true);
             controller.Apply(true);
-            if (controller.sun != null) controller.sun.bounceIntensity = NightBounce;
+            if (controller.sun != null) controller.sun.bounceIntensity = options.NightBounce;
             step = Step.Night;
             startTime = EditorApplication.timeSinceStartup;
             // Completion is detected by polling, not Lightmapping.bakeCompleted: another package's handler on that event
@@ -191,7 +216,7 @@ namespace OpenworldCrime.EditorTools
                 Status($"night done ({nightResult.LightmapCount} lightmaps, {Minutes(nightSeconds)}); day bake started");
                 SetLampsActive(GetLightingRoot(controller.gameObject.scene), false);
                 controller.Apply(false);
-                if (controller.sun != null) controller.sun.bounceIntensity = DayBounce;
+                if (controller.sun != null) controller.sun.bounceIntensity = options.DayBounce;
                 step = Step.Day;
                 if (!BeginBake()) Abort("could not start the day bake");
                 return;
@@ -213,8 +238,9 @@ namespace OpenworldCrime.EditorTools
                 controller.Apply(restoreNight);
                 EditorSceneManager.MarkSceneDirty(controller.gameObject.scene);
                 EditorSceneManager.SaveScene(controller.gameObject.scene);
-                Status($"DONE: {day.LightmapCount} lightmaps per set, {day.ProbeCount} probes, shared layout={sameLayout}, night {Minutes(nightSeconds)}, day {Minutes(total - nightSeconds)}, total {Minutes(total)}");
-                Finish();
+                string done = $"DONE: {day.LightmapCount} lightmaps per set, {day.ProbeCount} probes, shared layout={sameLayout}, night {Minutes(nightSeconds)}, day {Minutes(total - nightSeconds)}, total {Minutes(total)}";
+                Status(done);
+                Finish(true, done);
             }
         }
 
@@ -223,15 +249,18 @@ namespace OpenworldCrime.EditorTools
         private static void Abort(string why)
         {
             Status("FAILED: " + why);
-            Finish();
+            Finish(false, why);
         }
 
-        private static void Finish()
+        private static void Finish(bool success, string message)
         {
             EditorApplication.update -= Poll;
             Lightmapping.bakeCancelled -= OnBakeCancelled;
             bakeInFlight = false;
             step = Step.Idle;
+            System.Action<bool, string> completed = options.Completed;
+            options.Completed = null;
+            completed?.Invoke(success, message);
         }
 
         // ---------------------------------------------------------------------------------------------------------------
@@ -415,9 +444,9 @@ namespace OpenworldCrime.EditorTools
                 var light = go.AddComponent<Light>();
                 light.type = LightType.Point;
                 light.lightmapBakeType = LightmapBakeType.Baked;
-                light.range = LampRange;
-                light.intensity = LampIntensity;
-                light.color = LampColor;
+                light.range = options.LampRange;
+                light.intensity = options.LampIntensity;
+                light.color = options.LampColor;
                 light.bounceIntensity = 1f;
                 light.shadows = LightShadows.Soft;
                 light.shadowRadius = 0.3f;
@@ -436,7 +465,7 @@ namespace OpenworldCrime.EditorTools
                 light.type = LightType.Point;
                 light.lightmapBakeType = LightmapBakeType.Baked;
                 light.range = ShopLightRange;
-                light.intensity = ShopLightIntensity;
+                light.intensity = options.ShopLightIntensity;
                 light.color = ShopLightColor;
                 light.shadows = LightShadows.Soft;
                 light.shadowRadius = 0.2f;
@@ -532,14 +561,16 @@ namespace OpenworldCrime.EditorTools
         // ---------------------------------------------------------------------------------------------------------------
         private static BakedLightingSet CaptureSet(string mode, bool copyLightmaps)
         {
-            EnsureFolder(SetsFolder);
+            string setsFolder = options.SetsFolder;
+            string nightMapsFolder = options.NightMapsFolder;
+            EnsureFolder(setsFolder);
             LightmapData[] maps = LightmapSettings.lightmaps;
             var color = new Texture2D[maps.Length];
             var direction = new Texture2D[0];
             if (copyLightmaps)
             {
-                if (AssetDatabase.IsValidFolder(NightMapsFolder)) AssetDatabase.DeleteAsset(NightMapsFolder);
-                EnsureFolder(NightMapsFolder);
+                if (AssetDatabase.IsValidFolder(nightMapsFolder)) AssetDatabase.DeleteAsset(nightMapsFolder);
+                EnsureFolder(nightMapsFolder);
             }
             // The packer can emit an atlas page no renderer uses (seen: an empty second 2048 page). A copy of it would cost a
             // full page of memory on device for nothing, so unused pages keep pointing at the scene's own texture.
@@ -570,7 +601,7 @@ namespace OpenworldCrime.EditorTools
                 System.Buffer.BlockCopy(System.BitConverter.GetBytes(sh[p][rgb, c]), 0, bytes, o, 4);
                 o += 4;
             }
-            string probePath = $"{SetsFolder}/{mode}_Probes.bytes";
+            string probePath = $"{setsFolder}/{mode}_Probes.bytes";
             File.WriteAllBytes(probePath, bytes);
             AssetDatabase.ImportAsset(probePath);
             var probeAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(probePath);
@@ -583,14 +614,14 @@ namespace OpenworldCrime.EditorTools
                 scaleOffset[i] = layoutRenderers[i] != null ? layoutRenderers[i].lightmapScaleOffset : Vector4.zero;
             }
 
-            string setPath = $"{SetsFolder}/{mode}.asset";
+            string setPath = $"{setsFolder}/{mode}.asset";
             var set = AssetDatabase.LoadAssetAtPath<BakedLightingSet>(setPath);
             if (set == null)
             {
                 set = ScriptableObject.CreateInstance<BakedLightingSet>();
                 AssetDatabase.CreateAsset(set, setPath);
             }
-            string info = $"{mode} bake {System.DateTime.Now:yyyy-MM-dd HH:mm}: {maps.Length} lightmaps, {sh.Length} probes, {layoutRenderers.Length} lightmapped renderers, {TexelsPerMetre} texels/m.";
+            string info = $"{mode} bake {System.DateTime.Now:yyyy-MM-dd HH:mm}: {maps.Length} lightmaps, {sh.Length} probes, {layoutRenderers.Length} lightmapped renderers, {Lightmapping.lightingSettings.lightmapResolution} texels/m.";
             set.EditorSet(color, direction, probeAsset, sh.Length, first, index, scaleOffset, info);
             EditorUtility.SetDirty(set);
             AssetDatabase.SaveAssets();
@@ -601,7 +632,7 @@ namespace OpenworldCrime.EditorTools
         {
             if (source == null) return null;
             string from = AssetDatabase.GetAssetPath(source);
-            string to = $"{NightMapsFolder}/{prefix}_{Path.GetFileName(from)}";
+            string to = $"{options.NightMapsFolder}/{prefix}_{Path.GetFileName(from)}";
             AssetDatabase.CopyAsset(from, to);
             return AssetDatabase.LoadAssetAtPath<Texture2D>(to);
         }

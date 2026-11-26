@@ -34,6 +34,8 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Raised once when a car blows up (any car). Used by the player's side to get out of it.</summary>
         public static event Action<VehicleHealth> OnAnyDestroyed;
+        /// <summary>Raised whenever any car takes damage (after its health dropped). Args: car, amount, who did it (may be null).</summary>
+        public static event Action<VehicleHealth, float, Transform> OnAnyDamaged;
         /// <summary>Raised when this car takes damage. Args: amount, who did it (may be null).</summary>
         public event Action<float, Transform> OnDamaged;
         /// <summary>Raised when the stage changes (never for the reset of a pooled car).</summary>
@@ -71,6 +73,7 @@ namespace OpenworldCrime.Vehicles
         private Coroutine burnRoutine;
         private Coroutine wreckRoutine;
         private float lastCrashTime = -100f;
+        private float nextDebrisTime;
         private bool darkened;
         private bool valid;
         private MaterialPropertyBlock block;
@@ -90,6 +93,7 @@ namespace OpenworldCrime.Vehicles
             VehicleEffectPool.Prewarm(settings.heavySmokeEffect, settings.prewarmCount);
             VehicleEffectPool.Prewarm(settings.fireEffect, settings.prewarmCount);
             VehicleEffectPool.Prewarm(settings.explosionEffect, settings.prewarmCount);
+            VehicleEffectPool.Prewarm(settings.hitDebrisEffect, settings.prewarmCount + 1);
         }
 
         // iTS re-enables pooled cars and the takeover manager re-enables pre-warmed ones: each use starts as a fresh car.
@@ -111,11 +115,13 @@ namespace OpenworldCrime.Vehicles
 
         private void OnCollisionEnter(Collision collision)
         {
-            if (!valid || IsDestroyed || ((1 << collision.gameObject.layer) & settings.crashLayers) == 0) return;
-            if (Time.time - lastCrashTime < settings.crashCooldown || collision.contactCount == 0) return;
+            if (!valid || IsDestroyed || collision.contactCount == 0 || ((1 << collision.gameObject.layer) & settings.crashLayers) == 0) return;
+            ContactPoint contact = collision.GetContact(0);
+            TryCrashDebris(collision, contact);
+            if (Time.time - lastCrashTime < settings.crashCooldown) return;
 
             // The speed lost along the contact normal: scraping along a wall or a kerb does not count.
-            float speed = Mathf.Abs(Vector3.Dot(collision.relativeVelocity, collision.GetContact(0).normal));
+            float speed = Mathf.Abs(Vector3.Dot(collision.relativeVelocity, contact.normal));
             if (speed < settings.crashMinimumSpeed) return;
             lastCrashTime = Time.time;
             LastDamageWasCrash = true;
@@ -135,6 +141,47 @@ namespace OpenworldCrime.Vehicles
             ApplyHealthDamage(amount, sender);
         }
 
+        /// <summary>
+        /// Bullet hit at a point: damage as <see cref="ApplyDamage(float, Transform)"/>, plus a small debris burst thrown back
+        /// against the shot (shotDirection = the way the bullet travelled).
+        /// </summary>
+        public void ApplyDamage(float amount, Transform sender, Vector3 hitPoint, Vector3 shotDirection)
+        {
+            ApplyDamage(amount, sender);
+            if (!valid || IsDestroyed || amount <= 0f) return;
+            Vector3 outward = shotDirection.sqrMagnitude > 0.0001f ? -shotDirection.normalized : hitPoint - transform.position;
+            SpawnDebris(hitPoint, outward, settings.debrisBulletStrength, settings.debrisBulletCooldown);
+        }
+
+        // Fires below the crash-damage threshold too: a 25 km/h bump into a pole already knocks off a few bits.
+        private void TryCrashDebris(Collision collision, ContactPoint contact)
+        {
+            if (settings.hitDebrisEffect == null || Time.time < nextDebrisTime) return;
+            float speed = VehicleCollisionAudio.GetImpactSpeed(collision, transform.up, 0.3f);
+            if (speed < settings.debrisMinImpactSpeed) return;
+            // Both cars of a car-to-car crash receive it: only one throws the burst.
+            Rigidbody otherBody = collision.rigidbody;
+            if (otherBody != null && otherBody.TryGetComponent(out VehicleHealth other) && other != this && other.isActiveAndEnabled
+                && other.valid && !other.IsDestroyed && other.GetInstanceID() < GetInstanceID()) return;
+            float strength = Mathf.InverseLerp(settings.debrisMinImpactSpeed, settings.debrisFullImpactSpeed, speed);
+            Vector3 outward = contact.normal;
+            if (Vector3.Dot(outward, contact.point - transform.position) < 0f) outward = -outward;
+            SpawnDebris(contact.point, outward, Mathf.Lerp(0.35f, 1f, strength), settings.debrisCrashCooldown);
+        }
+
+        private void SpawnDebris(Vector3 point, Vector3 outward, float strength, float cooldown)
+        {
+            if (settings.hitDebrisEffect == null || Time.time < nextDebrisTime || !isActiveAndEnabled) return;
+            PooledVehicleEffect effect = VehicleEffectPool.Spawn(settings.hitDebrisEffect, point, settings.maxDebrisEffects);
+            if (effect == null) return;
+            nextDebrisTime = Time.time + cooldown;
+            // Thrown out of the panel and a little upward.
+            Vector3 direction = outward.sqrMagnitude > 0.0001f ? outward.normalized + Vector3.up * 0.35f : Vector3.up;
+            effect.transform.rotation = Quaternion.LookRotation(direction);
+            if (effect.TryGetComponent(out VehicleHitDebrisBurst burst)) burst.Play(strength);
+            effect.ReleaseAfter(settings.debrisLifetime);
+        }
+
         private void RememberAttacker(Transform sender)
         {
             if (!valid || IsDestroyed || sender == null || sender == transform || sender.IsChildOf(transform)) return;
@@ -146,6 +193,7 @@ namespace OpenworldCrime.Vehicles
             if (!valid || IsDestroyed || amount <= 0f || Invulnerable) return;
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
             OnDamaged?.Invoke(amount, sender);
+            OnAnyDamaged?.Invoke(this, amount, sender);
             UpdateStage();
         }
 
@@ -413,6 +461,7 @@ namespace OpenworldCrime.Vehicles
             bool wasWrecked = Stage == VehicleDamageStage.Destroyed;
             Stage = VehicleDamageStage.Healthy;
             lastCrashTime = -100f;
+            nextDebrisTime = 0f;
             LastAttacker = null;
             SetBurningCounted(false);
             ReleaseEffect(ref smokeEffect);
@@ -438,6 +487,7 @@ namespace OpenworldCrime.Vehicles
         {
             burningCars = 0;
             OnAnyDestroyed = null;
+            OnAnyDamaged = null;
         }
     }
 }

@@ -162,6 +162,11 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Raised when a driver has been thrown out (the spawned character now lives on its own).</summary>
         public static event Action<EnemyDummy> OnDriverEjected;
+        /// <summary>
+        /// A living driver was pulled out and shoved to the ground by the player (a carjack; not a panicked bail-out, not a shot
+        /// driver). Args: the pedestrian, the car's position. He gets up a moment later (PedestrianDamage.OnRecovered).
+        /// </summary>
+        public static event Action<PedestrianDamage, Vector3> OnDriverThrownOut;
         /// <summary>Creates the real person of a roster driver (the pedestrian spawner, wired by the takeover manager).</summary>
         public static Func<GameObject, Vector3, Quaternion, PedestrianWalker> PersonFactory;
 
@@ -936,6 +941,7 @@ namespace OpenworldCrime.Vehicles
                         if (bones[i] != null && bones[i] != animator.transform) bones[i].SetPositionAndRotation(pose[i].position, pose[i].rotation);
                 }
                 ped.KnockDownBy(velocity, tumble, alreadyDown ? fallBackwardGroundTime : groundTime, car.position);
+                if (!ped.IsDead) OnDriverThrownOut?.Invoke(ped, car.position);
                 return;
             }
             if (npc is EnemyVehicleImpact impact) impact.Launch(velocity, tumble, alreadyDown ? fallBackwardGroundTime : groundTime, car);
@@ -943,6 +949,9 @@ namespace OpenworldCrime.Vehicles
             EnemyDummy dummy = npc.GetComponent<EnemyDummy>();
             if (dummy != null) OnDriverEjected?.Invoke(dummy);
         }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetThrownOutEvent() => OnDriverThrownOut = null;
 
         private static void ApplyOutfit(GameObject root, Material material)
         {

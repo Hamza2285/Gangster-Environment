@@ -67,6 +67,7 @@ namespace OpenworldCrime.Pedestrians
         private Coroutine corpseRoutine;
         private Coroutine staggerRoutine;
         private PedestrianBrawler brawler;
+        private PedestrianPhoneCall phoneCall; // added by WitnessCallManager when he is picked to phone the police
 
         private void Awake()
         {
@@ -133,8 +134,11 @@ namespace OpenworldCrime.Pedestrians
 
         private void HandleRecovered(Vector3 threat)
         {
-            // A fighter who is still fit gets back into the fight; everyone else runs.
+            // A fighter who is still fit gets back into the fight; a phoning witness calls; everyone else runs.
             if (brawler != null && brawler.TryResumeAfterGettingUp()) return;
+            // A carjack victim picked to phone the police calls first (he runs once the call is over).
+            if (phoneCall == null) TryGetComponent(out phoneCall);
+            if (phoneCall != null && phoneCall.TryStartAfterGettingUp(threat)) return;
             if (walker.Owner != null) walker.Owner.RecoverWalker(walker, threat);
         }
 
@@ -172,6 +176,7 @@ namespace OpenworldCrime.Pedestrians
         private void HandleDespawned()
         {
             if (brawler != null) brawler.ResetForReuse();
+            if (phoneCall != null) phoneCall.ResetForReuse();
             if (staggerRoutine != null)
             {
                 StopCoroutine(staggerRoutine);

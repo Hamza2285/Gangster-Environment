@@ -642,6 +642,7 @@ namespace OpenworldCrime.EditorTools
                 so.FindProperty("driverDoor").objectReferenceValue = door;
                 so.ApplyModifiedPropertiesWithoutUndo();
                 adapter.EditorSetHandlingProfile(LoadHandlingProfile(def.Class));
+                adapter.EditorSetEngineSound(CarPolishSetup.LoadEngineSound(def.Name)); // per-model engine character (Car Polish)
 
                 root.GetComponent<Rigidbody>().mass = def.Mass;
                 ApplyHandling(rcc, def, body);
@@ -789,6 +790,7 @@ namespace OpenworldCrime.EditorTools
                 so.ApplyModifiedPropertiesWithoutUndo();
 
                 SetupCulling(root, info);
+                CarPolishSetup.ApplyTrafficEngineLoop(root, def.Name); // same engine character as the drivable twin
                 PrefabUtility.SaveAsPrefabAsset(root, path);
                 return "traffic ok";
             }

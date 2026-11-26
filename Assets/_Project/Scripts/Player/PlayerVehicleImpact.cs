@@ -20,6 +20,8 @@ namespace OpenworldCrime.Player
         [SerializeField] private vThirdPersonController controller;
         [SerializeField] private vRagdoll ragdoll;
         [SerializeField] private PlayerManager playerManager;
+        [Tooltip("Optional: a car (e.g. one sinking next to him) does not hurt him in the water.")]
+        [SerializeField] private PlayerSwimController swimController;
 
         [Header("Impact Speeds (m/s)")]
         [Tooltip("Slower contacts are ignored (walking into a slow car).")]
@@ -77,6 +79,7 @@ namespace OpenworldCrime.Player
         {
             if (!valid || !isActiveAndEnabled || controller.isDead || Time.time - lastHitTime < hitCooldown) return;
             if (playerManager != null && playerManager.IsInVehicle) return;
+            if (swimController != null && swimController.IsSubmerged) return;
 
             // How fast the car itself drove into him: he is a light dynamic body the solver has already carried along, and him
             // walking / running into a parked or slow car (or the car rocking when he bumps it) must not count.

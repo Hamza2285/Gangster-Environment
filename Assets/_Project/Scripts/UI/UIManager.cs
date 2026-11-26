@@ -129,6 +129,7 @@ namespace OpenworldCrime.UI
             weaponController.OnAmmoChanged += HandleAmmoChanged;
             weaponController.OnSlotsChanged += HandleSlotsChanged;
             MoneyManager.OnMoneyChanged += HandleMoneyChanged;
+            OpenworldCrime.Pedestrians.WitnessCallManager.OnWitnessCalledPolice += HandleWitnessCalledPolice;
             WeaponShopController.OnShopOpenChanged += HandleShopOpenChanged;
             if (interactionController != null) interactionController.OnFocusChanged += HandleInteractFocusChanged;
 
@@ -159,6 +160,7 @@ namespace OpenworldCrime.UI
                 weaponController.OnSlotsChanged -= HandleSlotsChanged;
             }
             MoneyManager.OnMoneyChanged -= HandleMoneyChanged;
+            OpenworldCrime.Pedestrians.WitnessCallManager.OnWitnessCalledPolice -= HandleWitnessCalledPolice;
             WeaponShopController.OnShopOpenChanged -= HandleShopOpenChanged;
             if (interactionController != null) interactionController.OnFocusChanged -= HandleInteractFocusChanged;
             if (vehicleInteraction != null)
@@ -409,8 +411,20 @@ namespace OpenworldCrime.UI
             SetOnFootHudVisible(true);
         }
 
+        // A carjack victim got through to the police: the short message line.
+        private void HandleWitnessCalledPolice(Vector3 position, string message)
+        {
+            if (!string.IsNullOrEmpty(message)) ShowVehicleMessage(message);
+        }
+
         private void HandleVehicleExitBlocked(VehicleExitBlockReason reason)
         {
+            if (reason == VehicleExitBlockReason.Locked)
+            {
+                string message = PlayerVehicleInteraction.ExitLockMessage;
+                if (!string.IsNullOrEmpty(message)) ShowVehicleMessage(message);
+                return;
+            }
             ShowVehicleMessage(reason == VehicleExitBlockReason.VehicleMoving ? vehicleMovingMessage : exitBlockedMessage);
         }
 

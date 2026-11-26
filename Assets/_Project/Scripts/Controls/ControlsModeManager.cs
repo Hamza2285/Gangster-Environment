@@ -9,7 +9,8 @@ namespace OpenworldCrime.Controls
     /// <summary>
     /// Owner of the control scheme (lives under ///Manager///, one per scene, not a Singleton).
     /// - Mobile on: Invector reads the on-screen controls (vInput device = Mobile, its virtual input names), RCC uses its
-    ///   mobile controller, the on-foot buttons show while walking and the RCC mobile canvas + exit button while driving.
+    ///   mobile controller, the on-foot buttons show while walking and the RCC mobile canvas + exit button while driving (the exit
+    ///   button not while getting out is locked, see PlayerVehicleInteraction.SetExitLock).
     /// - Mobile off: keyboard / mouse only, no on-screen buttons.
     /// Invector's automatic device switching (vInput.OnGUI) is turned off so this checkbox is the only source of truth.
     /// Touch devices always start in mobile mode. Elsewhere toggle <see cref="useMobileControls"/> in the Inspector (also in play
@@ -71,6 +72,7 @@ namespace OpenworldCrime.Controls
         private void OnEnable()
         {
             if (playerManager != null) playerManager.OnStateChanged += HandlePlayerStateChanged;
+            PlayerVehicleInteraction.OnExitLockChanged += HandleExitLockChanged;
         }
 
         private void Start() => Apply();
@@ -78,6 +80,7 @@ namespace OpenworldCrime.Controls
         private void OnDisable()
         {
             if (playerManager != null) playerManager.OnStateChanged -= HandlePlayerStateChanged;
+            PlayerVehicleInteraction.OnExitLockChanged -= HandleExitLockChanged;
         }
 
 #if UNITY_EDITOR
@@ -199,11 +202,14 @@ namespace OpenworldCrime.Controls
 
         private void HandlePlayerStateChanged(PlayerState state) => RefreshLayout();
 
+        // The exit button goes while getting out is locked (e.g. the intro chase until the cops are lost).
+        private void HandleExitLockChanged(bool locked) => RefreshLayout();
+
         private void RefreshLayout()
         {
             bool inVehicle = playerManager != null && playerManager.IsInVehicle;
             if (onFootControls != null) onFootControls.SetActive(useMobileControls && !inVehicle);
-            if (vehicleControls != null) vehicleControls.SetActive(useMobileControls && inVehicle);
+            if (vehicleControls != null) vehicleControls.SetActive(useMobileControls && inVehicle && !PlayerVehicleInteraction.IsExitLocked);
             if (rccCanvas != null) rccCanvas.SetActive(useMobileControls && inVehicle);
             for (int i = 0; i < keyboardOnlyObjects.Length; i++)
                 if (keyboardOnlyObjects[i] != null) SetHudVisible(keyboardOnlyObjects[i], !useMobileControls && keyboardOnlyStartStates[i]);

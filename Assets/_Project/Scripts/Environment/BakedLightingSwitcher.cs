@@ -81,7 +81,8 @@ namespace OpenworldCrime.Environment
 
         private void Awake()
         {
-            valid = Validate();
+            // Switched off by the realtime lighting (its sets are unassigned then, on purpose).
+            if (enabled) valid = Validate();
         }
 
         private void OnEnable()

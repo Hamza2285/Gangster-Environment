@@ -39,6 +39,8 @@ namespace OpenworldCrime.Police
         public Transform Victim;
         /// <summary>The victim is the police (an officer or a police car): the crime is always witnessed.</summary>
         public bool AgainstPolice;
+        /// <summary>A witness phoned it in (e.g. a carjacked driver): the police know at once, no unit has to see it.</summary>
+        public bool PhonedIn;
 
         public CrimeReport(CrimeType type, Vector3 position, Transform victim, bool againstPolice)
         {
@@ -46,6 +48,7 @@ namespace OpenworldCrime.Police
             Position = position;
             Victim = victim;
             AgainstPolice = againstPolice;
+            PhonedIn = false;
         }
     }
 

@@ -22,6 +22,8 @@ namespace OpenworldCrime.Player
         [Header("Player Components")]
         [SerializeField] private PlayerHealth playerHealth;
         [SerializeField] private PlayerCombatController combatController;
+        [Tooltip("Optional: reports the Swim state.")]
+        [SerializeField] private PlayerSwimController swimController;
 
         [Header("State Evaluation")]
         [Tooltip("Invector input magnitude above which the player counts as moving.")]
@@ -160,6 +162,7 @@ namespace OpenworldCrime.Player
         {
             if (controller.isDead) return PlayerState.Dead;
             if (IsInVehicle) return PlayerState.InVehicle;
+            if (swimController != null && swimController.IsSwimming) return PlayerState.Swim;
             if (hitTimer > 0f) return PlayerState.Hit;
             if (combatController.IsReloading) return PlayerState.Reload;
             if (shootTimer > 0f) return PlayerState.Shoot;

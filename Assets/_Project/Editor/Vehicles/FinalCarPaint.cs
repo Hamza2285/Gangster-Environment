@@ -32,35 +32,36 @@ namespace OpenworldCrime.EditorTools
 
         // Gamma-space colours (the project is in Gamma). Dark and neutral ones dominate, as on real streets. The darkest ones are
         // kept just off pure black so a dark car still shows its body shape under street lights instead of reading as a hole.
-        private static readonly Color Black = new Color(0.075f, 0.075f, 0.085f);
-        private static readonly Color White = new Color(0.86f, 0.87f, 0.87f);
-        private static readonly Color Silver = new Color(0.66f, 0.67f, 0.69f);
-        private static readonly Color Gunmetal = new Color(0.32f, 0.33f, 0.35f);
-        private static readonly Color MidnightBlue = new Color(0.08f, 0.14f, 0.33f);
-        private static readonly Color DeepRed = new Color(0.58f, 0.05f, 0.06f);
-        private static readonly Color RaceRed = new Color(0.78f, 0.06f, 0.05f);
-        private static readonly Color Yellow = new Color(0.95f, 0.72f, 0.06f);
-        private static readonly Color ElectricBlue = new Color(0.08f, 0.30f, 0.75f);
-        private static readonly Color BritishGreen = new Color(0.07f, 0.28f, 0.15f);
-        private static readonly Color Orange = new Color(0.95f, 0.38f, 0.05f);
+        // Car Polish: the coloured ones are richer (more saturated, cleaner hues); neutrals slightly cleaner and brighter.
+        private static readonly Color Black = new Color(0.07f, 0.072f, 0.085f);
+        private static readonly Color White = new Color(0.9f, 0.91f, 0.92f);
+        private static readonly Color Silver = new Color(0.7f, 0.71f, 0.74f);
+        private static readonly Color Gunmetal = new Color(0.3f, 0.32f, 0.36f);
+        private static readonly Color NightBlue = new Color(0.05f, 0.12f, 0.4f);
+        private static readonly Color DeepRed = new Color(0.62f, 0.03f, 0.06f);
+        private static readonly Color RaceRed = new Color(0.88f, 0.04f, 0.04f);
+        private static readonly Color Yellow = new Color(1f, 0.76f, 0.02f);
+        private static readonly Color ElectricBlue = new Color(0.03f, 0.3f, 0.9f);
+        private static readonly Color BritishGreen = new Color(0.03f, 0.32f, 0.15f);
+        private static readonly Color Orange = new Color(1f, 0.4f, 0.02f);
 
-        private static readonly Color Charcoal = new Color(0.18f, 0.18f, 0.2f);
-        private static readonly Color PearlWhite = new Color(0.93f, 0.92f, 0.88f);
-        private static readonly Color Champagne = new Color(0.72f, 0.63f, 0.46f);
-        private static readonly Color Burgundy = new Color(0.33f, 0.04f, 0.09f);
-        private static readonly Color Teal = new Color(0.03f, 0.42f, 0.44f);
-        private static readonly Color MetallicPurple = new Color(0.32f, 0.12f, 0.46f);
-        private static readonly Color Bronze = new Color(0.5f, 0.3f, 0.14f);
-        private static readonly Color SkyBlue = new Color(0.36f, 0.6f, 0.82f);
-        private static readonly Color OliveGreen = new Color(0.3f, 0.33f, 0.16f);
-        private static readonly Color Sand = new Color(0.78f, 0.7f, 0.55f);
+        private static readonly Color Charcoal = new Color(0.17f, 0.17f, 0.2f);
+        private static readonly Color PearlWhite = new Color(0.95f, 0.93f, 0.88f);
+        private static readonly Color Champagne = new Color(0.78f, 0.65f, 0.42f);
+        private static readonly Color Burgundy = new Color(0.4f, 0.02f, 0.09f);
+        private static readonly Color Teal = new Color(0f, 0.5f, 0.52f);
+        private static readonly Color MetallicPurple = new Color(0.38f, 0.07f, 0.6f);
+        private static readonly Color Bronze = new Color(0.58f, 0.3f, 0.09f);
+        private static readonly Color SkyBlue = new Color(0.26f, 0.6f, 0.95f);
+        private static readonly Color OliveGreen = new Color(0.3f, 0.36f, 0.12f);
+        private static readonly Color Sand = new Color(0.82f, 0.71f, 0.5f);
 
         // The traffic palette: every model gets every colour except its own (variant 0) group, so streets show a wide spread.
         // How often each one appears is VehiclePaintSettings' weights (written by ApplyAll from PaletteWeights).
         private static readonly (string name, Color color)[] Palette =
         {
             ("Black", Black), ("White", White), ("PearlWhite", PearlWhite), ("Silver", Silver), ("Gunmetal", Gunmetal),
-            ("Charcoal", Charcoal), ("MidnightBlue", MidnightBlue), ("ElectricBlue", ElectricBlue), ("SkyBlue", SkyBlue),
+            ("Charcoal", Charcoal), ("NightBlue", NightBlue), ("ElectricBlue", ElectricBlue), ("SkyBlue", SkyBlue),
             ("Teal", Teal), ("DeepRed", DeepRed), ("RaceRed", RaceRed), ("Burgundy", Burgundy), ("BritishGreen", BritishGreen),
             ("OliveGreen", OliveGreen), ("Yellow", Yellow), ("Orange", Orange), ("Bronze", Bronze), ("Champagne", Champagne),
             ("Sand", Sand), ("MetallicPurple", MetallicPurple),
@@ -70,7 +71,7 @@ namespace OpenworldCrime.EditorTools
         private static readonly (string colour, float weight)[] PaletteWeights =
         {
             ("Black", 11f), ("White", 10f), ("PearlWhite", 6f), ("Silver", 10f), ("Gunmetal", 7f), ("Charcoal", 5f),
-            ("MidnightBlue", 6f), ("ElectricBlue", 4f), ("SkyBlue", 3f), ("Teal", 4f), ("DeepRed", 5f), ("RaceRed", 4f),
+            ("NightBlue", 6f), ("ElectricBlue", 4f), ("SkyBlue", 3f), ("Teal", 4f), ("DeepRed", 5f), ("RaceRed", 4f),
             ("Burgundy", 4f), ("BritishGreen", 3f), ("OliveGreen", 2f), ("Yellow", 3f), ("Orange", 3f), ("Bronze", 3f),
             ("Champagne", 4f), ("Sand", 2f), ("MetallicPurple", 3f),
         };
@@ -92,6 +93,15 @@ namespace OpenworldCrime.EditorTools
                 }
                 return variants;
             }
+        }
+
+        /// <summary>Writes the palette weights into VehiclePaintSettings (also done by Apply Final Car Paint).</summary>
+        public static string WritePaletteWeights()
+        {
+            var sb = new StringBuilder();
+            WriteWeights(sb);
+            AssetDatabase.SaveAssets();
+            return "[FinalCarPaint]" + sb.ToString().TrimEnd();
         }
 
         private static void WriteWeights(StringBuilder sb)
@@ -120,7 +130,7 @@ namespace OpenworldCrime.EditorTools
             { "Audi SQ7", "ElectricBlue" },
             { "U Wagor", "Gunmetal" },
             { "Khodge 2", "RaceRed" },
-            { "Land Sover", "MidnightBlue" },
+            { "Land Sover", "NightBlue" },
             { "Talenter", "Orange" },
             { "WMB", "DeepRed" },
         };
@@ -179,6 +189,7 @@ namespace OpenworldCrime.EditorTools
             {
                 var material = AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(guid));
                 if (material == null || material == tuning || material.shader != shader) continue;
+                if (CarPaintPolish.IsProtected(material)) continue; // other people's local edits (e.g. the old *_MidnightBlue variants)
                 for (int i = 0; i < shader.GetPropertyCount(); i++)
                 {
                     UnityEngine.Rendering.ShaderPropertyType type = shader.GetPropertyType(i);

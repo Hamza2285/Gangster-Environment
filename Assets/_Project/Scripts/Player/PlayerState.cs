@@ -19,6 +19,8 @@ namespace OpenworldCrime.Player
         Hit,
         Dead,
         /// <summary>Getting in, driving or getting out of a vehicle (see PlayerVehicleInteraction).</summary>
-        InVehicle
+        InVehicle,
+        /// <summary>Swimming or climbing out of the water (see PlayerSwimController).</summary>
+        Swim
     }
 }

@@ -91,6 +91,70 @@ namespace OpenworldCrime.Vehicles
         [Tooltip("Handbrake torque on the rear wheels, as a multiple of the brake torque.")]
         [SerializeField, Range(0.5f, 4f)] private float handbrakeMultiplier = 1.5f;
 
+        [Header("Speed Steering & Drift (player's car, on top of RCC's Semi Arcade)")]
+        [Tooltip("Front wheel angle (deg) at and above Speed Steer Full At Kmh. Lower = calmer at high speed.")]
+        [SerializeField, Range(1f, 15f)] private float fastSteerLock = 4.5f;
+        [Tooltip("Speed (km/h) at which the steering has narrowed to Fast Steer Lock (most of it happens earlier).")]
+        [SerializeField, Range(60f, 300f)] private float speedSteerFullAtKmh = 150f;
+        [Tooltip("A hard turn starts to slide the rear from this speed (km/h)...")]
+        [SerializeField, Range(30f, 250f)] private float driftFromKmh = 65f;
+        [Tooltip("...and slides fully at this speed (km/h).")]
+        [SerializeField, Range(50f, 300f)] private float driftFullKmh = 120f;
+        [Tooltip("Steering input (0-1) beyond which a turn counts as hard.")]
+        [SerializeField, Range(0.1f, 0.95f)] private float driftSteerInput = 0.5f;
+        [Tooltip("Share of the rear grip left in a full high-speed slide. Lower = slides more.")]
+        [SerializeField, Range(0.1f, 1f)] private float turnRearGrip = 0.6f;
+        [Tooltip("Share of the rear grip left on the handbrake (RCC halves it again itself).")]
+        [SerializeField, Range(0.1f, 1f)] private float handbrakeRearGrip = 0.8f;
+        [Tooltip("The handbrake slides the car above this speed (km/h).")]
+        [SerializeField, Range(0f, 60f)] private float handbrakeSlideMinKmh = 12f;
+        [Tooltip("How fast (per s) grip is lost in a held hard turn (a quick tap does not slide), on the handbrake, and regained.")]
+        [SerializeField, Min(0.1f)] private float turnSlideRate = 2.2f;
+        [SerializeField, Min(0.1f)] private float handbrakeSlideRate = 10f;
+        [SerializeField, Min(0.1f)] private float slideRecoverRate = 1.8f;
+        [Tooltip("Share of RCC's steer helper left in a full slide (it pulls the movement back in line with the car).")]
+        [SerializeField, Range(0f, 1f)] private float steerHelperWhileSliding = 0.25f;
+        [Tooltip("Largest slide angle (deg): toward it grip comes back and opening yaw is capped.")]
+        [SerializeField, Range(10f, 90f)] private float maxSlideAngle = 42f;
+        [SerializeField, Min(0f)] private float spinDamping = 14f;
+        [Tooltip("Extra turn-in (rad/s2) on the handbrake while steering, up to the yaw rate (rad/s) below.")]
+        [SerializeField, Min(0f)] private float handbrakeYawKick = 2f;
+        [SerializeField, Min(0f)] private float handbrakeMaxYawRate = 1.9f;
+        [Tooltip("Yaw rate (rad/s) a high-speed slide may open at.")]
+        [SerializeField, Min(0.1f)] private float turnMaxYawRate = 1.1f;
+        [Tooltip("Lean (deg) allowed in a slide before the roll guard pushes back, and its strength (rad/s2 per degree).")]
+        [SerializeField, Range(2f, 40f)] private float freeRollAngle = 9f;
+        [SerializeField, Min(0f)] private float rollGuard = 1f;
+        [Tooltip("Counter-steering gets this share of the slide angle as extra steering lock.")]
+        [SerializeField, Range(0f, 1f)] private float counterSteerLockShare = 0.6f;
+
+        public float LowSpeedSteerAngle => lowSpeedSteerAngle;
+        public float DriftFromKmh => driftFromKmh;
+        public float DriftFullKmh => Mathf.Max(driftFullKmh, driftFromKmh + 1f);
+        public float DriftSteerInput => driftSteerInput;
+        public float TurnRearGrip => turnRearGrip;
+        public float HandbrakeRearGrip => handbrakeRearGrip;
+        public float HandbrakeSlideMinKmh => handbrakeSlideMinKmh;
+        public float TurnSlideRate => turnSlideRate;
+        public float HandbrakeSlideRate => handbrakeSlideRate;
+        public float SlideRecoverRate => slideRecoverRate;
+        public float SteerHelperWhileSliding => steerHelperWhileSliding;
+        public float MaxSlideAngle => maxSlideAngle;
+        public float SpinDamping => spinDamping;
+        public float HandbrakeYawKick => handbrakeYawKick;
+        public float HandbrakeMaxYawRate => handbrakeMaxYawRate;
+        public float TurnMaxYawRate => turnMaxYawRate;
+        public float FreeRollAngle => freeRollAngle;
+        public float RollGuard => rollGuard;
+        public float CounterSteerLockShare => counterSteerLockShare;
+
+        /// <summary>Steering lock (deg) at a speed: full in town, narrowing early, then levelling off at Fast Steer Lock.</summary>
+        public float SteerLockAt(float kmh)
+        {
+            float left = 1f - Mathf.Clamp01(kmh / Mathf.Max(1f, speedSteerFullAtKmh));
+            return Mathf.Lerp(Mathf.Min(fastSteerLock, lowSpeedSteerAngle), lowSpeedSteerAngle, left * left);
+        }
+
         // RCC spaces its shift speeds evenly up to the top speed while its gear ratios are not even: lower each gear's shift speed
         // to what the gear reaches at Upshift At Rev Share of the rev limit (never later than RCC's own value).
         private void MatchShiftSpeedsToGearing(RCC_CarControllerV3 car)

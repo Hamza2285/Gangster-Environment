@@ -27,7 +27,9 @@ namespace OpenworldCrime.Player
     public enum VehicleExitBlockReason
     {
         VehicleMoving,
-        NoClearExit
+        NoClearExit,
+        /// <summary>Getting out is not allowed right now (see <see cref="PlayerVehicleInteraction.SetExitLock"/>, e.g. a mission chase).</summary>
+        Locked
     }
 
     /// <summary>
@@ -353,6 +355,47 @@ namespace OpenworldCrime.Player
         public event Action<VehicleExitBlockReason> OnExitBlocked;
         public event Action<VehicleInteractionState> OnStateChanged;
 
+        /// <summary>Raised when getting out by the player's own input becomes locked (true) or allowed again (false).</summary>
+        public static event Action<bool> OnExitLockChanged;
+
+        // Who keeps the player in his vehicle right now, and the line to show him when he tries to get out (applies to whichever
+        // character is played). Only the player's own exit input is refused: forced exits (a wreck, a sinking car, an arrest,
+        // a mission reset) still work.
+        private static readonly Dictionary<object, string> exitLocks = new Dictionary<object, string>();
+
+        /// <summary>True while some system does not let the player get out of his vehicle by his own input.</summary>
+        public static bool IsExitLocked => exitLocks.Count > 0;
+
+        /// <summary>The message of a current exit lock (empty when none or when the lock gave no message).</summary>
+        public static string ExitLockMessage
+        {
+            get
+            {
+                foreach (var pair in exitLocks) if (!string.IsNullOrEmpty(pair.Value)) return pair.Value;
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Locks (or unlocks) getting out by the player's own input (keyboard key and the mobile exit button) for this owner.
+        /// The lock holds while any owner keeps one. Message: shown when he tries anyway (optional).
+        /// </summary>
+        public static void SetExitLock(object owner, bool locked, string message = null)
+        {
+            if (owner == null) return;
+            bool wasLocked = IsExitLocked;
+            if (locked) exitLocks[owner] = message ?? string.Empty;
+            else exitLocks.Remove(owner);
+            if (wasLocked != IsExitLocked) OnExitLockChanged?.Invoke(IsExitLocked);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetExitLocks()
+        {
+            exitLocks.Clear();
+            OnExitLockChanged = null;
+        }
+
         public VehicleInteractionState State { get; private set; } = VehicleInteractionState.OnFoot;
         private VehicleHealth ejectedFrom;
         public IVehicleController CurrentVehicle { get; private set; }
@@ -457,7 +500,7 @@ namespace OpenworldCrime.Player
                     if (enterExitInput.GetButtonDown()) CancelApproach();
                     break;
                 case VehicleInteractionState.InVehicle:
-                    if (enterExitInput.GetButtonDown()) RequestExit();
+                    if (enterExitInput.GetButtonDown()) HandleExitInput();
                     break;
             }
         }
@@ -2365,9 +2408,22 @@ namespace OpenworldCrime.Player
             return info.shortNameHash == stateHash ? info.normalizedTime : 1f;
         }
 
+        // The player asked to get out: refused while a menu or cutscene covers the game or a system holds an exit lock.
+        private void HandleExitInput()
+        {
+            if (GamePlayer.MenuOpen) return;
+            if (IsExitLocked)
+            {
+                OnExitBlocked?.Invoke(VehicleExitBlockReason.Locked);
+                return;
+            }
+            RequestExit();
+        }
+
         private bool CanActOnFoot()
         {
-            return !playerManager.IsInputLocked && playerManager.CurrentState != PlayerState.Dead;
+            // No getting into a vehicle from the water.
+            return !playerManager.IsInputLocked && playerManager.CurrentState != PlayerState.Dead && playerManager.CurrentState != PlayerState.Swim;
         }
 
         private void UpdateFocus()

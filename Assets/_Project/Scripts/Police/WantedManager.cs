@@ -200,7 +200,7 @@ namespace OpenworldCrime.Police
             if (!settings.TryGetRule(report.Type, out PoliceSettings.CrimeRule rule)) return;
             int stars = Stars > 0 ? Mathf.Max(Stars + rule.addStarsWhileWanted, rule.minStars) : rule.minStars;
             stars = Mathf.Clamp(Mathf.Max(stars, Stars), 1, MaxStars);
-            if (!report.AgainstPolice && !dispatcher.TryWitness(report, stars)) return;
+            if (!report.AgainstPolice && !report.PhonedIn && !dispatcher.TryWitness(report, stars)) return;
 
             Stars = stars;
             IsLethal |= rule.lethal || Stars >= settings.lethalFromStars;

@@ -17,6 +17,10 @@ namespace OpenworldCrime.Vehicles
     /// - clip mix: the on/off-throttle split is moved toward the throttle at a limited rate instead of jumping.
     /// The car's physics, gearbox and limiter are untouched. Only while the car is driven. Added at runtime by
     /// <see cref="RCCVehicleAdapter"/> to every drivable car.
+    /// Brake squeal: RCC loops a brake clip ("Brake Sound AudioSource": the prefab's brake override, else RCC_Settings' Brakes)
+    /// whenever the brake is pressed. Every one of those clips is a near-pure ~5 kHz tone (the "whistle"), so it is muted here
+    /// (AudioSource.mute; RCC only writes its volume). The tyre skid (RCC_WheelCollider, AsphaltSkid ~0.6 kHz, slip-driven) is a
+    /// different source and is kept.
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(1000)]
@@ -28,14 +32,17 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private Vector2 wheelRevsFromKmh = new Vector2(12f, 30f);
         [Tooltip("How fast (per s) the sound goes from the off-throttle to the on-throttle clip, and back.")]
         [SerializeField, Min(0.5f)] private float throttleRise = 5f, throttleFall = 3f;
+        [Tooltip("Silence RCC's brake squeal loop (the high whistle while braking). The tyre skid sound is not affected.")]
+        [SerializeField] private bool muteBrakeSqueal = true;
 
         private static readonly BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-        private static FieldInfo highField, lowField, highOffField, lowOffField, idleField;
+        private static FieldInfo highField, lowField, highOffField, lowOffField, idleField, brakeField;
 
         private RCC_CarControllerV3 car;
         private AudioSource high, low, highOff, lowOff, idle;
         private float pitch = -1f, throttle;
-        private float nextLookup;
+        private float nextLookup, nextBrakeLookup;
+        private bool brakeMuted;
 
         /// <summary>Pitch written now (debug / tests).</summary>
         public float SmoothedPitch => pitch;
@@ -54,11 +61,14 @@ namespace OpenworldCrime.Vehicles
                 highOffField = t.GetField("engineSoundHighOff", Flags);
                 lowOffField = t.GetField("engineSoundLowOff", Flags);
                 idleField = t.GetField("engineSoundIdle", Flags);
+                brakeField = t.GetField("brakeSound", Flags);
             }
+            brakeMuted = !muteBrakeSqueal || brakeField == null;
         }
 
         private void LateUpdate()
         {
+            if (!brakeMuted) MuteBrakeSqueal();
             if (!car.canControl || !car.engineRunning) { pitch = -1f; return; }
             if (high == null)
             {
@@ -114,6 +124,17 @@ namespace OpenworldCrime.Vehicles
             on.volume = level * throttle;
             off.volume = level * (1f - throttle);
             off.pitch = pitch;
+        }
+
+        // RCC creates the source in its Awake; looked up at a low rate until found, then never again.
+        private void MuteBrakeSqueal()
+        {
+            if (Time.unscaledTime < nextBrakeLookup) return;
+            nextBrakeLookup = Time.unscaledTime + 0.5f;
+            AudioSource brake = Get(brakeField);
+            if (brake == null) return;
+            brake.mute = true;
+            brakeMuted = true;
         }
 
         private AudioSource Get(FieldInfo f) => f != null ? f.GetValue(car) as AudioSource : null;

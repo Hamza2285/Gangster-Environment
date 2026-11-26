@@ -26,7 +26,14 @@ namespace OpenworldCrime.Vehicles
         [SerializeField] private bool engineOffWhenParked = true;
         [Tooltip("Shared driving feel (steering, grip, assists, suspension) applied when the car is created. Empty = the RCC values on this prefab.")]
         [SerializeField] private VehicleHandlingProfile handlingProfile;
+        [Tooltip("Engine character of this model (RCC clips, pitch and volume range), applied when the car is created. Empty = the RCC values on this prefab.")]
+        [SerializeField] private VehicleEngineSound engineSound;
         [SerializeField] private AudioClip hornClip;
+
+        [Header("Exhaust Flames")]
+        [Tooltip("Backfire flames and their pop sound (RCC exhaust flame) only on cars whose RCC top speed (km/h) is at least this. " +
+                 "Slower cars never backfire. 0 = every car keeps its prefab setting.")]
+        [SerializeField, Min(0f)] private float exhaustFlameMinTopSpeed = 260f;
 
         [Header("Seat & Door Points")]
         [Tooltip("Character root anchor while seated (root of the seated pose, not the hips).")]
@@ -132,6 +139,9 @@ namespace OpenworldCrime.Vehicles
             if (body != null) body.maxDepenetrationVelocity = maxDepenetrationSpeed;
             AddContactHelpers();
             if (handlingProfile != null) handlingProfile.ApplyTo(carController, body);
+            // Before RCC's Awake, which creates the engine AudioSources from these clips.
+            if (engineSound != null) engineSound.ApplyTo(carController);
+            ApplyExhaustFlameRule();
             if (driverDummy != null) driverDummy.SetActive(false);
             if (rccCamera != null) rccCamera.gameObject.SetActive(false);
             // Parked until a driver takes control (RCC reads player input while canControl is set).
@@ -337,11 +347,33 @@ namespace OpenworldCrime.Vehicles
 
         /// <summary>Driving feel applied to this car when it was created (null = prefab values).</summary>
         public VehicleHandlingProfile HandlingProfile => handlingProfile;
+        /// <summary>Engine sound applied to this car when it was created (null = prefab values).</summary>
+        public VehicleEngineSound EngineSound => engineSound;
 
 #if UNITY_EDITOR
         /// <summary>Editor only: lets the builder assign the handling profile.</summary>
         public void EditorSetHandlingProfile(VehicleHandlingProfile profile) => handlingProfile = profile;
+        /// <summary>Editor only: lets the builder / Car Polish tool assign the engine sound.</summary>
+        public void EditorSetEngineSound(VehicleEngineSound sound) => engineSound = sound;
 #endif
+
+        // RCC pops the exhaust (flame particles, flame light, ExhaustFire clip) whenever useExhaustFlame is set and the revs drop
+        // through 5000-5500 off throttle; with NOS off on every car nothing else lights it. Only the very fast cars keep it. The
+        // flame lights of the others are switched off so they never take an additional-light slot.
+        private void ApplyExhaustFlameRule()
+        {
+            if (exhaustFlameMinTopSpeed <= 0f) return;
+            bool flames = carController.maxspeed >= exhaustFlameMinTopSpeed;
+            carController.useExhaustFlame = flames;
+            if (flames) return;
+            RCC_Exhaust[] exhausts = GetComponentsInChildren<RCC_Exhaust>(true);
+            for (int i = 0; i < exhausts.Length; i++)
+            {
+                if (exhausts[i].flame == null) continue;
+                Light flameLight = exhausts[i].flame.GetComponentInChildren<Light>(true);
+                if (flameLight != null) flameLight.enabled = false;
+            }
+        }
 
         /// <summary>Assigns the scene RCC camera to a vehicle spawned at runtime (prefabs cannot reference scene objects).</summary>
         public void SetVehicleCamera(RCC_Camera vehicleCamera)
@@ -473,6 +505,7 @@ namespace OpenworldCrime.Vehicles
             if (GetComponent<VehicleHumanContactFx>() == null) gameObject.AddComponent<VehicleHumanContactFx>();
             if (GetComponent<VehicleEngineAudioSmoother>() == null) gameObject.AddComponent<VehicleEngineAudioSmoother>(); // no engine-sound flutter at speed
             if (GetComponent<VehicleShiftAssist>() == null) gameObject.AddComponent<VehicleShiftAssist>(); // upshift before the rev limiter
+            if (GetComponent<VehicleDriftAssist>() == null && GetComponent<BikeHandlingAssist>() == null) gameObject.AddComponent<VehicleDriftAssist>(); // calmer steering at speed, slides (cars only)
             if (GetComponent<UnityEngine.AI.NavMeshObstacle>() == null)
                 VehicleNavMeshObstacle.Configure(gameObject.AddComponent<UnityEngine.AI.NavMeshObstacle>(), gameObject);
         }
