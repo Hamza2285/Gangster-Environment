@@ -28,6 +28,8 @@ namespace OpenworldCrime.Player
         [SerializeField] private PlayerVehicleInteraction vehicleInteraction;
         [Tooltip("Landing in water is a splash, not a fall (optional).")]
         [SerializeField] private PlayerSwimController swimController;
+        [Tooltip("An open parachute caught the fall: no landing damage from here (optional).")]
+        [SerializeField] private PlayerParachute parachute;
 
         [Header("Layers")]
         [Tooltip("Vehicle colliders (standing on them arms the roof fall; landing back on one is no fall).")]
@@ -72,11 +74,13 @@ namespace OpenworldCrime.Player
             animator = GetComponent<Animator>();
             vehicleInteraction = GetComponent<PlayerVehicleInteraction>();
             swimController = GetComponent<PlayerSwimController>();
+            parachute = GetComponent<PlayerParachute>();
         }
 
         private void Awake()
         {
             if (controller == null || body == null || animator == null) Reset();
+            if (parachute == null) parachute = GetComponent<PlayerParachute>();
             if (controller == null || body == null || animator == null)
             {
                 Debug.LogError($"[{nameof(PlayerVehicleFallDamage)}] Missing Invector controller / Rigidbody / Animator on '{name}'.", this);
@@ -101,6 +105,8 @@ namespace OpenworldCrime.Player
 
         private void HandleBailStarted(OpenworldCrime.Vehicles.IVehicleController vehicle)
         {
+            // Jumping out of a helicopter in the air: PlayerFreeFall judges that landing (parachute or ragdoll), not this.
+            if (vehicle is OpenworldCrime.Vehicles.IVehicleExitRule rule && rule.AllowsAirJump) return;
             float speed = vehicle != null && (vehicle as Object) != null ? vehicle.CurrentSpeed : 0f;
             Arm(Mode.Bail, speed);
         }
@@ -120,6 +126,8 @@ namespace OpenworldCrime.Player
             if (controller.isDead) { mode = Mode.None; onVehicle = false; return; }
             // Came down in the water: the swim controller splashes instead, no ground damage.
             if (swimController != null && swimController.IsSubmerged) { mode = Mode.None; onVehicle = false; return; }
+            // Under an open canopy (e.g. after jumping out of a plane): the parachute caught the fall.
+            if (parachute != null && parachute.State == ParachuteState.Gliding) { mode = Mode.None; onVehicle = false; return; }
             switch (mode)
             {
                 case Mode.None: WatchRoof(); return;
@@ -134,7 +142,7 @@ namespace OpenworldCrime.Player
             if (vehicleInteraction != null && vehicleInteraction.State != VehicleInteractionState.OnFoot) { onVehicle = false; return; }
             if (controller.isGrounded && !controller.ragdolled)
             {
-                onVehicle = IsVehicle(controller.groundHit.collider);
+                onVehicle = IsVehicle(controller.groundHit.collider) && !IsFlying(controller.groundHit.collider);
                 if (onVehicle) vehicleSurfaceY = controller.groundHit.point.y;
                 return;
             }
@@ -223,6 +231,13 @@ namespace OpenworldCrime.Player
             });
             controller.noDamageWhileRolling = rollImmunity;
             OnLanded?.Invoke(damage, impactSpeed);
+        }
+
+        // An aircraft in the air (brushing the plane / helicopter while jumping out of it is no roof to fall from).
+        private static bool IsFlying(Collider c)
+        {
+            Rigidbody owner = c != null ? c.attachedRigidbody : null;
+            return owner != null && owner.TryGetComponent(out OpenworldCrime.Vehicles.IFlyingVehicle flying) && !flying.IsGrounded;
         }
 
         private bool IsVehicle(Collider c)

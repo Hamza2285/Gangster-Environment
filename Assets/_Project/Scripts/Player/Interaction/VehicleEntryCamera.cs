@@ -141,6 +141,8 @@ namespace OpenworldCrime.Player
         private void HandleEntered(IVehicleController vehicle)
         {
             EndBlend();
+            // Door vehicles (helicopter) cut to their own boarding view and glide from there: no blend from the player camera.
+            if (VehicleBoarding.TryGet(vehicle, out _)) return;
             Camera vehicleCamera = vehicle != null ? vehicle.GetActiveCamera() : null;
             if (vehicleCamera == null || playerCamera == null || vehicleBlendDuration <= 0f) return;
             blendCamera = vehicleCamera;

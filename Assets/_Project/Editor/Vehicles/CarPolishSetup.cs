@@ -66,29 +66,31 @@ namespace OpenworldCrime.EditorTools
 
         // Per model (drivable prefab name without "Drivable_"): heavier SUVs low and deep, sports cars higher and raspier, every
         // model its own clip set or pitch range. RCC's bundled engine recordings only (Sounds/Engine).
+        // Pitch at the rev limit stays natural (<= 1.6 for cars, lower for big ones): the "High" recordings are already high-rev,
+        // pitching them further made them shrill. Variety comes from the clip set and the idle pitch. Volumes ~30% under RCC's.
         private static readonly Dictionary<string, EngineDef> Engines = new Dictionary<string, EngineDef>
         {
             // Sports / super
-            { "Car1",      Set("Sport/Sport1_Low", "Sport/Sport1_High", "Sport/Sport1_Low_Off", "Sport/Sport1_High_Off", "Sport/Sport1_Idle", 0.8f, 1.85f, 0.85f) },
-            { "NewCar1",   Set("Sport/Sport1_Low", "Sport/Sport1_Med", "Sport/Sport1_Low_Off", "Sport/Sport1_Med_Off", "Sport/Sport1_Idle", 0.76f, 1.72f, 0.85f) },
-            { "Car3",      Set("Sport/Sport2_Low", "Sport/Sport2_High", "Sport/Sport2_Low_Off", "Sport/Sport2_High_Off", "Sport/Sport2_Idle", 0.86f, 1.95f, 0.88f) },
-            { "Khodge2",   Set("Fast_Low", "Fast_High", null, null, "Fast_Idle", 0.8f, 1.85f, 0.85f) },
+            { "Car1",      Set("Sport/Sport1_Low", "Sport/Sport1_High", "Sport/Sport1_Low_Off", "Sport/Sport1_High_Off", "Sport/Sport1_Idle", 0.78f, 1.5f, 0.6f) },
+            { "NewCar1",   Set("Sport/Sport1_Low", "Sport/Sport1_Med", "Sport/Sport1_Low_Off", "Sport/Sport1_Med_Off", "Sport/Sport1_Idle", 0.76f, 1.55f, 0.6f) },
+            { "Car3",      Set("Sport/Sport2_Low", "Sport/Sport2_Med", "Sport/Sport2_Low_Off", "Sport/Sport2_Med_Off", "Sport/Sport2_Idle", 0.8f, 1.6f, 0.62f) },
+            { "Khodge2",   Set("Fast_Low", "Fast_High", null, null, "Fast_Idle", 0.78f, 1.5f, 0.6f) },
             // Muscle
-            { "Car2",      Set("Muscle/Muscle_Low", "Muscle/Muscle_High", "Muscle/Muscle_Off", "Muscle/Muscle_Off", "Muscle/Muscle_Idle", 0.7f, 1.6f, 0.9f) },
-            { "NewCar3",   Set("Muscle/Muscle_Low", "Muscle/Muscle_High", "Muscle/Muscle_Off", "Muscle/Muscle_Off", "Muscle/Muscle_Idle", 0.64f, 1.5f, 0.9f) },
+            { "Car2",      Set("Muscle/Muscle_Low", "Muscle/Muscle_High", "Muscle/Muscle_Off", "Muscle/Muscle_Off", "Muscle/Muscle_Idle", 0.68f, 1.4f, 0.63f) },
+            { "NewCar3",   Set("Muscle/Muscle_Low", "Muscle/Muscle_High", "Muscle/Muscle_Off", "Muscle/Muscle_Off", "Muscle/Muscle_Idle", 0.64f, 1.32f, 0.63f) },
             // Sedans
-            { "Car4",      Set("E36_Low", "E36_Med", "E36_Low_Off", "E36_Med_Off", "E36_Idle", 0.75f, 1.65f, 0.82f) },
-            { "WMB",       Set("E36_Low", "E36_High", "E36_Low_Off", "E36_High_Off", "E36_Idle", 0.8f, 1.75f, 0.82f) },
-            { "Talenter",  Set("Generic/Generic_Low", "Generic/Generic_Med", "Generic/Generic_Low_Off", "Generic/Generic_Med_Off", "Generic/Generic_Idle", 0.75f, 1.65f, 0.82f) },
-            { "Taxi",      Set("Saloon/Saloon_Low", "Saloon/Saloon_High", null, null, "Saloon/Saloon_Idle", 0.72f, 1.58f, 0.8f) },
+            { "Car4",      Set("E36_Low", "E36_Med", "E36_Low_Off", "E36_Med_Off", "E36_Idle", 0.74f, 1.48f, 0.57f) },
+            { "WMB",       Set("E36_Low", "E36_High", "E36_Low_Off", "E36_High_Off", "E36_Idle", 0.76f, 1.42f, 0.57f) },
+            { "Talenter",  Set("Generic/Generic_Low", "Generic/Generic_Med", "Generic/Generic_Low_Off", "Generic/Generic_Med_Off", "Generic/Generic_Idle", 0.74f, 1.45f, 0.57f) },
+            { "Taxi",      Set("Saloon/Saloon_Low", "Saloon/Saloon_High", null, null, "Saloon/Saloon_Idle", 0.72f, 1.4f, 0.56f) },
             // SUVs
-            { "Car5",      Set("Generic/Generic_Low", "Generic/Generic_High", "Generic/Generic_Low_Off", "Generic/Generic_High_Off", "Generic/Generic_Idle", 0.66f, 1.48f, 0.9f) },
-            { "GWagon",    Set("SUV_Low_On", "SUV_Med_On", "SUV_Low_Off", "SUV_Med_Off", "SUV_Idle", 0.62f, 1.4f, 0.95f) },
-            { "LandSover", Set("SUV_Low_On", "SUV_High_On", "SUV_Low_Off", "SUV_High_Off", "SUV_Idle", 0.66f, 1.46f, 0.92f) },
-            { "Ambulance", Set("Bus/Bus_Low", "Bus/Bus_High", null, null, "Bus/Bus_Idle", 0.72f, 1.5f, 0.85f) },
+            { "Car5",      Set("Generic/Generic_Low", "Generic/Generic_High", "Generic/Generic_Low_Off", "Generic/Generic_High_Off", "Generic/Generic_Idle", 0.66f, 1.3f, 0.63f) },
+            { "GWagon",    Set("SUV_Low_On", "SUV_Med_On", "SUV_Low_Off", "SUV_Med_Off", "SUV_Idle", 0.62f, 1.25f, 0.66f) },
+            { "LandSover", Set("SUV_Low_On", "SUV_High_On", "SUV_Low_Off", "SUV_High_Off", "SUV_Idle", 0.64f, 1.28f, 0.64f) },
+            { "Ambulance", Set("Bus/Bus_Low", "Bus/Bus_High", null, null, "Bus/Bus_Idle", 0.7f, 1.3f, 0.6f) },
             // Bikes keep their chopper recordings, pitched apart.
-            { "Bike_Chopper", PitchOnly(0.68f, 1.55f, 0.85f) },
-            { "Bike_Sport",   PitchOnly(0.88f, 2f, 0.82f) },
+            { "Bike_Chopper", PitchOnly(0.68f, 1.4f, 0.6f) },
+            { "Bike_Sport",   PitchOnly(0.85f, 1.7f, 0.58f) },
         };
 
         [MenuItem(Menu + "Apply Engine Sounds")]
@@ -138,6 +140,9 @@ namespace OpenworldCrime.EditorTools
             return sb.ToString();
         }
 
+        /// <summary>Traffic cars' engine loop volume (was 0.74, ~30% down to sit under the player's car).</summary>
+        public const float TrafficEngineVolume = 0.52f;
+
         /// <summary>The model's engine sound asset (null when the model has none).</summary>
         public static VehicleEngineSound LoadEngineSound(string model) =>
             AssetDatabase.LoadAssetAtPath<VehicleEngineSound>($"{EngineSoundFolder}/EngineSound_{model}.asset");
@@ -149,6 +154,7 @@ namespace OpenworldCrime.EditorTools
             var source = trafficRoot != null ? trafficRoot.GetComponent<AudioSource>() : null;
             if (sound == null || sound.trafficLoop == null || source == null) return false;
             source.clip = sound.trafficLoop;
+            source.volume = TrafficEngineVolume;
             return true;
         }
 

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Invector;
+using OpenworldCrime.Player;
 using OpenworldCrime.Vehicles;
 using UnityEngine;
 
@@ -13,6 +14,8 @@ namespace OpenworldCrime.Combat
     /// - The playable characters: hurt by a car, thrown off a bike / out through the windscreen, a bail-out, an explosion or a heavy
     ///   fall (their Invector health's damage event, by damage type and amount), and death.
     /// - Anybody a vehicle hits hard (<see cref="VehicleCharacterImpact.OnCharacterHit"/>): pedestrians, officers, the player.
+    /// - A hard landing from a fall (<see cref="PlayerFreeFall.OnHardLanding"/>): a bigger burst (several splashes fanned out
+    ///   over the ground, scaled by how hard) with a wet impact sound, and a splatter on the ground that spreads.
     /// Splashes and marks are pooled (created once at start); only the few marks currently fading are touched per frame.
     /// </summary>
     [DisallowMultipleComponent]
@@ -34,8 +37,17 @@ namespace OpenworldCrime.Combat
         [Tooltip("A vehicle hit on anybody bleeds from this impact speed (m/s).")]
         [SerializeField, Min(0f)] private float minVehicleHitSpeed = 6f;
 
+        [Header("Hard Landing (falls)")]
+        [Tooltip("Splashes fanned out at a hard landing: at the least and at a lethal landing.")]
+        [SerializeField] private Vector2Int landingSplashes = new Vector2Int(2, 4);
+        [Tooltip("Ground splatter size (m) at the least and at a lethal landing (spreads out like a death pool).")]
+        [SerializeField] private Vector2 landingMarkSize = new Vector2(2.2f, 3.8f);
+        [Tooltip("Wet impact sounds, one picked at random (optional).")]
+        [SerializeField] private AudioClip[] landingClips = new AudioClip[0];
+        [SerializeField, Range(0f, 1f)] private float landingVolume = 0.9f;
+
         [Header("Marks On The Ground")]
-        [SerializeField, Min(1)] private int splashPoolSize = 6;
+        [SerializeField, Min(1)] private int splashPoolSize = 8;
         [SerializeField, Min(1)] private int markPoolSize = 16;
         [Tooltip("Mark size (m), random between the two, for a hit / a fall.")]
         [SerializeField] private Vector2 markSize = new Vector2(0.7f, 1.2f);
@@ -47,6 +59,9 @@ namespace OpenworldCrime.Combat
         [SerializeField, Min(0.1f)] private float markFadeSeconds = 4f;
         [SerializeField] private Color markColor = new Color(0.32f, 0.02f, 0.02f, 0.9f);
         [SerializeField] private LayerMask groundLayers = 1;
+        [Tooltip("Height (m) of a mark above the ground collider: clears thin painted surfaces laid over it (airport apron, " +
+                 "road decals) without floating visibly.")]
+        [SerializeField, Range(0.005f, 0.15f)] private float markLift = 0.06f;
         [Tooltip("Seconds a falling body is given to come to rest before its mark is placed.")]
         [SerializeField, Min(0.1f)] private float maxSettleSeconds = 3f;
 
@@ -108,6 +123,7 @@ namespace OpenworldCrime.Combat
         private void OnEnable()
         {
             VehicleCharacterImpact.OnCharacterHit += HandleVehicleHit;
+            PlayerFreeFall.OnHardLanding += HandleHardLanding;
             damageHandlers.Clear();
             deathHandlers.Clear();
             for (int i = 0; i < players.Length; i++)
@@ -126,6 +142,7 @@ namespace OpenworldCrime.Combat
         private void OnDisable()
         {
             VehicleCharacterImpact.OnCharacterHit -= HandleVehicleHit;
+            PlayerFreeFall.OnHardLanding -= HandleHardLanding;
             for (int i = 0; i < players.Length && i < damageHandlers.Count; i++)
             {
                 if (players[i] == null || damageHandlers[i] == null) continue;
@@ -180,7 +197,7 @@ namespace OpenworldCrime.Combat
             Mark m = marks[nextMark];
             nextMark = (nextMark + 1) % marks.Count;
             m.Transform.gameObject.SetActive(true);
-            m.Transform.SetPositionAndRotation(hit.point + hit.normal * 0.02f,
+            m.Transform.SetPositionAndRotation(hit.point + hit.normal * markLift,
                 Quaternion.LookRotation(-hit.normal) * Quaternion.Euler(0f, 0f, Random.Range(0f, 360f)));
             m.Transform.localScale = Vector3.one * size;
             m.BornAt = Time.time;
@@ -215,6 +232,27 @@ namespace OpenworldCrime.Combat
             lastVehicleBlood = Time.time;
             Splash(impact.Point, impact.VehicleVelocity + Vector3.up * 2f);
             StartCoroutine(MarkLater(impact.Point + impact.VehicleVelocity * 0.15f, 1f, Random.Range(markSize.x, markSize.y)));
+        }
+
+        // Several pooled splashes fanned out low over the ground (the pool is sized for it), a wet thud, and a splatter mark
+        // right at the impact that spreads out.
+        private void HandleHardLanding(PlayerFreeFall faller, Vector3 point, float severity)
+        {
+            if (faller == null || !faller.gameObject.activeInHierarchy) return;
+            int count = Mathf.RoundToInt(Mathf.Lerp(landingSplashes.x, landingSplashes.y, severity));
+            float turn = Random.Range(0f, 360f);
+            for (int i = 0; i < count; i++)
+            {
+                float angle = turn + i * 360f / Mathf.Max(1, count);
+                Vector3 outward = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
+                Splash(point + outward * 0.15f, outward + Vector3.up * Random.Range(0.6f, 1.2f));
+            }
+            if (landingClips != null && landingClips.Length > 0)
+            {
+                AudioClip clip = landingClips[Random.Range(0, landingClips.Length)];
+                if (clip != null) AudioSource.PlayClipAtPoint(clip, point, landingVolume);
+            }
+            MarkGround(point, Mathf.Lerp(landingMarkSize.x, landingMarkSize.y, severity));
         }
 
         private IEnumerator MarkLater(Vector3 point, float delay, float size)

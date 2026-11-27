@@ -11,7 +11,8 @@ namespace OpenworldCrime.UI
     /// position plus a fixed offset, smoothed so it never jitters, pushed out of the HUD elements listed in Keep Clear Of (radio
     /// bar, minimap, health, money, on-screen controls) and clamped inside the safe area. Shown/hidden from the vehicle
     /// interaction's entered/exited events; LateUpdate only runs while shown. The number's text only changes when the whole
-    /// km/h value changes (cached strings, no per-frame allocation). A HUD widget script: it only drives its own elements.
+    /// km/h value changes (cached strings, no per-frame allocation). Not shown for aircraft (<see cref="IFlyingVehicle"/>).
+    /// A HUD widget script: it only drives its own elements.
     /// </summary>
     [DisallowMultipleComponent]
     public class VehicleSpeedReadout : MonoBehaviour
@@ -103,6 +104,8 @@ namespace OpenworldCrime.UI
 
         private void Show(IVehicleController driven)
         {
+            // Helicopter / plane: the flight instruments show speed and altitude instead.
+            if (driven is IFlyingVehicle) driven = null;
             vehicle = driven;
             car = driven != null ? driven.transform : null;
             bool visible = car != null;

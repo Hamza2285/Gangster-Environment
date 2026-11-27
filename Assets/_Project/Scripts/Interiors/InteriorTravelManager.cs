@@ -116,6 +116,26 @@ namespace OpenworldCrime.Interiors
             StartCoroutine(ExitRoutine());
         }
 
+        /// <summary>
+        /// Moves the player to another spot in the city behind a short fade (e.g. a tower's street door up to its roof,
+        /// <see cref="RooftopDoor"/>). No scene is loaded; the player keeps everything.
+        /// </summary>
+        public void TravelInCity(Transform point, string caption = null)
+        {
+            if (!CanTravel || IsInside || point == null) return;
+            StartCoroutine(TravelInCityRoutine(point, caption));
+        }
+
+        private IEnumerator TravelInCityRoutine(Transform point, string caption)
+        {
+            IsTransitioning = true;
+            playerManager.SetInputLocked(true);
+            PlayDoor();
+            yield return fader.FadeTo(1f, fadeDuration, string.IsNullOrEmpty(caption) ? null : caption);
+            MovePlayer(point);
+            yield return Finish(true);
+        }
+
         /// <summary>Weapons may be drawn only inside <see cref="InteriorWeaponZone"/>s while indoors (shop = holstered, range = free).</summary>
         public void SetWeaponsAllowed(bool allowed)
         {

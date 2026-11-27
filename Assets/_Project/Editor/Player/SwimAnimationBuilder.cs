@@ -132,7 +132,7 @@ namespace OpenworldCrime.EditorTools
             Fingers(m, 0.6f);
         }
 
-        private static void Fingers(Dictionary<string, float> m, float stretch)
+        public static void Fingers(Dictionary<string, float> m, float stretch)
         {
             string[] fingers = { "Thumb", "Index", "Middle", "Ring", "Little" };
             foreach (string hand in new[] { "LeftHand", "RightHand" })
@@ -159,9 +159,10 @@ namespace OpenworldCrime.EditorTools
 
         // ---------------------------------------------------------------- clip writing
 
-        private delegate void Pose(float p, Dictionary<string, float> muscles, out Vector3 bodyPos, out Quaternion bodyRot);
+        public delegate void Pose(float p, Dictionary<string, float> muscles, out Vector3 bodyPos, out Quaternion bodyRot);
 
-        private static AnimationClip Write(string path, string clipName, float period, Pose pose)
+        /// <summary>Writes a looping humanoid muscle clip (also used by ParachuteSetup for the hang pose).</summary>
+        public static AnimationClip Write(string path, string clipName, float period, Pose pose)
         {
             var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
             if (clip == null)
@@ -224,7 +225,7 @@ namespace OpenworldCrime.EditorTools
             curve.AddKey(time, value);
         }
 
-        private static void EnsureFolder(string path)
+        public static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
             string parent = System.IO.Path.GetDirectoryName(path).Replace('\\', '/');

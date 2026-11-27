@@ -232,6 +232,28 @@ namespace OpenworldCrime.Player
         [Tooltip("On-foot state used by the instant (fallback) exit.")]
         [SerializeField] private string onFootStateName = "Free Movement";
 
+        [Header("Boarding Through A Door (helicopter, IVehicleBoardingSequence)")]
+        [Tooltip("Fades the screen briefly around the cut to / from the vehicle's boarding camera. Optional (hard cut without it).")]
+        [SerializeField] private OpenworldCrime.UI.ScreenFader boardingFader;
+        [Tooltip("Seconds of the dip to black at the camera cut (each way).")]
+        [SerializeField, Min(0f)] private float boardingFadeSeconds = 0.2f;
+        [Tooltip("Seconds of the move from the door onto the seat (and back), hidden by the boarding camera.")]
+        [SerializeField, Min(0.1f)] private float boardingClimbSeconds = 0.7f;
+        [Tooltip("Getting out: seconds the camera takes to swing round to the boarding view before the door opens.")]
+        [SerializeField, Min(0f)] private float boardingViewSettleSeconds = 0.6f;
+
+        [Header("Jumping Out In The Air (helicopter, IVehicleExitRule.AllowsAirJump)")]
+        [Tooltip("Free fall after jumping out: stable skydiving pose with a parachute bag, screaming ragdoll without.")]
+        [SerializeField] private PlayerFreeFall freeFall;
+        [Tooltip("Seconds of the move from the seat out through the open door (it moves with the helicopter).")]
+        [SerializeField, Min(0.05f)] private float airJumpDuration = 0.35f;
+        [Tooltip("Metres sideways from the seat to where the character leaves the door.")]
+        [SerializeField, Min(0.1f)] private float airJumpDistance = 1.7f;
+        [Tooltip("Speed (m/s) of the push away from the helicopter.")]
+        [SerializeField, Min(0f)] private float airJumpPushSpeed = 3.5f;
+        [Tooltip("Tumble (rad/s) of the ragdoll as it leaves (no parachute).")]
+        [SerializeField, Min(0f)] private float airJumpTumble = 2.5f;
+
         [Header("Bail Out (exit while the vehicle moves)")]
         [Tooltip("Exit pressed at or above this speed (km/h) bails out of the moving vehicle; below it the normal exit rules apply.")]
         [SerializeField, Min(1f)] private float bailMinSpeedKmh = 15f;
@@ -1077,6 +1099,11 @@ namespace OpenworldCrime.Player
 
             if (!vehicle.CanExit)
             {
+                if (vehicle is IVehicleExitRule airRule && airRule.AllowsAirJump && freeFall != null)
+                {
+                    StartAirJump(vehicle);
+                    return true;
+                }
                 if (CanBail(vehicle))
                 {
                     StartBail(vehicle);
@@ -1098,6 +1125,13 @@ namespace OpenworldCrime.Player
 
             // Vehicle camera off before the player camera comes back, so only one camera/AudioListener is ever active.
             vehicle.DisableControl();
+            if (vehicle.UsesQuickMount && TryGetBoarding(vehicle, out IVehicleBoardingSequence boarding))
+            {
+                // Door vehicles (helicopter): the vehicle camera swings to the far side; the player camera comes back at the end.
+                boarding.ShowBoardingView(true);
+                StartCoroutine(BoardingDismountRoutine(vehicle, boarding, exitPosition, exitRotation));
+                return true;
+            }
             playerCameraRoot.SetActive(true);
 
             StartCoroutine(vehicle.UsesQuickMount ? QuickDismountRoutine(vehicle, exitPosition, exitRotation)
@@ -1110,8 +1144,99 @@ namespace OpenworldCrime.Player
         // as Invector's ragdoll with the vehicle's momentum (fast) -> Invector's get-up -> control back. The vehicle rolls on.
         // ---------------------------------------------------------------------------------------------------------------
 
+        // ---------------------------------------------------------------------------------------------------------------
+        // Jumping out in the air (helicopter in flight): the door opens, the character moves out through it with the helicopter
+        // and lets go; with a parachute bag he falls in the stable skydiving pose and can open it, without one he tumbles down
+        // as a screaming ragdoll (PlayerFreeFall). The helicopter, left alone, settles down by itself.
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private void StartAirJump(IVehicleController vehicle)
+        {
+            SetState(VehicleInteractionState.Bailing);
+            // Raised while the vehicle camera is still on, so the player camera can blend from its view.
+            OnVehicleBailStarted?.Invoke(vehicle);
+            vehicle.ReleaseControlRolling();
+            playerCameraRoot.SetActive(true);
+            StartCoroutine(AirJumpRoutine(vehicle));
+        }
+
+        private IEnumerator AirJumpRoutine(IVehicleController vehicle)
+        {
+            Transform craft = vehicle.transform;
+            Transform seat = vehicle.GetDriverSeat();
+            Rigidbody craftBody = ((Component)vehicle).GetComponent<Rigidbody>();
+            VehicleBoarding.TryGet(vehicle, out IVehicleBoardingSequence boarding);
+            if (boarding != null) boarding.SetDoorOpen(true);
+
+            // 1. Out of the seat through the door, moving with the helicopter (collisions with it stay ignored).
+            ShowCharacterAtSeat(vehicle);
+            animator.Play(seatedStateHash, BaseLayer, 0f);
+            animator.Update(0f);
+            animator.CrossFadeInFixedTime(bailDiveHash, airJumpDuration, BaseLayer, 0f);
+            Vector3 seatLocal = craft.InverseTransformPoint(seat.position);
+            Transform exitPoint = vehicle.GetExitPoint();
+            float side = exitPoint != null && craft.InverseTransformPoint(exitPoint.position).x < seatLocal.x ? -1f : 1f;
+            Quaternion seatLocalRotation = Quaternion.Inverse(craft.rotation) * seat.rotation;
+            Vector3 outLocal = seatLocal + new Vector3(side * airJumpDistance, -0.3f, -0.5f);
+            Quaternion outLocalRotation = Quaternion.LookRotation(new Vector3(side, 0f, 0.4f));
+            for (float t = 0f; t < airJumpDuration; t += Time.deltaTime)
+            {
+                if ((vehicle as UnityEngine.Object) == null) break;
+                float k = Mathf.SmoothStep(0f, 1f, t / airJumpDuration);
+                transform.SetPositionAndRotation(craft.TransformPoint(Vector3.Lerp(seatLocal, outLocal, k)),
+                    craft.rotation * Quaternion.Slerp(seatLocalRotation, outLocalRotation, k));
+                yield return null;
+            }
+
+            // 2. Let go: the helicopter is empty now; the body keeps its velocity plus a push away from the door.
+            bool craftAlive = (vehicle as UnityEngine.Object) != null;
+            Vector3 away = craftAlive ? Vector3.ProjectOnPlane(craft.right * side, Vector3.up).normalized : transform.forward;
+            Vector3 velocity = (craftBody != null ? craftBody.GetPointVelocity(transform.position) : Vector3.zero) + away * airJumpPushSpeed;
+            if (craftAlive)
+            {
+                SetDoorClearance(vehicle, false);
+                vehicle.SetOccupied(false);
+                if (boarding != null) boarding.SetDoorOpen(false);
+            }
+            if (vehicleIK != null) vehicleIK.End();
+            transform.SetParent(originalParent, true);
+            transform.rotation = FlatRotation(transform.forward);
+            CurrentVehicle = null;
+
+            bool ragdollFall = !freeFall.HasParachuteBag
+                && freeFall.StartRagdollFall(velocity, Vector3.Cross(Vector3.up, away) * airJumpTumble, craft);
+            if (!ragdollFall)
+            {
+                // 3a. With the parachute bag: back to normal control in the air (falling; the stable pose and the parachute
+                //     button come from PlayerFreeFall / PlayerParachute).
+                controller.EnableGravityAndCollision();
+                body.linearVelocity = velocity;
+                if (craftAlive) StartCoroutine(RestoreVehicleCollisionWhenClear(vehicle));
+                UnlockPlayer();
+                RestoreWeapon();
+                SetState(VehicleInteractionState.OnFoot);
+                OnVehicleExited?.Invoke(vehicle);
+                RefreshNearbyVehicles();
+                yield break;
+            }
+
+            // 3b. Ragdoll fall: control comes back once Invector's ragdoll has landed and got up (or he is dead). The ragdoll's
+            //     limb colliders are live now: they ignore the helicopter until the body is well clear of it.
+            if (craftAlive) SetVehicleCollisionIgnored(vehicle, true);
+            yield return new WaitForSeconds(bailIgnoreVehicleTime);
+            if ((vehicle as UnityEngine.Object) != null) StartCoroutine(RestoreVehicleCollisionWhenClear(vehicle));
+            while (freeFall.IsRagdollFalling && !controller.isDead) yield return null;
+            if (!controller.ragdolled) controller.EnableGravityAndCollision();
+            UnlockPlayer();
+            RestoreWeapon();
+            SetState(VehicleInteractionState.OnFoot);
+            OnVehicleExited?.Invoke(vehicle);
+            RefreshNearbyVehicles();
+        }
+
         private bool CanBail(IVehicleController vehicle)
         {
+            if (vehicle is IVehicleExitRule rule && !rule.AllowsBailOut) return false; // e.g. a helicopter in the air
             float kmh = vehicle.CurrentSpeed * 3.6f;
             return kmh >= bailMinSpeedKmh && (playerRagdoll != null || kmh <= bailRollMaxSpeedKmh);
         }
@@ -1608,6 +1733,11 @@ namespace OpenworldCrime.Player
                 yield return BikeClipMountRoutine(vehicle, bikeClips);
                 yield break;
             }
+            if (TryGetBoarding(vehicle, out IVehicleBoardingSequence boarding))
+            {
+                yield return BoardingMountRoutine(vehicle, boarding);
+                yield break;
+            }
             Transform seat = vehicle.GetDriverSeat();
             Transform enterPoint = GetEnterPointFor(vehicle);
             Vector3 startPosition = transform.position;
@@ -1662,6 +1792,91 @@ namespace OpenworldCrime.Player
             }
             SnapTo(exitPosition, exitRotation);
             CompleteExit(vehicle);
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Boarding through a door (helicopter): line up at the door -> the door opens -> short dip to black and cut to the
+        // vehicle's camera on the far side -> the character moves onto the seat behind the body, unseen -> seated, the door
+        // closes while the vehicle camera swings round behind. Getting out runs the other way and cuts back to the player camera.
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private static bool TryGetBoarding(IVehicleController vehicle, out IVehicleBoardingSequence boarding) =>
+            VehicleBoarding.TryGet(vehicle, out boarding);
+
+        private IEnumerator BoardingMountRoutine(IVehicleController vehicle, IVehicleBoardingSequence boarding)
+        {
+            Transform seat = vehicle.GetDriverSeat();
+            Transform enterPoint = GetEnterPointFor(vehicle);
+            Vector3 startPosition = transform.position;
+            Quaternion startRotation = transform.rotation;
+            Vector3 standPosition = GetGroundedPosition(enterPoint.position);
+            Quaternion standRotation = FlatRotation(enterPoint.forward);
+            float alignDuration = Mathf.Clamp(Vector3.Distance(startPosition, standPosition) / alignSpeed, 0.1f, maxAlignDuration);
+            for (float t = 0f; t < alignDuration; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / alignDuration);
+                transform.SetPositionAndRotation(Vector3.Lerp(startPosition, standPosition, k), Quaternion.Slerp(startRotation, standRotation, k));
+                yield return null;
+            }
+
+            // The door opens in the player camera's view.
+            boarding.SetDoorOpen(true);
+            yield return new WaitForSeconds(boarding.DoorSeconds * 0.85f);
+
+            // Dip to black and cut to the far-side view (player camera off first: one AudioListener at a time).
+            if (boardingFader != null && boardingFadeSeconds > 0f) yield return boardingFader.FadeTo(1f, boardingFadeSeconds);
+            playerCameraRoot.SetActive(false);
+            boarding.ShowBoardingView(false);
+            if (boardingFader != null && boardingFadeSeconds > 0f) StartCoroutine(boardingFader.FadeTo(0f, boardingFadeSeconds * 1.5f));
+
+            OnVehicleClimbStarted?.Invoke(vehicle);
+            animator.CrossFadeInFixedTime(seatedStateHash, boardingClimbSeconds * 0.8f, BaseLayer, 0f);
+            transform.SetParent(seat, true);
+            Vector3 fromPosition = transform.localPosition;
+            Quaternion fromRotation = transform.localRotation;
+            for (float t = 0f; t < boardingClimbSeconds; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / boardingClimbSeconds);
+                transform.localPosition = Vector3.Lerp(fromPosition, Vector3.zero, k) + seat.InverseTransformVector(Vector3.up) * (quickMountHop * Mathf.Sin(k * Mathf.PI));
+                transform.localRotation = Quaternion.Slerp(fromRotation, Quaternion.identity, k);
+                yield return null;
+            }
+            // Seated: the vehicle takes control (its camera, already on, swings round behind) and the door shuts.
+            FinishSeating(vehicle);
+            boarding.SetDoorOpen(false);
+        }
+
+        private IEnumerator BoardingDismountRoutine(IVehicleController vehicle, IVehicleBoardingSequence boarding, Vector3 exitPosition, Quaternion exitRotation)
+        {
+            // The vehicle camera swings round to the far side, then the door opens.
+            yield return new WaitForSeconds(boardingViewSettleSeconds);
+            boarding.SetDoorOpen(true);
+            yield return new WaitForSeconds(boarding.DoorSeconds * 0.6f);
+
+            ShowCharacterAtSeat(vehicle);
+            animator.Play(seatedStateHash, BaseLayer, 0f);
+            animator.Update(0f);
+            animator.CrossFadeInFixedTime(onFootStateHash, boardingClimbSeconds, BaseLayer, 0f);
+            Vector3 fromPosition = transform.position;
+            Quaternion fromRotation = transform.rotation;
+            for (float t = 0f; t < boardingClimbSeconds; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / boardingClimbSeconds);
+                transform.SetPositionAndRotation(Vector3.Lerp(fromPosition, exitPosition, k) + Vector3.up * (quickMountHop * Mathf.Sin(k * Mathf.PI)),
+                    Quaternion.Slerp(fromRotation, exitRotation, k));
+                yield return null;
+            }
+            SnapTo(exitPosition, exitRotation);
+            boarding.SetDoorOpen(false);
+            // The door shuts (still on the far-side view) before the cut back, so the player camera never sees it swing.
+            yield return new WaitForSeconds(boarding.DoorSeconds * 0.75f);
+
+            // Dip to black and cut back to the player camera (vehicle camera off first: one AudioListener at a time).
+            if (boardingFader != null && boardingFadeSeconds > 0f) yield return boardingFader.FadeTo(1f, boardingFadeSeconds);
+            boarding.EndBoardingView();
+            playerCameraRoot.SetActive(true);
+            CompleteExit(vehicle);
+            if (boardingFader != null && boardingFadeSeconds > 0f) yield return boardingFader.FadeTo(0f, boardingFadeSeconds * 1.5f);
         }
 
         // ---------------------------------------------------------------------------------------------------------------

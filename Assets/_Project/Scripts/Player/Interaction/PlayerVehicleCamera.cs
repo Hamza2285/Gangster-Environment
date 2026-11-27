@@ -109,6 +109,13 @@ namespace OpenworldCrime.Player
         // Raised before the vehicle camera is switched off, so its final view can be captured.
         private void HandleExitStarted(IVehicleController target)
         {
+            // Door vehicles (helicopter) show the exit from their own boarding view and cut back to the normal follow camera.
+            if (VehicleBoarding.TryGet(target, out _))
+            {
+                mode = Mode.None;
+                if (thirdPersonCamera != null && thirdPersonCamera.currentTarget != null) thirdPersonCamera.ResetAngleWithoutSmooth();
+                return;
+            }
             vehicle = target;
             mode = Mode.Exit;
             progress = 0f;
